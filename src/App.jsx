@@ -557,6 +557,8 @@ function createStyles() {
     .info-popover{position:absolute;right:0;top:24px;z-index:9999;width:260px;padding:10px 12px;border-radius:12px;background:rgba(28,30,34,.98);color:#f8fafc;border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 36px rgba(0,0,0,.28);font-size:12px;font-weight:500;line-height:1.55;letter-spacing:-.01em;text-align:left;opacity:0;visibility:hidden;transform:translateY(-4px);transition:.14s ease;pointer-events:none;white-space:normal}
     .info-tip:hover .info-popover{opacity:1;visibility:visible;transform:translateY(0)}
     .card,.kpi{overflow:visible}
+
+    .mini-chart-placeholder{height:120px;margin:10px 0 14px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#6b7280}
     @media (max-width:900px){.donut-wrap{grid-template-columns:1fr}.hero-top{flex-direction:column}.hero-badges{justify-content:flex-start}}
     @media (max-width:1100px){.grid-4,.grid-3,.grid-2{grid-template-columns:1fr}}
   
@@ -1123,14 +1125,12 @@ function App() {
               </div>
 
               <div className="card">
-                <h3 className="title-with-info">자산구성 도넛차트 <span className="info-tip mini">i<span className="info-popover"></span></span></h3>
-                
+                <h3 className="title-with-info">자산구성 도넛차트 <span className="info-tip mini">i<span className="info-popover">현금성, 예금, 투자포트폴리오 등 자산 구성을 비중으로 표시합니다.</span></span></h3>
                 <AssetDonutChart segments={dashboardChartData.assetSegments} />
               </div>
 
               <div className="card">
-                <h3 className="title-with-info">목표 대비 게이지 <span className="info-tip mini">i<span className="info-popover"></span></span></h3>
-                
+                <h3 className="title-with-info">목표 대비 게이지 <span className="info-tip mini">i<span className="info-popover">현재 자산이 아니라 미래 시뮬레이션 결과를 목표와 비교한 비율입니다.</span></span></h3>
                 <GoalGauge
                   value={dashboardChartData.retirementProjected}
                   target={dashboardChartData.retirementTarget}
@@ -1142,12 +1142,11 @@ function App() {
 
             <div className="metric-split">
               <div className="card metric-panel">
-                <h3>현재 상태 & 점검 신호 <span className="info-tip mini">i<span className="info-popover"></span></span></h3>
+                <h3>현재 상태 & 점검 신호 <span className="info-tip mini">i<span className="info-popover">현재 입력된 계좌와 예산 기준으로 바로 해석할 수 있는 값입니다.</span></span></h3>
                 <div className="stat-row"><span className="stat-label">입력 점검 필요 항목</span><span className="mono"><strong>{fmt(dashboardDetail.totalValidationIssues)}</strong>건</span></div>
                 <div className="stat-row"><span className="stat-label">예산 초과 항목</span><span className="mono"><strong>{fmt(dashboardDetail.budgetSummary.over)}</strong>개</span></div>
                 <div className="stat-row"><span className="stat-label">예산 주의 항목</span><span className="mono"><strong>{fmt(dashboardDetail.budgetSummary.warn)}</strong>개</span></div>
                 <div className="stat-row"><span className="stat-label">지금 바로 쓸 수 있는 돈</span><span className="mono"><strong>{fmt(dashboardDetail.liquidAssets)}</strong>원</span></div>
-                <div className="stat-help">여기 숫자는 </div>
                 <div style={{ marginTop: 12 }}>
                   {dashboard.net >= 0 ? <span className="chip good">이번달 흑자</span> : <span className="chip bad">이번달 적자</span>}
                   {" "}
@@ -1156,23 +1155,18 @@ function App() {
               </div>
 
               <div className="card metric-panel future">
-                <h3>절세·목표 전망 <span className="info-tip mini">i<span className="info-popover"></span></span></h3>
+                <h3>절세·목표 전망 <span className="info-tip mini">i<span className="info-popover">현재 설정을 그대로 유지했을 때의 예상 결과이며, 현재 보유 금액이 아닌 미래 기대값입니다.</span></span></h3>
                 <div className="stat-row"><span className="stat-label">ISA 절세 예상 총액</span><span className="mono"><strong>{fmt(dashboardDetail.retirementRow?.isaTaxSaved || 0)}</strong>원</span></div>
                 <div className="stat-row"><span className="stat-label">ISA→연금 추가공제 예상</span><span className="mono"><strong>{fmt(dashboardDetail.retirementRow?.pensionCreditAcc || 0)}</strong>원</span></div>
                 <div className="stat-row"><span className="stat-label">은퇴 시뮬 총자산</span><span className="mono"><strong>{fmt(dashboardDetail.retirementRow?.total || 0)}</strong>원</span></div>
                 <div className="stat-row"><span className="stat-label">배당 버킷 예상</span><span className="mono"><strong>{fmt(dashboardDetail.retirementRow?.dividend || 0)}</strong>원</span></div>
-                
               </div>
             </div>
 
             <div className="grid grid-2">
               <div className="card">
-                <h3>이번달 자금 흐름
-
-<div style={{height:'120px',marginTop:'10px',background:'#f3f4f6',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',color:'#6b7280'}}>
-  차트 영역
-</div>
-</h3>
+                <h3>이번달 자금 흐름</h3>
+                <div className="mini-chart-placeholder">차트 영역</div>
                 <div className="row-between"><span className="muted">수입</span><strong className="mono">{fmt(dashboard.income)}원</strong></div>
                 <div className="progress"><div className="bar" style={{ width: `${clamp(dashboard.income > 0 ? 100 : 0, 0, 100)}%` }} /></div>
                 <div className="row-between" style={{ marginTop: 10 }}><span className="muted">지출</span><strong className="mono">{fmt(dashboard.expense)}원</strong></div>
@@ -1183,12 +1177,8 @@ function App() {
               </div>
 
               <div className="card">
-                <h3>장기 목표 진행
-
-<div style={{height:'120px',marginTop:'10px',background:'#f3f4f6',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',color:'#6b7280'}}>
-  차트 영역
-</div>
-</h3>
+                <h3>장기 목표 진행</h3>
+                <div className="mini-chart-placeholder">차트 영역</div>
                 <div className="row-between"><span className="muted">현재 나이</span><strong>{fmt(data.settings.currentAge)}세</strong></div>
                 <div className="row-between"><span className="muted">은퇴 나이</span><strong>{fmt(data.settings.retireAge)}세</strong></div>
                 <div className="row-between"><span className="muted">남은 기간</span><strong>{fmt(Math.max(n(data.settings.retireAge) - n(data.settings.currentAge), 0))}년</strong></div>
@@ -1993,7 +1983,8 @@ function AnalysisTab({ data, financialAnalysis }) {
             return (
               <div key={k} style={{ marginBottom: 12 }}>
                 <div className="row-between"><strong>{k}</strong><span className="mono">{fmtPct(rate)}</span></div>
-                
+                <div className="progress"><div className="bar" style={{ width: `${clamp(rate, 0, 100)}%` }} /></div>
+              </div>
             );
           })}
         </div>
