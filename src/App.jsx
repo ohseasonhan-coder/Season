@@ -216,7 +216,7 @@ function txSignedAmount(t) {
 }
 
 
-const QUOTE_SERVER_URL = "";
+const QUOTE_SERVER_URL = "http://localhost:8787";
 
 const STOCK_MASTER = [
   { name: "삼성전자", code: "005930", symbol: "005930.KS", ticker: "005930", market: "KRX", currency: "KRW", assetClass: "개별주식" },
@@ -568,6 +568,7 @@ function createStyles() {
 function App() {
   const [data, setData] = useState(() => loadData());
   const [tab, setTab] = useState("dashboard");
+  const [showDashboardInfo, setShowDashboardInfo] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => { saveData(data); }, [data]);
@@ -1081,38 +1082,20 @@ function App() {
 
         {tab === "dashboard" && (
           <div className="grid">
-            <div className="card dashboard-guide">
-              <div className="dashboard-guide-grid">
+            <div className="card dashboard-guide compact-guide">
+              <div className="info-header">
                 <div>
-                  <h3 style={{ marginBottom: 8 }}>대시보드 읽는 순서</h3>
-                  <div className="section-note" style={{ marginBottom: 14 }}>한 화면 안에 현재 상태, 최근 흐름, 목표 전망이 함께 보이도록 정리했습니다. 먼저 현재를 보고, 그다음 흐름을 본 뒤, 마지막으로 목표 전망을 확인하면 가장 직관적입니다.</div>
-                  <div className="reading-list">
-                    <div className="reading-item">
-                      <strong>1. 현재 상태</strong>
-                      지금 보유한 순자산, 현금성 자산, 이번 달 수입·지출처럼 이미 입력된 값입니다.
-                    </div>
-                    <div className="reading-item">
-                      <strong>2. 최근 흐름</strong>
-                      최근 6개월 평균, 월별 추이, 예산 초과 여부처럼 지금의 소비·저축 패턴을 보여줍니다.
-                    </div>
-                    <div className="reading-item">
-                      <strong>3. 목표 전망</strong>
-                      은퇴자산, ISA 절세, ISA→연금 이전 효과처럼 앞으로의 계획을 가정해 계산한 값입니다.
-                    </div>
-                  </div>
+                  <h3 style={{ marginBottom: 4 }}>대시보드</h3>
+                  <div className="section-note" style={{ marginBottom: 0 }}>현재 상태 · 최근 흐름 · 목표 전망을 한 화면에서 확인합니다.</div>
                 </div>
-                <div>
-                  <div className="legend-inline" style={{ justifyContent: "flex-start", marginBottom: 10 }}>
-                    <span className="mini-badge mini-badge-current">현재 상태</span>
-                    <span className="mini-badge mini-badge-future">목표 전망</span>
-                    <span className="mini-badge mini-badge-warning">점검 신호</span>
-                  </div>
-                  <div className="insight-card" style={{ height: "100%" }}>
-                    <div className="insight-title">이 화면에서 가장 중요한 해석</div>
-                    <div className="insight-text">절세 관련 숫자는 이미 계좌에 쌓인 돈이 아니라, 현재 설정을 유지했을 때 앞으로 줄어들 것으로 보는 세금 효과입니다. 그래서 절세 숫자는 현재 자산과 분리해서 별도 카드로 확인하도록 바꿨습니다.</div>
-                  </div>
-                </div>
+                <button className="info-btn" type="button" onClick={() => setShowDashboardInfo((v) => !v)} aria-label="대시보드 설명 보기">ⓘ</button>
               </div>
+              {showDashboardInfo && (
+                <div className="info-box">
+                  <div>현재 상태 → 최근 흐름 → 목표 전망 순서로 보면 가장 직관적입니다.</div>
+                  <div>절세·은퇴 수치는 확정금액이 아니라 설정값 기반의 예상치입니다.</div>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-4">
