@@ -568,7 +568,6 @@ function createStyles() {
 function App() {
   const [data, setData] = useState(() => loadData());
   const [tab, setTab] = useState("dashboard");
-  const [showDashboardInfo, setShowDashboardInfo] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => { saveData(data); }, [data]);
@@ -1088,14 +1087,11 @@ function App() {
                   <h3 style={{ marginBottom: 4 }}>대시보드</h3>
                   <div className="section-note" style={{ marginBottom: 0 }}>현재 상태 · 최근 흐름 · 목표 전망을 한 화면에서 확인합니다.</div>
                 </div>
-                <button className="info-btn" type="button" onClick={() => setShowDashboardInfo((v) => !v)} aria-label="대시보드 설명 보기">ⓘ</button>
+                <span className="info-tip" aria-label="대시보드 설명">
+                  i
+                  <span className="info-popover">현재 → 흐름 → 목표 순서로 보세요. 절세·은퇴 수치는 설정값 기반 예상치입니다.</span>
+                </span>
               </div>
-              {showDashboardInfo && (
-                <div className="info-box">
-                  <div>현재 상태 → 최근 흐름 → 목표 전망 순서로 보면 가장 직관적입니다.</div>
-                  <div>절세·은퇴 수치는 확정금액이 아니라 설정값 기반의 예상치입니다.</div>
-                </div>
-              )}
             </div>
 
             <div className="grid grid-4">
@@ -1114,8 +1110,7 @@ function App() {
 
             <div className="grid grid-3">
               <div className="card">
-                <h3>월별 추이 차트</h3>
-                <div className="section-note">최근 최대 12개월의 수입·지출·순수입 추이를 한 번에 확인합니다.</div>
+                <h3 className="title-with-info">월별 추이 차트 <span className="info-tip mini">i<span className="info-popover">최근 최대 12개월의 수입·지출·순수입 추이를 한 번에 확인합니다.</span></span></h3>
                 <MonthlyTrendChart data={dashboardChartData.monthlyTrend} />
               </div>
 
