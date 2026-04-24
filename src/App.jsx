@@ -1161,7 +1161,7 @@ function App() {
                 <div className="stat-row"><span className="stat-label">ISA→연금 추가공제 예상</span><span className="mono"><strong>{fmt(dashboardDetail.retirementRow?.pensionCreditAcc || 0)}</strong>원</span></div>
                 <div className="stat-row"><span className="stat-label">은퇴 시뮬 총자산</span><span className="mono"><strong>{fmt(dashboardDetail.retirementRow?.total || 0)}</strong>원</span></div>
                 <div className="stat-row"><span className="stat-label">배당 버킷 예상</span><span className="mono"><strong>{fmt(dashboardDetail.retirementRow?.dividend || 0)}</strong>원</span></div>
-                <div className="stat-help">여기 숫자는 현재 설정을 그대로 유지했을 때를 가정한 전망값입니다. 지금 통장에 있는 금액이 아니라 앞으로 기대하는 효과와 결과입니다.</div>
+                
               </div>
             </div>
 
@@ -1993,8 +1993,7 @@ function AnalysisTab({ data, financialAnalysis }) {
             return (
               <div key={k} style={{ marginBottom: 12 }}>
                 <div className="row-between"><strong>{k}</strong><span className="mono">{fmtPct(rate)}</span></div>
-                <div className="progress">
-              </div>
+                
             );
           })}
         </div>
