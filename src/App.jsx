@@ -549,6 +549,14 @@ function createStyles() {
     .legend-dot{display:inline-block;width:10px;height:10px;border-radius:999px}
     .donut-wrap{display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:center}
     .sticky-actions{position:sticky;top:10px;z-index:10}
+
+    .title-with-info{display:flex;align-items:center;gap:7px}
+    .info-tip{position:relative;width:17px;height:17px;border-radius:50%;border:1px solid #c8cdd5;background:#f7f8fa;color:#667085;font-size:10px;font-weight:800;line-height:1;display:inline-flex;align-items:center;justify-content:center;cursor:default;flex:0 0 17px;font-family:Inter,Arial,sans-serif;vertical-align:middle}
+    .info-tip.mini{width:16px;height:16px;font-size:10px;transform:translateY(-1px)}
+    .info-tip:hover{background:#eef0f3;color:#111827;border-color:#aeb5bf}
+    .info-popover{position:absolute;right:0;top:24px;z-index:9999;width:260px;padding:10px 12px;border-radius:12px;background:rgba(28,30,34,.98);color:#f8fafc;border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 36px rgba(0,0,0,.28);font-size:12px;font-weight:500;line-height:1.55;letter-spacing:-.01em;text-align:left;opacity:0;visibility:hidden;transform:translateY(-4px);transition:.14s ease;pointer-events:none;white-space:normal}
+    .info-tip:hover .info-popover{opacity:1;visibility:visible;transform:translateY(0)}
+    .card,.kpi{overflow:visible}
     @media (max-width:900px){.donut-wrap{grid-template-columns:1fr}.hero-top{flex-direction:column}.hero-badges{justify-content:flex-start}}
     @media (max-width:1100px){.grid-4,.grid-3,.grid-2{grid-template-columns:1fr}}
   
@@ -1115,13 +1123,13 @@ function App() {
               </div>
 
               <div className="card">
-                <h3>자산구성 도넛차트</h3>
+                <h3 className="title-with-info">자산구성 도넛차트 <span className="info-tip mini">i<span className="info-popover">자산·부채·포트폴리오 입력값을 기준으로 전체 자산 비중을 보여줍니다.</span></span></h3>
                 <div className="section-note">현금성, 예금, 투자포트폴리오 등 자산 구성을 비중으로 표시합니다.</div>
                 <AssetDonutChart segments={dashboardChartData.assetSegments} />
               </div>
 
               <div className="card">
-                <h3>목표 대비 게이지</h3>
+                <h3 className="title-with-info">목표 대비 게이지 <span className="info-tip mini">i<span className="info-popover">설정한 목표금액 대비 현재 준비율 또는 시뮬레이션 도달률을 보여줍니다.</span></span></h3>
                 <div className="section-note">현재 자산이 아니라 미래 시뮬레이션 결과를 목표와 비교한 비율입니다.</div>
                 <GoalGauge
                   value={dashboardChartData.retirementProjected}
