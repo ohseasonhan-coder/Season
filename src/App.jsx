@@ -1123,14 +1123,14 @@ function App() {
               </div>
 
               <div className="card">
-                <h3 className="title-with-info">자산구성 도넛차트 <span className="info-tip mini">i<span className="info-popover">현금성, 예금, 투자포트폴리오 등 자산 구성을 비중으로 표시합니다.</span></span></h3>
-                <div className="section-note">현금성, 예금, 투자포트폴리오 등 자산 구성을 비중으로 표시합니다.</div>
+                <h3 className="title-with-info">자산구성 도넛차트 <span className="info-tip mini">i<span className="info-popover"></span></span></h3>
+                
                 <AssetDonutChart segments={dashboardChartData.assetSegments} />
               </div>
 
               <div className="card">
-                <h3 className="title-with-info">목표 대비 게이지 <span className="info-tip mini">i<span className="info-popover">현재 자산이 아니라 미래 시뮬레이션 결과를 목표와 비교한 비율입니다.</span></span></h3>
-                <div className="section-note">현재 자산이 아니라 미래 시뮬레이션 결과를 목표와 비교한 비율입니다.</div>
+                <h3 className="title-with-info">목표 대비 게이지 <span className="info-tip mini">i<span className="info-popover"></span></span></h3>
+                
                 <GoalGauge
                   value={dashboardChartData.retirementProjected}
                   target={dashboardChartData.retirementTarget}
@@ -1142,12 +1142,12 @@ function App() {
 
             <div className="metric-split">
               <div className="card metric-panel">
-                <h3>현재 상태 & 점검 신호 <span className="info-tip mini">i<span className="info-popover">현재 입력된 계좌와 예산 기준으로 바로 해석할 수 있는 값입니다.</span></span></h3>
+                <h3>현재 상태 & 점검 신호 <span className="info-tip mini">i<span className="info-popover"></span></span></h3>
                 <div className="stat-row"><span className="stat-label">입력 점검 필요 항목</span><span className="mono"><strong>{fmt(dashboardDetail.totalValidationIssues)}</strong>건</span></div>
                 <div className="stat-row"><span className="stat-label">예산 초과 항목</span><span className="mono"><strong>{fmt(dashboardDetail.budgetSummary.over)}</strong>개</span></div>
                 <div className="stat-row"><span className="stat-label">예산 주의 항목</span><span className="mono"><strong>{fmt(dashboardDetail.budgetSummary.warn)}</strong>개</span></div>
                 <div className="stat-row"><span className="stat-label">지금 바로 쓸 수 있는 돈</span><span className="mono"><strong>{fmt(dashboardDetail.liquidAssets)}</strong>원</span></div>
-                <div className="stat-help">여기 숫자는 현재 입력된 계좌와 예산 기준으로 바로 해석할 수 있는 값입니다.</div>
+                <div className="stat-help">여기 숫자는 </div>
                 <div style={{ marginTop: 12 }}>
                   {dashboard.net >= 0 ? <span className="chip good">이번달 흑자</span> : <span className="chip bad">이번달 적자</span>}
                   {" "}
@@ -1156,7 +1156,7 @@ function App() {
               </div>
 
               <div className="card metric-panel future">
-                <h3>절세·목표 전망 <span className="info-tip mini">i<span className="info-popover">현재 설정을 그대로 유지했을 때의 예상 결과이며, 현재 보유 금액이 아닌 미래 기대값입니다.</span></span></h3>
+                <h3>절세·목표 전망 <span className="info-tip mini">i<span className="info-popover"></span></span></h3>
                 <div className="stat-row"><span className="stat-label">ISA 절세 예상 총액</span><span className="mono"><strong>{fmt(dashboardDetail.retirementRow?.isaTaxSaved || 0)}</strong>원</span></div>
                 <div className="stat-row"><span className="stat-label">ISA→연금 추가공제 예상</span><span className="mono"><strong>{fmt(dashboardDetail.retirementRow?.pensionCreditAcc || 0)}</strong>원</span></div>
                 <div className="stat-row"><span className="stat-label">은퇴 시뮬 총자산</span><span className="mono"><strong>{fmt(dashboardDetail.retirementRow?.total || 0)}</strong>원</span></div>
@@ -1993,7 +1993,7 @@ function AnalysisTab({ data, financialAnalysis }) {
             return (
               <div key={k} style={{ marginBottom: 12 }}>
                 <div className="row-between"><strong>{k}</strong><span className="mono">{fmtPct(rate)}</span></div>
-                <div className="progress"><div className="bar" style={{ width: `${clamp(rate, 0, 100)}%` }} /></div>
+                <div className="progress">
               </div>
             );
           })}
