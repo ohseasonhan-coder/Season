@@ -179,20 +179,105 @@ input,select,textarea{font-family:inherit}
 .nav-dot{width:6px;height:6px;border-radius:99px;background:var(--red);margin-left:auto;flex-shrink:0}
 
 
-/* Collapsible sidebar */
-.sidebar{transition:width .22s ease,padding .22s ease}
-.main{transition:margin-left .22s ease}
-.sidebar-toggle{height:34px;margin:2px 6px 10px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text2);font-size:20px;font-weight:800;display:flex;align-items:center;justify-content:center;transition:.16s ease}
-.sidebar-toggle:hover{background:var(--surface3);color:var(--text)}
-.sidebar.collapsed{width:72px;padding-left:10px;padding-right:10px}
-.sidebar.collapsed .sidebar-logo{padding-left:4px;padding-right:4px;justify-content:center}
-.sidebar.collapsed .logo-copy,.sidebar.collapsed .nav-section,.sidebar.collapsed .nav-label{display:none}
-.sidebar.collapsed .nav-item{justify-content:center;padding:10px 0;gap:0}
-.sidebar.collapsed .nav-icon{width:auto;font-size:17px}
-.sidebar.collapsed .nav-dot{position:absolute;right:12px;top:10px;margin-left:0}
-.sidebar.collapsed .sidebar-toggle{margin-left:4px;margin-right:4px}
+/* Collapsible sidebar - Apple blur motion */
+.sidebar{
+  transition:width .28s cubic-bezier(.2,.8,.2,1), padding .28s cubic-bezier(.2,.8,.2,1), background .28s ease, box-shadow .28s ease;
+  backdrop-filter:blur(22px) saturate(160%);
+  -webkit-backdrop-filter:blur(22px) saturate(160%);
+  background:rgba(22,25,32,.82);
+  box-shadow:inset -1px 0 0 rgba(255,255,255,.04), 12px 0 40px rgba(0,0,0,.18);
+}
+.main{transition:margin-left .28s cubic-bezier(.2,.8,.2,1)}
+.sidebar-logo,.nav-item,.sidebar-toggle{transition:all .24s cubic-bezier(.2,.8,.2,1)}
+.logo-copy,.nav-label,.nav-section{transition:opacity .16s ease, transform .18s ease}
+.sidebar-toggle{
+  height:34px;
+  margin:2px 6px 12px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;
+  background:rgba(255,255,255,.055);
+  color:rgba(240,241,243,.72);
+  font-weight:800;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:background .18s ease,color .18s ease,transform .18s ease,border-color .18s ease,box-shadow .18s ease;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+}
+.sidebar-toggle:hover{
+  background:rgba(255,255,255,.105);
+  color:#fff;
+  border-color:rgba(255,255,255,.14);
+  transform:translateY(-1px);
+  box-shadow:0 8px 20px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.07);
+}
+.toggle-glyph{
+  font-size:17px;
+  line-height:1;
+  opacity:.86;
+  transform:translateY(-1px);
+  transition:transform .2s cubic-bezier(.2,.8,.2,1), opacity .18s ease;
+}
+.sidebar-toggle:hover .toggle-glyph{opacity:1;transform:translateY(-1px) scale(1.12)}
+.sidebar.collapsed{
+  width:72px;
+  padding-left:10px;
+  padding-right:10px;
+  background:rgba(22,25,32,.9);
+}
+.sidebar.collapsed .sidebar-logo{
+  padding-left:4px;
+  padding-right:4px;
+  justify-content:center;
+}
+.sidebar.collapsed .logo-copy,
+.sidebar.collapsed .nav-section,
+.sidebar.collapsed .nav-label{
+  opacity:0;
+  transform:translateX(-8px);
+  pointer-events:none;
+  width:0;
+  max-width:0;
+  overflow:hidden;
+}
+.sidebar.collapsed .nav-item{
+  justify-content:center;
+  padding:11px 0;
+  gap:0;
+  border-radius:15px;
+}
+.sidebar.collapsed .nav-item.active{
+  background:rgba(108,125,255,.18);
+  box-shadow:inset 0 0 0 1px rgba(108,125,255,.16);
+}
+.sidebar.collapsed .nav-icon{
+  width:auto;
+  font-size:17px;
+}
+.sidebar.collapsed .nav-dot{
+  position:absolute;
+  right:12px;
+  top:10px;
+  margin-left:0;
+}
+.sidebar.collapsed .sidebar-toggle{
+  margin-left:4px;
+  margin-right:4px;
+  border-radius:15px;
+}
 .main.expanded{margin-left:72px}
-.nav-item{position:relative}
+.nav-item{position:relative;overflow:hidden}
+.nav-item:before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  background:linear-gradient(135deg,rgba(255,255,255,.08),transparent 65%);
+  opacity:0;
+  transition:opacity .18s ease;
+  pointer-events:none;
+}
+.nav-item:hover:before,.nav-item.active:before{opacity:1}
 @media(max-width:900px){
   .sidebar.collapsed{width:64px}
   .main.expanded{margin-left:64px}
@@ -1710,7 +1795,7 @@ export default function App() {
             </div>
           </div>
           <button className="sidebar-toggle" type="button" onClick={() => setSidebarOpen((v) => !v)} aria-label={sidebarOpen ? "사이드바 접기" : "사이드바 펼치기"}>
-            <span>{sidebarOpen ? "‹" : "›"}</span>
+            <span className="toggle-glyph">{sidebarOpen ? "⟨" : "⟩"}</span>
           </button>
           {NAV.map((item,i)=>{
             if(item.section) return <div key={i} className="nav-section">{item.section}</div>;
