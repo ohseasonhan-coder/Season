@@ -1,8 +1,15 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 const STORAGE_KEY = "asset-app-final-complete-v1";
 const LEGACY_STORAGE_KEYS = ["asset-app-sidebar-premium-season-fixed", "asset-app-sidebar-premium-season-stock-server", "asset-app-excel-parity-v1"];
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const CLOUD_TABLE = "asset_app_profiles";
+const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const thisMonthISO = () => new Date().toISOString().slice(0, 7);
@@ -559,6 +566,36 @@ function createStyles() {
     .card,.kpi{overflow:visible}
 
     .mini-chart-placeholder{height:120px;margin:10px 0 14px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#6b7280}
+
+    /* Apple-like final polish */
+    .card{transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease}
+    .card:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(15,23,42,.07),0 1px 4px rgba(15,23,42,.04)}
+    .card h3{display:flex;align-items:center;gap:7px;line-height:1.35}
+    .section-note{color:#7a828e;font-size:12px;line-height:1.55}
+    .metric-panel .stat-row,.row-between{border-bottom:1px solid rgba(229,231,235,.55);padding:7px 0}
+    .metric-panel .stat-row:last-child,.row-between:last-child{border-bottom:none}
+    .stat-label{color:#667085}
+    .info-tip{box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
+    .info-popover{max-width:280px}
+    .mini-chart-placeholder{background:linear-gradient(180deg,#f8fafc 0%,#f3f4f6 100%);border-style:dashed;color:#8a93a3}
+    .table-wrap{box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
+    th{letter-spacing:-.01em}
+    td{letter-spacing:-.01em}
+    .chip{letter-spacing:-.01em}
+
+    .mini-summary-bars{display:grid;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(229,231,235,.65)}
+    .mini-bar-line{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;font-size:12px;color:#667085}
+    .mini-bar-track{height:8px;border-radius:999px;background:#eef0f3;overflow:hidden}
+    .mini-bar-fill{height:100%;border-radius:999px;background:#111827}
+    .mini-bar-fill.dark{background:#4b5563}
+
+    .auth-panel{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:16px;padding:16px 18px;border-radius:22px;background:rgba(255,255,255,.92);border:1px solid #e5e7eb;box-shadow:0 8px 24px rgba(15,23,42,.06)}
+    .auth-note{margin-top:4px;font-size:12px;color:#667085;line-height:1.5}
+    .auth-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    .auth-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+    .auth-form input{height:38px;padding:0 12px;border:1px solid #d0d5dd;border-radius:12px;outline:none;min-width:180px;background:#fff}
+    .auth-form input:focus{border-color:#98a2b3;box-shadow:0 0 0 4px rgba(15,23,42,.06)}
+    .auth-message{font-size:12px;color:#475467;width:100%;text-align:right}
     @media (max-width:900px){.donut-wrap{grid-template-columns:1fr}.hero-top{flex-direction:column}.hero-badges{justify-content:flex-start}}
     @media (max-width:1100px){.grid-4,.grid-3,.grid-2{grid-template-columns:1fr}}
   
@@ -575,12 +612,190 @@ function createStyles() {
 `;
 }
 
+
+function AuthPanel({ session, authLoading, syncState, cloudReady, onLoadCloud, onSaveCloud }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const runAuth = async (mode) => {
+    if (!supabase) {
+      setMessage("Supabase 환경변수가 설정되지 않았습니다.");
+      return;
+    }
+    if (!email || !password) {
+      setMessage("이메일과 비밀번호를 입력해 주세요.");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = mode === "signup"
+        ? await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signInWithPassword({ email, password });
+      if (result.error) throw result.error;
+      setMessage(mode === "signup" ? "회원가입 완료. 이메일 확인이 필요할 수 있습니다." : "로그인되었습니다.");
+    } catch (err) {
+      setMessage(err.message || "인증 처리 중 오류가 발생했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const signOut = async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+  };
+
+  if (!supabase) {
+    return (
+      <div className="auth-panel">
+        <div>
+          <strong>클라우드 저장 비활성</strong>
+          <div className="auth-note">VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY 설정 후 계정 동기화가 가능합니다.</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (authLoading) {
+    return (
+      <div className="auth-panel">
+        <div>
+          <strong>계정 상태 확인 중</strong>
+          <div className="auth-note">잠시만 기다려 주세요.</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (session?.user) {
+    return (
+      <div className="auth-panel">
+        <div>
+          <strong>{session.user.email}</strong>
+          <div className="auth-note">
+            {cloudReady ? "모바일·윈도우 동기화 사용 중" : "클라우드 데이터 확인 중"} · {syncState}
+          </div>
+        </div>
+        <div className="auth-actions">
+          <button className="btn ghost" type="button" onClick={onLoadCloud}>불러오기</button>
+          <button className="btn secondary" type="button" onClick={onSaveCloud}>저장</button>
+          <button className="btn danger" type="button" onClick={signOut}>로그아웃</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="auth-panel">
+      <div>
+        <strong>계정으로 동기화</strong>
+        <div className="auth-note">이메일 계정으로 로그인하면 PC와 모바일에서 같은 데이터를 사용할 수 있습니다.</div>
+      </div>
+      <div className="auth-form">
+        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" />
+        <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호" type="password" />
+        <button className="btn primary" type="button" disabled={busy} onClick={() => runAuth("signin")}>로그인</button>
+        <button className="btn ghost" type="button" disabled={busy} onClick={() => runAuth("signup")}>회원가입</button>
+      </div>
+      {message ? <div className="auth-message">{message}</div> : null}
+    </div>
+  );
+}
+
 function App() {
   const [data, setData] = useState(() => loadData());
   const [tab, setTab] = useState("dashboard");
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(Boolean(supabase));
+  const [cloudReady, setCloudReady] = useState(false);
+  const [syncState, setSyncState] = useState("로컬 저장");
   const fileInputRef = useRef(null);
+  const skipCloudSaveRef = useRef(false);
 
   useEffect(() => { saveData(data); }, [data]);
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthLoading(false);
+      return;
+    }
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session || null);
+      setAuthLoading(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession || null);
+      setCloudReady(false);
+      setSyncState(nextSession ? "클라우드 확인 중" : "로컬 저장");
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  const loadCloudData = async () => {
+    if (!supabase || !session?.user) return;
+    setSyncState("클라우드 불러오는 중");
+    const { data: row, error } = await supabase
+      .from(CLOUD_TABLE)
+      .select("data, updated_at")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+
+    if (error) {
+      setSyncState("불러오기 실패");
+      console.error(error);
+      return;
+    }
+
+    if (row?.data) {
+      skipCloudSaveRef.current = true;
+      setData(migrateData(row.data));
+      setSyncState("클라우드 불러오기 완료");
+    } else {
+      setSyncState("신규 계정");
+    }
+    setCloudReady(true);
+  };
+
+  const saveCloudData = async (manual = true) => {
+    if (!supabase || !session?.user) return;
+    setSyncState("클라우드 저장 중");
+    const payload = {
+      user_id: session.user.id,
+      data,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase
+      .from(CLOUD_TABLE)
+      .upsert(payload, { onConflict: "user_id" });
+
+    if (error) {
+      setSyncState("저장 실패");
+      console.error(error);
+      return;
+    }
+    setSyncState(manual ? "수동 저장 완료" : "자동 저장 완료");
+    setCloudReady(true);
+  };
+
+  useEffect(() => {
+    if (!session?.user) return;
+    loadCloudData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!supabase || !session?.user || !cloudReady) return;
+    if (skipCloudSaveRef.current) {
+      skipCloudSaveRef.current = false;
+      return;
+    }
+    const timer = setTimeout(() => saveCloudData(false), 900);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, session?.user?.id, cloudReady]);
 
   const update = (fn) => setData((prev) => migrateData(fn(prev)));
 
@@ -990,6 +1205,7 @@ function App() {
     <div className="app">
       <style>{createStyles()}</style>
       <div className="wrap">
+        <AuthPanel session={session} authLoading={authLoading} syncState={syncState} cloudReady={cloudReady} onLoadCloud={loadCloudData} onSaveCloud={() => saveCloudData(true)} />
         <div className="hero">
           <div className="hero-top">
             <div>
@@ -1147,6 +1363,10 @@ function App() {
                 <div className="stat-row"><span className="stat-label">예산 초과 항목</span><span className="mono"><strong>{fmt(dashboardDetail.budgetSummary.over)}</strong>개</span></div>
                 <div className="stat-row"><span className="stat-label">예산 주의 항목</span><span className="mono"><strong>{fmt(dashboardDetail.budgetSummary.warn)}</strong>개</span></div>
                 <div className="stat-row"><span className="stat-label">지금 바로 쓸 수 있는 돈</span><span className="mono"><strong>{fmt(dashboardDetail.liquidAssets)}</strong>원</span></div>
+                <div className="mini-summary-bars current-status-bars">
+                  <div className="mini-bar-line"><span>입력 안정도</span><div className="mini-bar-track"><div className="mini-bar-fill" style={{ width: `${clamp(100 - dashboardDetail.totalValidationIssues * 10, 0, 100)}%` }} /></div></div>
+                  <div className="mini-bar-line"><span>예산 안정도</span><div className="mini-bar-track"><div className="mini-bar-fill" style={{ width: `${clamp(100 - (dashboardDetail.budgetSummary.over * 20 + dashboardDetail.budgetSummary.warn * 10), 0, 100)}%` }} /></div></div>
+                </div>
                 <div style={{ marginTop: 12 }}>
                   {dashboard.net >= 0 ? <span className="chip good">이번달 흑자</span> : <span className="chip bad">이번달 적자</span>}
                   {" "}
@@ -1163,10 +1383,17 @@ function App() {
               </div>
             </div>
 
+            <div className="mini-summary-bars future-status-bars">
+                  <div className="mini-bar-line"><span>은퇴 목표 도달률</span><div className="mini-bar-track"><div className="mini-bar-fill dark" style={{ width: `${clamp((dashboardDetail.retirementRow?.total || 0) / Math.max(n(data.settings.retirementTargetAmount), 1) * 100, 0, 100)}%` }} /></div></div>
+                  <div className="mini-bar-line"><span>라이프이벤트 준비율</span><div className="mini-bar-track"><div className="mini-bar-fill dark" style={{ width: `${clamp(dashboardChartData.totalEventTarget > 0 ? dashboardChartData.totalEventPrepared / dashboardChartData.totalEventTarget * 100 : 0, 0, 100)}%` }} /></div></div>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-2">
               <div className="card">
-                <h3>이번달 자금 흐름</h3>
-                <div className="mini-chart-placeholder">차트 영역</div>
+                <h3 className="title-with-info">이번달 자금 흐름 <span className="info-tip mini">i<span className="info-popover">이번 달 입력된 거래내역을 기준으로 수입·지출·순수입을 요약합니다.</span></span></h3>
+                <div className="mini-chart-placeholder">요약 차트</div>
                 <div className="row-between"><span className="muted">수입</span><strong className="mono">{fmt(dashboard.income)}원</strong></div>
                 <div className="progress"><div className="bar" style={{ width: `${clamp(dashboard.income > 0 ? 100 : 0, 0, 100)}%` }} /></div>
                 <div className="row-between" style={{ marginTop: 10 }}><span className="muted">지출</span><strong className="mono">{fmt(dashboard.expense)}원</strong></div>
@@ -1177,8 +1404,8 @@ function App() {
               </div>
 
               <div className="card">
-                <h3>장기 목표 진행</h3>
-                <div className="mini-chart-placeholder">차트 영역</div>
+                <h3 className="title-with-info">장기 목표 진행 <span className="info-tip mini">i<span className="info-popover">현재 설정값을 기준으로 은퇴까지 남은 기간과 목표 도달률을 보여줍니다.</span></span></h3>
+                <div className="mini-chart-placeholder">요약 차트</div>
                 <div className="row-between"><span className="muted">현재 나이</span><strong>{fmt(data.settings.currentAge)}세</strong></div>
                 <div className="row-between"><span className="muted">은퇴 나이</span><strong>{fmt(data.settings.retireAge)}세</strong></div>
                 <div className="row-between"><span className="muted">남은 기간</span><strong>{fmt(Math.max(n(data.settings.retireAge) - n(data.settings.currentAge), 0))}년</strong></div>
@@ -1190,7 +1417,7 @@ function App() {
 
             <div className="grid grid-2">
               <div className="card">
-                <h3>최근 6개월 월간 요약</h3>
+                <h3 className="title-with-info">최근 6개월 월간 요약 <span className="info-tip mini">i<span className="info-popover">최근 6개월의 월별 수입·지출·순수입 흐름을 표로 확인합니다.</span></span></h3>
                 <div className="table-wrap">
                   <table>
                     <thead><tr><th>월</th><th className="right">수입</th><th className="right">지출</th><th className="right">순수입</th><th className="right">저축률</th></tr></thead>
@@ -1214,7 +1441,7 @@ function App() {
               </div>
 
               <div className="card">
-                <h3>예산 경고 / 상위 지출 카테고리</h3>
+                <h3 className="title-with-info">예산 경고 / 상위 지출 카테고리 <span className="info-tip mini">i<span className="info-popover">이번 달 예산 초과·주의 항목과 지출이 큰 카테고리를 보여줍니다.</span></span></h3>
                 {budgetAnalysis.length === 0 ? <div className="empty">예산이 없습니다.</div> : (
                   <>
                     {budgetAnalysis.slice().sort((a, b) => b.rate - a.rate).slice(0, 5).map((b) => (
@@ -1238,7 +1465,7 @@ function App() {
 
             <div className="grid grid-2">
               <div className="card">
-                <h3>계좌별 자산 현황</h3>
+                <h3 className="title-with-info">계좌별 자산 현황 <span className="info-tip mini">i<span className="info-popover">등록된 계좌별 자산·부채·포트폴리오 평가액을 합산해 보여줍니다.</span></span></h3>
                 <div className="table-wrap">
                   <table>
                     <thead><tr><th>계좌</th><th>유형</th><th className="right">현금/예금</th><th className="right">투자</th><th className="right">부채</th><th className="right">순액</th></tr></thead>
@@ -1260,7 +1487,7 @@ function App() {
               </div>
 
               <div className="card">
-                <h3>자산 구성 / 포트폴리오 요약</h3>
+                <h3 className="title-with-info">자산 구성 / 포트폴리오 요약 <span className="info-tip mini">i<span className="info-popover">자산군과 포트폴리오 비중을 함께 점검합니다.</span></span></h3>
                 <div className="small muted" style={{ marginBottom: 8 }}>자산/부채 카테고리별 합계</div>
                 {dashboardDetail.assetCategoryBreakdown.slice(0, 8).map((row) => (
                   <div key={`${row.kind}-${row.category}`} style={{ marginBottom: 10 }}>
@@ -1286,7 +1513,7 @@ function App() {
 
             <div className="grid grid-3">
               <div className="card">
-                <h3>입력점검 상세</h3>
+                <h3 className="title-with-info">입력점검 상세 <span className="info-tip mini">i<span className="info-popover">거래·자산·포트폴리오 입력 중 보완이 필요한 항목을 보여줍니다.</span></span></h3>
                 {validations.filter((v) => v.count > 0).length === 0 ? <div className="ok-box">현재 주요 입력 오류가 없습니다.</div> :
                   <div className="danger-box">
                     {validations.filter((v) => v.count > 0).map((v) => <div key={v.item}>• {v.item}: {fmt(v.count)}건</div>)}
@@ -1295,7 +1522,7 @@ function App() {
               </div>
 
               <div className="card">
-                <h3>핵심 라이프 이벤트</h3>
+                <h3 className="title-with-info">핵심 라이프 이벤트 <span className="info-tip mini">i<span className="info-popover">출산·차량·여행 등 목표자금 준비 상황을 보여줍니다.</span></span></h3>
                 {dashboardDetail.topEvents.map((e) => (
                   <div key={e.id} style={{ marginBottom: 12 }}>
                     <div className="row-between"><strong>{e.name}</strong><span className="small">{e.age}세 예정</span></div>
@@ -1320,7 +1547,7 @@ function App() {
             </div>
 
             <div className="card">
-              <h3>최근 거래 8건</h3>
+              <h3 className="title-with-info">최근 거래 8건 <span className="info-tip mini">i<span className="info-popover">최근 입력된 거래를 빠르게 확인합니다.</span></span></h3>
               <div className="table-wrap">
                 <table>
                   <thead><tr><th>날짜</th><th>구분</th><th>분류</th><th className="right">금액</th><th>입금</th><th>출금</th><th>내용</th></tr></thead>
