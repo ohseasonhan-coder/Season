@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import * as XLSX from "xlsx";
+import {
+  ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
+  PieChart, Pie, Cell, RadialBarChart, RadialBar
+} from "recharts";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const STORAGE_KEY = "asset-app-final-complete-v1";
@@ -39,6 +44,14 @@ const DEFAULT_SETTINGS = {
   rebalanceBandPct:5, takeProfitPct:20, dipBuy3PctAmount:1000000, dipBuy5PctAmount:1000000, dipBuy10PctAmount:1000000,
   retirementTargetAmount:2000000000,
 };
+const DEFAULT_ASSET_TARGETS = [
+  { id: uid(), label: "나스닥100", weight: 0.45, annualReturn: 0.12, color: "#6c7dff" },
+  { id: uid(), label: "나스닥100(H)", weight: 0.45, annualReturn: 0.12, color: "#8b9aff" },
+  { id: uid(), label: "배당ETF", weight: 0.10, annualReturn: 0.08, color: "#34d58a" },
+];
+
+const DEFAULT_RECURRING = [];
+
 const DEFAULT_BUDGETS = [
   { id:uid(), cat1:"식비", budget:800000, targetWeight:0.15 },
   { id:uid(), cat1:"주거", budget:400000, targetWeight:0.10 },
@@ -56,7 +69,7 @@ const DEFAULT_EVENTS = [
   { id:uid(), name:"🚗 차량 교체", yearsFromNow:4, amountNeeded:25000000, currentPrepared:8000000, priority:"높음" },
 ];
 const DEFAULT_ACCOUNTS = [
-  { id:uid(), name:"우리은행(급여)", type:"은행", institution:"우리은행", currency:"KRW", owner:"본인", active:true, defaultIn:true, note:"" },
+  { id:uid(), name:"우리은행", type:"은행", institution:"우리은행", currency:"KRW", owner:"본인", active:true, defaultIn:true, note:"" },
   { id:uid(), name:"카카오뱅크", type:"은행", institution:"카카오뱅크", currency:"KRW", owner:"본인", active:true, defaultIn:false, note:"" },
   { id:uid(), name:"ISA", type:"증권", institution:"증권사", currency:"KRW", owner:"본인", active:true, defaultIn:false, note:"" },
   { id:uid(), name:"연금저축", type:"연금", institution:"증권사", currency:"KRW", owner:"본인", active:true, defaultIn:false, note:"" },
@@ -65,15 +78,11 @@ const DEFAULT_ACCOUNTS = [
 ];
 const DEFAULT_ASSETS = [
   { id:uid(), kind:"자산", category:"현금성", name:"현금", current:0, previous:0, includeInEmergency:true, note:"" },
-  { id:uid(), kind:"자산", category:"은행예금", name:"우리은행(급여)", current:0, previous:0, includeInEmergency:false, note:"" },
+  { id:uid(), kind:"자산", category:"은행예금", name:"우리은행", current:0, previous:0, includeInEmergency:false, note:"" },
   { id:uid(), kind:"자산", category:"은행예금", name:"카카오뱅크", current:0, previous:0, includeInEmergency:true, note:"" },
   { id:uid(), kind:"부채", category:"카드", name:"신용카드", current:0, previous:0, includeInEmergency:false, note:"" },
 ];
-const DEFAULT_PORTFOLIO = [
-  { id:uid(), account:"ISA", name:"TIGER 나스닥100", qty:0, avgPrice:0, currentPrice:0, targetAmount:0, riskSigma:0.22, assetClass:"나스닥", memo:"" },
-  { id:uid(), account:"ISA", name:"TIGER 나스닥100(H)", qty:0, avgPrice:0, currentPrice:0, targetAmount:0, riskSigma:0.22, assetClass:"나스닥", memo:"" },
-  { id:uid(), account:"ISA", name:"TIGER 배당다우존스", qty:0, avgPrice:0, currentPrice:0, targetAmount:0, riskSigma:0.15, assetClass:"배당", memo:"" },
-];
+const DEFAULT_PORTFOLIO = [];
 const STOCK_MASTER = [
   { name:"삼성전자", code:"005930", symbol:"005930.KS", ticker:"005930", market:"KRX", currency:"KRW", assetClass:"개별주식" },
   { name:"SK하이닉스", code:"000660", symbol:"000660.KS", ticker:"000660", market:"KRX", currency:"KRW", assetClass:"개별주식" },
@@ -97,15 +106,19 @@ function normalizeCategories(c) {
   return merged;
 }
 function emptyData() {
-  return { version:10, categories:DEFAULT_CATEGORIES, transactions:[], accounts:DEFAULT_ACCOUNTS, assets:DEFAULT_ASSETS, portfolio:DEFAULT_PORTFOLIO, budgets:DEFAULT_BUDGETS, events:DEFAULT_EVENTS, settings:DEFAULT_SETTINGS, lastSavedAt:null };
+  return { version:10, categories:DEFAULT_CATEGORIES, transactions:[], accounts:DEFAULT_ACCOUNTS, assets:DEFAULT_ASSETS, portfolio:DEFAULT_PORTFOLIO, assetTargets:DEFAULT_ASSET_TARGETS, recurring:DEFAULT_RECURRING, budgets:DEFAULT_BUDGETS, events:DEFAULT_EVENTS, settings:DEFAULT_SETTINGS, lastSavedAt:null };
 }
 function migrateData(d) {
   const x = { ...emptyData(), ...d };
   x.categories = normalizeCategories(d.categories);
   x.transactions = Array.isArray(d.transactions) ? d.transactions.map((t) => ({ ...t, cat2: normalizeSalaryLabel(t.cat2) })) : [];
-  x.accounts = Array.isArray(d.accounts) && d.accounts.length ? d.accounts : DEFAULT_ACCOUNTS;
-  x.assets = Array.isArray(d.assets) ? d.assets.map((r) => ({ includeInEmergency:false, category:r.kind==="부채"?"부채":"기타", ...r })) : DEFAULT_ASSETS;
-  x.portfolio = Array.isArray(d.portfolio) ? d.portfolio.map((p) => ({ riskSigma:0.22, assetClass:"기타", ...p })) : DEFAULT_PORTFOLIO;
+  x.accounts = Array.isArray(d.accounts) && d.accounts.length ? d.accounts.map((a)=>({ ...a, name: a.name === "우리은행(급여)" ? "우리은행" : a.name })) : DEFAULT_ACCOUNTS;
+  x.assets = Array.isArray(d.assets) ? d.assets.map((r) => ({ includeInEmergency:false, category:r.kind==="부채"?"부채":"기타", ...r, name: r.name === "우리은행(급여)" ? "우리은행" : r.name })) : DEFAULT_ASSETS;
+  x.portfolio = Array.isArray(d.portfolio) ? d.portfolio
+    .map((p) => ({ riskSigma:0.22, assetClass:"기타", ...p }))
+    .filter((p) => n(p.qty) > 0 || n(p.avgPrice) > 0 || n(p.currentPrice) > 0 || n(p.targetAmount) > 0 || String(p.memo || "").trim()) : DEFAULT_PORTFOLIO;
+  x.assetTargets = Array.isArray(d.assetTargets) && d.assetTargets.length ? d.assetTargets : DEFAULT_ASSET_TARGETS;
+  x.recurring = Array.isArray(d.recurring) ? d.recurring : DEFAULT_RECURRING;
   x.budgets = Array.isArray(d.budgets) && d.budgets.length ? d.budgets : DEFAULT_BUDGETS;
   x.events = Array.isArray(d.events) && d.events.length ? d.events : DEFAULT_EVENTS;
   x.settings = { ...DEFAULT_SETTINGS, ...(d.settings||{}) };
@@ -374,77 +387,50 @@ function polylinePath(pts){ return pts.map((p,i)=>`${i===0?"M":"L"}${p.x},${p.y}
 function areaPath(pts,base){ if(!pts.length) return ""; const d=polylinePath(pts); return `${d} L${pts[pts.length-1].x},${base} L${pts[0].x},${base} Z`; }
 
 function MonthlyTrendChart({ data }) {
-  const rows = (data||[]).slice(-12);
-  if(!rows.length) return <div className="empty">거래내역을 입력하면 차트가 표시됩니다.</div>;
-  const W=560,H=180,ml=52,mr=12,mt=12,mb=28,iW=W-ml-mr,iH=H-mt-mb;
-  const maxVal=Math.max(...rows.map(r=>Math.max(n(r.income),n(r.expense))),1);
-  const minNet=Math.min(...rows.map(r=>n(r.net)),0);
-  const maxY=maxVal,minY=minNet,range=maxY-minY||1;
-  const y=(v)=>mt+((maxY-v)/range)*iH;
-  const step=iW/Math.max(rows.length,1);
-  const linePts=rows.map((r,i)=>({x:ml+step*i+step/2,y:y(n(r.net))}));
-  const incBars=rows.map((r,i)=>{ const bx=ml+step*i+step*.12,bw=step*.3,v=n(r.income),by=y(v); return {x:bx,y:by,w:bw,h:mt+iH-by}; });
-  const expBars=rows.map((r,i)=>{ const bx=ml+step*i+step*.46,bw=step*.3,v=n(r.expense),by=y(v); return {x:bx,y:by,w:bw,h:mt+iH-by}; });
-  const grids=Array.from({length:4}).map((_,i)=>minY+(range*i)/3);
+  const rows = (data || []).slice(-12);
+  if (!rows.length) return <div className="empty">거래내역을 입력하면 차트가 표시됩니다.</div>;
   return (
-    <div>
-      <div className="chart-legend">
-        <span><i className="legend-dot" style={{background:"#6c7dff"}}/>수입</span>
-        <span><i className="legend-dot" style={{background:"#ff5c72"}}/>지출</span>
-        <span><i className="legend-dot" style={{background:"#34d58a"}}/>순수입</span>
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="chart-svg">
-        <defs>
-          <linearGradient id="netGrad" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#34d58a" stopOpacity=".2"/>
-            <stop offset="100%" stopColor="#34d58a" stopOpacity=".02"/>
-          </linearGradient>
-        </defs>
-        {grids.map((gv,i)=>(
-          <g key={i}>
-            <line x1={ml} x2={W-mr} y1={y(gv)} y2={y(gv)} stroke="#2a2d36" strokeDasharray="4 3"/>
-            <text x={ml-6} y={y(gv)+4} textAnchor="end" fontSize="10" fill="#5a6278">{fmt(gv/10000)}만</text>
-          </g>
-        ))}
-        <line x1={ml} x2={W-mr} y1={y(0)} y2={y(0)} stroke="#353840"/>
-        {incBars.map((b,i)=><rect key={`i${i}`} x={b.x} y={b.y} width={b.w} height={b.h} rx="4" fill="#6c7dff" opacity=".7"/>)}
-        {expBars.map((b,i)=><rect key={`e${i}`} x={b.x} y={b.y} width={b.w} height={b.h} rx="4" fill="#ff5c72" opacity=".7"/>)}
-        <path d={areaPath(linePts,y(0))} fill="url(#netGrad)"/>
-        <path d={polylinePath(linePts)} fill="none" stroke="#34d58a" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
-        {linePts.map((p,i)=><circle key={`p${i}`} cx={p.x} cy={p.y} r="3.5" fill="#34d58a"/>)}
-        {rows.map((r,i)=>(
-          <text key={r.month} x={ml+step*i+step/2} y={H-6} textAnchor="middle" fontSize="10" fill="#5a6278">
-            {String(r.month).slice(5)}
-          </text>
-        ))}
-      </svg>
+    <div style={{ width: "100%", height: 240 }}>
+      <ResponsiveContainer>
+        <LineChart data={rows} margin={{ top: 12, right: 16, left: 0, bottom: 0 }}>
+          <XAxis dataKey="month" tick={{ fill: "#5a6278", fontSize: 11 }} tickFormatter={(v)=>String(v).slice(5)} />
+          <YAxis tick={{ fill: "#5a6278", fontSize: 11 }} tickFormatter={(v)=>`${Math.round(n(v)/10000)}만`} />
+          <Tooltip formatter={(value)=>`${fmt(value)}원`} contentStyle={{ background:"#161920", border:"1px solid #353840", borderRadius:12, color:"#f0f1f3" }} />
+          <Bar dataKey="income" name="수입" fill="#6c7dff" radius={[6,6,0,0]} />
+          <Bar dataKey="expense" name="지출" fill="#ff5c72" radius={[6,6,0,0]} />
+          <Line type="monotone" dataKey="net" name="순수입" stroke="#34d58a" strokeWidth={3} dot={{ r:3 }} />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }
 
 function AssetDonutChart({ segments }) {
-  const rows=(segments||[]).filter(s=>n(s.value)>0);
-  if(!rows.length) return <div className="empty">자산 데이터가 없습니다.</div>;
-  const total=rows.reduce((s,r)=>s+n(r.value),0);
-  const colors=["#6c7dff","#34d58a","#f0b429","#ff5c72","#60c5e8","#a78bfa"];
-  let angle=0;
-  const slices=rows.map((r,i)=>{ const value=n(r.value),sweep=(value/total)*360,start=angle,end=angle+sweep; angle=end; return {...r,color:colors[i%colors.length],start,end,pct:value/total*100}; });
+  const rows = (segments || []).filter((s) => n(s.value) > 0);
+  if (!rows.length) return <div className="empty">자산 데이터가 없습니다.</div>;
+  const total = rows.reduce((s, r) => s + n(r.value), 0);
+  const colors = ["#6c7dff", "#34d58a", "#f0b429", "#ff5c72", "#60c5e8", "#a78bfa"];
+  const chartRows = rows.map((r, i) => ({ ...r, fill: colors[i % colors.length], pct: total ? n(r.value) / total * 100 : 0 }));
   return (
     <div className="donut-wrap">
-      <svg viewBox="0 0 200 200" className="chart-svg">
-        {slices.map(s=><path key={s.label} d={arcPath(100,100,72,s.start,s.end)} fill="none" stroke={s.color} strokeWidth="28" strokeLinecap="butt"/>)}
-        <circle cx="100" cy="100" r="50" fill="#161920"/>
-        <text x="100" y="96" textAnchor="middle" fontSize="10" fill="#5a6278">총자산</text>
-        <text x="100" y="116" textAnchor="middle" fontSize="16" fontWeight="800" fill="#f0f1f3">{fmt(total/100000000)}억</text>
-      </svg>
+      <div style={{ width: "100%", height: 220 }}>
+        <ResponsiveContainer>
+          <PieChart>
+            <Pie data={chartRows} dataKey="value" nameKey="label" innerRadius={58} outerRadius={82} paddingAngle={2}>
+              {chartRows.map((entry, i) => <Cell key={entry.label || i} fill={entry.fill} />)}
+            </Pie>
+            <Tooltip formatter={(value)=>`${fmt(value)}원`} contentStyle={{ background:"#161920", border:"1px solid #353840", borderRadius:12, color:"#f0f1f3" }} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
       <div>
-        {slices.map(s=>(
-          <div key={s.label} className="stat-row" style={{padding:"7px 0"}}>
-            <span className="row" style={{gap:8}}>
-              <i className="legend-dot" style={{background:s.color,width:10,height:10,borderRadius:"50%",display:"inline-block",flexShrink:0}}/>
-              <span style={{fontSize:12,color:"var(--text2)"}}>{s.label}</span>
+        {chartRows.map((s) => (
+          <div key={s.label} className="stat-row" style={{ padding: "7px 0" }}>
+            <span className="row" style={{ gap: 8 }}>
+              <i className="legend-dot" style={{ background: s.fill, width: 10, height: 10, borderRadius: "50%", display: "inline-block", flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: "var(--text2)" }}>{s.label}</span>
             </span>
-            <span style={{fontSize:12,color:"var(--text)",fontVariantNumeric:"tabular-nums"}}>{fmtPct(s.pct)}</span>
+            <span style={{ fontSize: 12, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{fmtPct(s.pct)}</span>
           </div>
         ))}
       </div>
@@ -453,25 +439,24 @@ function AssetDonutChart({ segments }) {
 }
 
 function GoalGauge({ value, target, title }) {
-  const rate=Math.min((Math.max(n(value),0)/Math.max(n(target),1))*100,100);
-  const angle=-180+(rate/100)*180;
-  const end=polarToCartesian(120,110,75,angle);
-  const color=rate>=100?"#34d58a":rate>=70?"#6c7dff":rate>=40?"#f0b429":"#ff5c72";
+  const rate = Math.min((Math.max(n(value), 0) / Math.max(n(target), 1)) * 100, 100);
+  const color = rate >= 100 ? "#34d58a" : rate >= 70 ? "#6c7dff" : rate >= 40 ? "#f0b429" : "#ff5c72";
+  const chartData = [{ name: title || "목표", value: rate, fill: color }];
   return (
     <div className="gauge-wrap">
-      <svg viewBox="0 0 240 140" className="chart-svg">
-        <path d={arcPath(120,110,75,-180,0)} fill="none" stroke="#252830" strokeWidth="16"/>
-        <path d={arcPath(120,110,75,-180,angle)} fill="none" stroke={color} strokeWidth="16" strokeLinecap="round"/>
-        <line x1="120" y1="110" x2={end.x} y2={end.y} stroke={color} strokeWidth="3" strokeLinecap="round" opacity=".6"/>
-        <circle cx="120" cy="110" r="5" fill={color}/>
-        <text x="34" y="128" fontSize="10" fill="#5a6278">0%</text>
-        <text x="188" y="128" fontSize="10" fill="#5a6278">100%</text>
-      </svg>
-      <div className="gauge-pct" style={{color}}>{fmtPct(rate)}</div>
+      <div style={{ width: "100%", height: 180 }}>
+        <ResponsiveContainer>
+          <RadialBarChart innerRadius="70%" outerRadius="95%" data={chartData} startAngle={180} endAngle={0}>
+            <RadialBar dataKey="value" cornerRadius={10} background={{ fill: "#252830" }} />
+            <Tooltip formatter={(value)=>`${fmtPct(value)}`} contentStyle={{ background:"#161920", border:"1px solid #353840", borderRadius:12, color:"#f0f1f3" }} />
+          </RadialBarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="gauge-pct" style={{ color }}>{fmtPct(rate)}</div>
       <div className="gauge-label">{title}</div>
-      <div style={{marginTop:10,display:"flex",justifyContent:"center",gap:20,fontSize:12}}>
-        <span style={{color:"var(--text3)"}}>현재 <span style={{color:"var(--text)",fontWeight:600}}>{fmt(value)}원</span></span>
-        <span style={{color:"var(--text3)"}}>목표 <span style={{color:"var(--text)",fontWeight:600}}>{fmt(target)}원</span></span>
+      <div style={{ marginTop: 10, display: "flex", justifyContent: "center", gap: 20, fontSize: 12 }}>
+        <span style={{ color: "var(--text3)" }}>예상 <span style={{ color: "var(--text)", fontWeight: 600 }}>{fmt(value)}원</span></span>
+        <span style={{ color: "var(--text3)" }}>목표 <span style={{ color: "var(--text)", fontWeight: 600 }}>{fmt(target)}원</span></span>
       </div>
     </div>
   );
@@ -1288,7 +1273,12 @@ function SimulationTab({ data, futureSim }) {
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
 function SettingsTab({ data, update }) {
   const s=data.settings;
+  const assetTargets = data.assetTargets || DEFAULT_ASSET_TARGETS;
   const set=(k,v)=>update(d=>({...d,settings:{...d.settings,[k]:v}}));
+  const setTarget=(id,key,value)=>update(d=>({...d,assetTargets:(d.assetTargets||DEFAULT_ASSET_TARGETS).map(t=>t.id===id?{...t,[key]:value}:t)}));
+  const addTarget=()=>update(d=>({...d,assetTargets:[...(d.assetTargets||DEFAULT_ASSET_TARGETS),{id:uid(),label:"새 자산군",weight:0,annualReturn:0.08,color:"#60c5e8"}]}));
+  const removeTarget=(id)=>update(d=>({...d,assetTargets:(d.assetTargets||DEFAULT_ASSET_TARGETS).filter(t=>t.id!==id)}));
+  const targetWeightSum = assetTargets.reduce((sum,t)=>sum+n(t.weight),0);
   return (
     <div className="stack">
       <div className="g2">
@@ -1321,15 +1311,30 @@ function SettingsTab({ data, update }) {
       </div>
       <div className="g2">
         <div className="card">
-          <h3>투자 수익률 / 목표 비중</h3>
-          <div className="form-grid-3">
-            <Field label="나스닥 기대수익률"><input type="number" step="0.01" value={s.annualReturnNasdaq} onChange={e=>set("annualReturnNasdaq",Number(e.target.value))}/></Field>
-            <Field label="배당 기대수익률"><input type="number" step="0.01" value={s.annualReturnDividend} onChange={e=>set("annualReturnDividend",Number(e.target.value))}/></Field>
-            <Field label="연 투자증가율"><input type="number" step="0.01" value={s.annualRaise} onChange={e=>set("annualRaise",Number(e.target.value))}/></Field>
-            <Field label="나스닥100 비중"><input type="number" step="0.01" value={s.targetNasdaqWeight} onChange={e=>set("targetNasdaqWeight",Number(e.target.value))}/></Field>
-            <Field label="나스닥100(H) 비중"><input type="number" step="0.01" value={s.targetNasdaqHWeight} onChange={e=>set("targetNasdaqHWeight",Number(e.target.value))}/></Field>
-            <Field label="배당ETF 비중"><input type="number" step="0.01" value={s.targetDividendWeight} onChange={e=>set("targetDividendWeight",Number(e.target.value))}/></Field>
+          <div className="card-title">
+            <h3>투자 수익률 / 목표 비중</h3>
+            <button className="btn btn-sm btn-primary" onClick={addTarget}>자산군 추가</button>
           </div>
+          <div className={Math.abs(targetWeightSum-1)<0.001 ? "alert alert-ok" : "alert alert-warn"} style={{marginBottom:12}}>
+            목표 비중 합계: {fmtPct(targetWeightSum*100)} {Math.abs(targetWeightSum-1)<0.001 ? "· 정상" : "· 합계가 100%가 되도록 조정하세요"}
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>자산군</th><th>목표 비중</th><th>기대수익률</th><th>색상</th><th>작업</th></tr></thead>
+              <tbody>
+                {assetTargets.map(t=>(
+                  <tr key={t.id}>
+                    <td><input className="auth-input" value={t.label} onChange={e=>setTarget(t.id,"label",e.target.value)} /></td>
+                    <td><input className="auth-input" type="number" step="0.01" value={t.weight} onChange={e=>setTarget(t.id,"weight",Number(e.target.value))} /></td>
+                    <td><input className="auth-input" type="number" step="0.01" value={t.annualReturn} onChange={e=>setTarget(t.id,"annualReturn",Number(e.target.value))} /></td>
+                    <td><input className="auth-input" type="color" value={t.color || "#6c7dff"} onChange={e=>setTarget(t.id,"color",e.target.value)} /></td>
+                    <td><button className="btn btn-sm btn-danger" onClick={()=>removeTarget(t.id)}>삭제</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="small muted" style={{marginTop:10}}>예: 나스닥100, 나스닥100(H), 배당ETF 외에도 원자력·반도체·현금성 등 원하는 자산군을 추가할 수 있습니다.</div>
         </div>
         <div className="card">
           <h3>투자 스케줄 / 규칙</h3>
@@ -1419,8 +1424,11 @@ function AccountsTab({ data, update }) {
 // ─── Data Tab ─────────────────────────────────────────────────────────────────
 function DataTab({ data, update, validations }) {
   const fileRef=useRef();
+  const excelRef=useRef();
   const exportJSON=()=>{ const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`asset-backup-${todayISO()}.json`; a.click(); };
-  const importJSON=(file)=>{ const rd=new FileReader(); rd.onload=()=>{ try{setData(migrateData(JSON.parse(rd.result)));alert("복원 완료");}catch(e){alert("복원 실패: "+e.message);} }; rd.readAsText(file); };
+  const exportCSV=()=>{ const headers=["date","type","cat1","cat2","amount","inAccount","outAccount","content","memo"]; const body=data.transactions.map(t=>headers.map(h=>`"${String(t[h]??"").replace(/"/g,'""')}"`).join(",")); const blob=new Blob([[headers.join(","),...body].join("\n")],{type:"text/csv;charset=utf-8"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`transactions-${todayISO()}.csv`; a.click(); };
+  const importJSON=(file)=>{ const rd=new FileReader(); rd.onload=()=>{ try{update(()=>migrateData(JSON.parse(rd.result)));alert("복원 완료");}catch(e){alert("복원 실패: "+e.message);} }; rd.readAsText(file); };
+  const importExcel=(file)=>{ const rd=new FileReader(); rd.onload=()=>{ try{ const wb=XLSX.read(rd.result,{type:"array"}); const ws=wb.Sheets[wb.SheetNames[0]]; const rows=XLSX.utils.sheet_to_json(ws,{defval:""}); const tx=rows.map(r=>({id:uid(),date:String(r.date||r.날짜||todayISO()).slice(0,10),type:r.type||r.구분||"지출",cat1:r.cat1||r.대분류||"",cat2:r.cat2||r.소분류||"",amount:n(r.amount||r.금액),inAccount:r.inAccount||r.입금계좌||"",outAccount:r.outAccount||r.출금계좌||"",content:r.content||r.내용||"",memo:r.memo||r.메모||""})).filter(t=>t.date&&t.type&&t.amount); update(d=>({...d,transactions:[...d.transactions,...tx]})); alert(`${tx.length}건 가져오기 완료`);}catch(e){alert("Excel/CSV 가져오기 실패: "+e.message);} }; rd.readAsArrayBuffer(file); };
   const clearAll=()=>{ if(!window.confirm("전체 데이터를 초기화할까요?")) return; update(()=>emptyData()); };
   return (
     <div className="stack">
@@ -1447,9 +1455,12 @@ function DataTab({ data, update, validations }) {
         <h3>백업 / 복원</h3>
         <div className="row" style={{flexWrap:"wrap",gap:10}}>
           <button className="btn btn-primary" onClick={exportJSON}>JSON 백업 다운로드</button>
+          <button className="btn btn-ghost" onClick={exportCSV}>CSV 거래내역 다운로드</button>
           <button className="btn btn-ghost" onClick={()=>fileRef.current?.click()}>JSON 복원</button>
+          <button className="btn btn-ghost" onClick={()=>excelRef.current?.click()}>Excel/CSV 가져오기</button>
           <button className="btn btn-danger" onClick={clearAll}>전체 초기화</button>
           <input ref={fileRef} type="file" accept=".json" style={{display:"none"}} onChange={e=>e.target.files?.[0]&&importJSON(e.target.files[0])}/>
+          <input ref={excelRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={e=>e.target.files?.[0]&&importExcel(e.target.files[0])}/>
         </div>
         <div style={{marginTop:12,fontSize:12,color:"var(--text3)"}}>마지막 저장: {data.lastSavedAt?new Date(data.lastSavedAt).toLocaleString():"-"}</div>
       </div>
@@ -1457,12 +1468,78 @@ function DataTab({ data, update, validations }) {
   );
 }
 
+
+// ─── Recurring Transactions Tab ───────────────────────────────────────────────
+function RecurringTab({ data, update, accountNamesIn, accountNamesOut }) {
+  const empty={id:"",active:true,day:1,type:"지출",cat1:"",cat2:"",amount:"",inAccount:"",outAccount:"",content:"",memo:""};
+  const [form,setForm]=useState(empty);
+  const cat1Opts=Object.keys(data.categories[form.type]||{});
+  const cat2Opts=(data.categories[form.type]||{})[form.cat1]||[];
+  const save=()=>{
+    if(!form.type||!form.cat1||!form.cat2||n(form.amount)<=0||!form.content) return alert("반복 거래 필수값을 확인하세요.");
+    update(d=>{
+      const row={...form,day:clamp(n(form.day)||1,1,28),amount:n(form.amount),id:form.id||uid()};
+      const recurring=form.id?(d.recurring||[]).map(r=>r.id===form.id?row:r):[...(d.recurring||[]),row];
+      return {...d,recurring};
+    });
+    setForm(empty);
+  };
+  const registerThisMonth=()=>{
+    const month=thisMonthISO();
+    update(d=>{
+      const tx=[...d.transactions];
+      (d.recurring||[]).filter(r=>r.active!==false).forEach(r=>{
+        const marker=`${r.id}-${month}`;
+        if(tx.some(t=>t.recurringKey===marker)) return;
+        const date=`${month}-${String(clamp(n(r.day)||1,1,28)).padStart(2,"0")}`;
+        tx.push({id:uid(),date,type:r.type,cat1:r.cat1,cat2:r.cat2,amount:n(r.amount),inAccount:r.inAccount||"",outAccount:r.outAccount||"",content:r.content,memo:r.memo||"",recurringKey:marker});
+      });
+      return {...d,transactions:tx};
+    });
+  };
+  return (
+    <div className="stack">
+      <div className="card">
+        <div className="card-title"><h3>반복 거래 등록</h3><button className="btn btn-sm btn-primary" onClick={registerThisMonth}>이번 달 자동 등록</button></div>
+        <div className="form-grid">
+          <Field label="사용"><select value={String(form.active)} onChange={e=>setForm({...form,active:e.target.value==="true"})}><option value="true">사용</option><option value="false">중지</option></select></Field>
+          <Field label="매월 일자(1~28)"><input value={form.day} onChange={e=>setForm({...form,day:e.target.value})}/></Field>
+          <Field label="구분"><select value={form.type} onChange={e=>setForm({...form,type:e.target.value,cat1:"",cat2:""})}><option>수입</option><option>지출</option><option>자산이동</option></select></Field>
+          <Field label="대분류"><select value={form.cat1} onChange={e=>setForm({...form,cat1:e.target.value,cat2:""})}><option value="">선택</option>{cat1Opts.map(x=><option key={x}>{x}</option>)}</select></Field>
+          <Field label="소분류"><select value={form.cat2} onChange={e=>setForm({...form,cat2:e.target.value})}><option value="">선택</option>{cat2Opts.map(x=><option key={x}>{x}</option>)}</select></Field>
+          <Field label="금액"><input value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})}/></Field>
+          <Field label="입금계좌"><select value={form.inAccount} onChange={e=>setForm({...form,inAccount:e.target.value})}><option value="">선택</option>{accountNamesIn.map(x=><option key={x}>{x}</option>)}</select></Field>
+          <Field label="출금계좌"><select value={form.outAccount} onChange={e=>setForm({...form,outAccount:e.target.value})}><option value="">선택</option>{accountNamesOut.map(x=><option key={x}>{x}</option>)}</select></Field>
+          <Field label="내용"><input value={form.content} onChange={e=>setForm({...form,content:e.target.value})}/></Field>
+        </div>
+        <div className="form-actions"><button className="btn btn-primary" onClick={save}>{form.id?"수정 저장":"반복 거래 저장"}</button><button className="btn btn-ghost" onClick={()=>setForm(empty)}>초기화</button></div>
+      </div>
+      <div className="card">
+        <h3>반복 거래 목록</h3>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>상태</th><th>일자</th><th>구분</th><th>분류</th><th className="td-right">금액</th><th>내용</th><th>작업</th></tr></thead>
+            <tbody>
+              {(data.recurring||[]).map(r=>(
+                <tr key={r.id}><td>{r.active!==false?<span className="badge badge-green">사용</span>:<span className="badge badge-muted">중지</span>}</td><td>매월 {r.day}일</td><td>{r.type}</td><td>{r.cat1} / {r.cat2}</td><td className="td-right td-mono">{fmt(r.amount)}</td><td>{r.content}</td><td><div className="row"><button className="btn btn-sm btn-ghost" onClick={()=>setForm({...r})}>수정</button><button className="btn btn-sm btn-danger" onClick={()=>update(d=>({...d,recurring:(d.recurring||[]).filter(x=>x.id!==r.id)}))}>삭제</button></div></td></tr>
+              ))}
+              {!(data.recurring||[]).length&&<tr><td colSpan={7}><div className="empty">반복 거래가 없습니다.</div></td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 const NAV = [
   { section: "메인" },
   { id:"dashboard", icon:"◈", label:"대시보드" },
   { section: "입력" },
   { id:"transactions", icon:"↔", label:"거래내역" },
+  { id:"recurring", icon:"🔁", label:"반복 거래" },
   { id:"assets", icon:"🏦", label:"자산·부채" },
   { id:"portfolio", icon:"📈", label:"포트폴리오" },
   { id:"budget", icon:"💰", label:"가계부" },
@@ -1477,7 +1554,7 @@ const NAV = [
   { id:"data", icon:"💾", label:"데이터·백업" },
 ];
 
-const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
+const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", recurring:"반복 거래", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -1489,6 +1566,17 @@ export default function App() {
   const [cloudReady,setCloudReady]=useState(false);
   const [showFab,setShowFab]=useState(false);
   const skipCloudSaveRef=useRef(false);
+
+  useEffect(()=>{
+    const onKey=(e)=>{
+      if(!e.altKey) return;
+      const key=e.key.toLowerCase();
+      const map={d:"dashboard",t:"transactions",r:"recurring",p:"portfolio",a:"assets",b:"budget",s:"settings",x:"data"};
+      if(map[key]){e.preventDefault();setTab(map[key]);}
+    };
+    window.addEventListener("keydown",onKey);
+    return()=>window.removeEventListener("keydown",onKey);
+  },[]);
 
   useEffect(()=>{ saveData(data); },[data]);
 
@@ -1523,6 +1611,19 @@ export default function App() {
     const t=setTimeout(()=>saveCloudData(false),900);
     return()=>clearTimeout(t);
   },[data,session?.user?.id,cloudReady]);
+
+  useEffect(()=>{
+    if(!(data.recurring||[]).length) return;
+    const month=thisMonthISO();
+    const additions=[];
+    (data.recurring||[]).filter(r=>r.active!==false).forEach(r=>{
+      const marker=`${r.id}-${month}`;
+      if(data.transactions.some(t=>t.recurringKey===marker)) return;
+      const date=`${month}-${String(clamp(n(r.day)||1,1,28)).padStart(2,"0")}`;
+      additions.push({id:uid(),date,type:r.type,cat1:r.cat1,cat2:r.cat2,amount:n(r.amount),inAccount:r.inAccount||"",outAccount:r.outAccount||"",content:r.content,memo:r.memo||"",recurringKey:marker});
+    });
+    if(additions.length) setData(prev=>({...prev,transactions:[...prev.transactions,...additions]}));
+  },[data.recurring]);
 
   const update=(fn)=>setData(prev=>migrateData(fn(prev)));
   const accountOptions=useMemo(()=>data.accounts.filter(a=>a.active),[data.accounts]);
@@ -1599,8 +1700,12 @@ export default function App() {
     const rows=[];
     let nasdaq=0,dividend=0,isaBalance=0,isaPrincipalInCycle=0,realizedIsaTaxSavedAcc=0,pensionCreditAcc=0,pensionTransferredAcc=0,taxableOverflowAcc=0,isaRolloverCount=0;
     const years=Math.max(n(data.settings.retireAge)-n(data.settings.currentAge),0);
-    const wN=n(data.settings.targetNasdaqWeight)+n(data.settings.targetNasdaqHWeight),wD=n(data.settings.targetDividendWeight);
-    const weightedReturn=(n(data.settings.annualReturnNasdaq)*(wN||0))+(n(data.settings.annualReturnDividend)*(wD||0));
+    const targets=(data.assetTargets&&data.assetTargets.length?data.assetTargets:DEFAULT_ASSET_TARGETS);
+    const weightSum=targets.reduce((s,t)=>s+n(t.weight),0)||1;
+    const normalizedTargets=targets.map(t=>({...t,weight:n(t.weight)/weightSum,annualReturn:n(t.annualReturn)}));
+    const weightedReturn=normalizedTargets.reduce((s,t)=>s+(t.weight*t.annualReturn),0);
+    const nasdaqLikeWeight=normalizedTargets.filter(t=>String(t.label||"").includes("나스닥")).reduce((s,t)=>s+t.weight,0);
+    const dividendLikeWeight=normalizedTargets.filter(t=>String(t.label||"").includes("배당")).reduce((s,t)=>s+t.weight,0);
     const isaAnnualLimit=Math.max(n(data.settings.isaAnnualLimit),0),isaCycleYears=Math.max(n(data.settings.isaCycleYears),1);
     const isaTaxFreeLimit=Math.max(n(data.settings.isaTaxFreeLimit),0),isaTaxRate=Math.max(n(data.settings.isaTaxRate),0);
     const normalTaxRate=Math.max(n(data.settings.taxableDividendTaxRate),0);
@@ -1617,8 +1722,8 @@ export default function App() {
       const annualIsaContribution=Math.min(annualInvest,isaAnnualLimit);
       const annualTaxableOverflowInvest=Math.max(annualInvest-annualIsaContribution,0);
       taxableOverflowAcc+=annualTaxableOverflowInvest;
-      nasdaq=(nasdaq+annualInvest*wN)*(1+n(data.settings.annualReturnNasdaq));
-      dividend=(dividend+annualInvest*wD)*(1+n(data.settings.annualReturnDividend));
+      nasdaq=(nasdaq+annualInvest*nasdaqLikeWeight)*(1+weightedReturn);
+      dividend=(dividend+annualInvest*dividendLikeWeight)*(1+weightedReturn);
       const total=nasdaq+dividend;
       const yearInCycle=((year-1)%isaCycleYears)+1;
       if(yearInCycle===1){isaBalance=0;isaPrincipalInCycle=0;}
@@ -1644,7 +1749,7 @@ export default function App() {
       rows.push({age:n(data.settings.currentAge)+year,year,yearLabel:`${new Date().getFullYear()+year-1}`,monthlyInvest,annualInvest,nasdaq,dividend,isaTaxSaved,pensionCreditAcc,pensionTransferredAcc,cyclePensionCredit,cycleTransferAmount,total,isaBalance,isaPrincipalInCycle,isaProfitInCycle,yearInCycle,maturityOccurred,taxableOverflowAcc,isaRolloverCount});
     }
     return rows;
-  },[data.settings]);
+  },[data.settings,data.assetTargets]);
 
   const dashboardDetail=useMemo(()=>{
     const emergencyFund=data.assets.filter(a=>a.kind==="자산"&&a.includeInEmergency).reduce((s,a)=>s+n(a.current),0);
@@ -1706,7 +1811,7 @@ export default function App() {
           <div className="topbar">
             <div className="topbar-title">{PAGE_TITLES[tab]||tab}</div>
             <div className="topbar-right">
-              <span style={{fontSize:12,color:"var(--text3)"}}>{thisMonthISO()}</span>
+              <span style={{fontSize:12,color:"var(--text3)"}}>Alt+D/T/R/P/S 이동 · {thisMonthISO()}</span>
               {dashboard.net!==0&&(
                 <span className={`badge ${dashboard.net>=0?"badge-green":"badge-red"}`}>
                   이번달 {dashboard.net>=0?"흑자":"적자"} {fmt(Math.abs(dashboard.net))}원
@@ -1718,6 +1823,7 @@ export default function App() {
           <div className="page">
             {tab==="dashboard"&&<DashboardTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} dashboardChartData={dashboardChartData} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} monthlySeries={monthlySeries} eventAnalysis={eventAnalysis} futureSim={futureSim}/>}
             {tab==="transactions"&&<TransactionsTab data={data} update={update} accountNamesIn={accountNamesIn} accountNamesOut={accountNamesOut}/>}
+            {tab==="recurring"&&<RecurringTab data={data} update={update} accountNamesIn={accountNamesIn} accountNamesOut={accountNamesOut}/>}
             {tab==="assets"&&<AssetsTab data={data} update={update}/>}
             {tab==="portfolio"&&<PortfolioTab data={data} update={update} accountOptions={accountOptions} financialAnalysis={financialAnalysis}/>}
             {tab==="budget"&&<BudgetTab data={data} update={update} budgetAnalysis={budgetAnalysis}/>}
