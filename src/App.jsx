@@ -179,7 +179,7 @@ input,select,textarea{font-family:inherit}
 .nav-dot{width:6px;height:6px;border-radius:99px;background:var(--red);margin-left:auto;flex-shrink:0}
 
 
-/* Collapsible sidebar - Apple blur motion */
+/* Collapsible sidebar - Apple blur motion compact */
 .sidebar{
   transition:width .28s cubic-bezier(.2,.8,.2,1), padding .28s cubic-bezier(.2,.8,.2,1), background .28s ease, box-shadow .28s ease;
   backdrop-filter:blur(22px) saturate(160%);
@@ -191,8 +191,8 @@ input,select,textarea{font-family:inherit}
 .sidebar-logo,.nav-item,.sidebar-toggle{transition:all .24s cubic-bezier(.2,.8,.2,1)}
 .logo-copy,.nav-label,.nav-section{transition:opacity .16s ease, transform .18s ease}
 .sidebar-toggle{
-  height:34px;
-  margin:2px 6px 12px;
+  height:32px;
+  margin:2px 6px 10px;
   border:1px solid rgba(255,255,255,.08);
   border-radius:14px;
   background:rgba(255,255,255,.055);
@@ -212,7 +212,7 @@ input,select,textarea{font-family:inherit}
   box-shadow:0 8px 20px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.07);
 }
 .toggle-glyph{
-  font-size:17px;
+  font-size:16px;
   line-height:1;
   opacity:.86;
   transform:translateY(-1px);
@@ -221,17 +221,21 @@ input,select,textarea{font-family:inherit}
 .sidebar-toggle:hover .toggle-glyph{opacity:1;transform:translateY(-1px) scale(1.12)}
 .sidebar.collapsed{
   width:72px;
-  padding-left:10px;
-  padding-right:10px;
+  padding:14px 10px;
   background:rgba(22,25,32,.9);
+  overflow:visible;
 }
 .sidebar.collapsed .sidebar-logo{
-  padding-left:4px;
-  padding-right:4px;
+  padding:4px 0 8px;
   justify-content:center;
+  margin-bottom:0;
+}
+.sidebar.collapsed .logo-mark{
+  width:34px;
+  height:34px;
+  border-radius:12px;
 }
 .sidebar.collapsed .logo-copy,
-.sidebar.collapsed .nav-section,
 .sidebar.collapsed .nav-label{
   opacity:0;
   transform:translateX(-8px);
@@ -240,11 +244,20 @@ input,select,textarea{font-family:inherit}
   max-width:0;
   overflow:hidden;
 }
+.sidebar.collapsed .nav-section{
+  display:none;
+}
 .sidebar.collapsed .nav-item{
+  width:42px;
+  height:40px;
+  min-height:40px;
   justify-content:center;
-  padding:11px 0;
+  padding:0;
+  margin:2px auto;
   gap:0;
   border-radius:15px;
+  position:relative;
+  overflow:visible;
 }
 .sidebar.collapsed .nav-item.active{
   background:rgba(108,125,255,.18);
@@ -253,16 +266,18 @@ input,select,textarea{font-family:inherit}
 .sidebar.collapsed .nav-icon{
   width:auto;
   font-size:17px;
+  line-height:1;
 }
 .sidebar.collapsed .nav-dot{
   position:absolute;
-  right:12px;
-  top:10px;
+  right:8px;
+  top:8px;
   margin-left:0;
 }
 .sidebar.collapsed .sidebar-toggle{
-  margin-left:4px;
-  margin-right:4px;
+  width:42px;
+  height:30px;
+  margin:0 auto 8px;
   border-radius:15px;
 }
 .main.expanded{margin-left:72px}
@@ -278,8 +293,39 @@ input,select,textarea{font-family:inherit}
   pointer-events:none;
 }
 .nav-item:hover:before,.nav-item.active:before{opacity:1}
+.sidebar.collapsed .nav-item::after{
+  content:attr(data-tip);
+  position:absolute;
+  left:calc(100% + 12px);
+  top:50%;
+  transform:translateY(-50%) translateX(-4px);
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  white-space:nowrap;
+  z-index:9999;
+  padding:8px 10px;
+  border-radius:12px;
+  background:rgba(28,30,36,.96);
+  color:#f5f7fb;
+  border:1px solid rgba(255,255,255,.10);
+  box-shadow:0 14px 30px rgba(0,0,0,.28);
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:-.01em;
+  transition:opacity .14s ease, transform .14s ease, visibility .14s ease;
+}
+.sidebar.collapsed .nav-item::before{
+  border-radius:15px;
+}
+.sidebar.collapsed .nav-item:hover::after{
+  opacity:1;
+  visibility:visible;
+  transform:translateY(-50%) translateX(0);
+}
 @media(max-width:900px){
-  .sidebar.collapsed{width:64px}
+  .sidebar.collapsed{width:64px;padding-left:8px;padding-right:8px}
+  .sidebar.collapsed .nav-item{width:40px;height:38px;min-height:38px}
   .main.expanded{margin-left:64px}
 }
 
@@ -1800,7 +1846,7 @@ export default function App() {
           {NAV.map((item,i)=>{
             if(item.section) return <div key={i} className="nav-section">{item.section}</div>;
             return (
-              <button key={item.id} className={`nav-item ${tab===item.id?"active":""}`} onClick={()=>setTab(item.id)}>
+              <button key={item.id} className={`nav-item ${tab===item.id?"active":""}`} data-tip={item.label} title={sidebarOpen ? "" : item.label} onClick={()=>setTab(item.id)}>
                 <span className="nav-icon">{item.icon}</span>
                 <span className="nav-label">{item.label}</span>
                 {item.id==="data"&&totalIssues>0&&<span className="nav-dot"/>}
