@@ -223,7 +223,7 @@ function txSignedAmount(t) {
 }
 
 
-const QUOTE_SERVER_URL = "http://localhost:8787";
+const QUOTE_SERVER_URL = "";
 
 const STOCK_MASTER = [
   { name: "삼성전자", code: "005930", symbol: "005930.KS", ticker: "005930", market: "KRX", currency: "KRW", assetClass: "개별주식" },
@@ -263,13 +263,13 @@ function buildServerSymbolFromRow(row) {
 }
 
 async function quoteServerHealthCheck() {
-  const res = await fetch(`${QUOTE_SERVER_URL}/api/health`);
+  const res = await fetch(`/api/health`);
   if (!res.ok) throw new Error("시세 서버 연결 실패");
   return res.json();
 }
 
 async function searchStockFromServer(query) {
-  const res = await fetch(`${QUOTE_SERVER_URL}/api/search?q=${encodeURIComponent(query)}`);
+  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
   if (!res.ok) throw new Error("종목 검색 실패");
   const json = await res.json();
   return Array.isArray(json.items) ? json.items : [];
@@ -281,14 +281,14 @@ async function fetchQuoteFromServer(row) {
   if (symbol) query.set("symbol", symbol);
   if (row.name) query.set("name", row.name);
   if (row.code) query.set("code", row.code);
-  const res = await fetch(`${QUOTE_SERVER_URL}/api/quote?${query.toString()}`);
+  const res = await fetch(`/api/quote?${query.toString()}`);
   const json = await res.json();
   if (!res.ok || !json.ok || !json.item) throw new Error(json.message || "현재가 조회 실패");
   return json.item;
 }
 
 async function fetchBulkQuotesFromServer(items) {
-  const res = await fetch(`${QUOTE_SERVER_URL}/api/bulk-quotes`, {
+  const res = await fetch(`/api/bulk-quotes`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ items }),
@@ -1380,10 +1380,7 @@ function App() {
                 <div className="stat-row"><span className="stat-label">ISA→연금 추가공제 예상</span><span className="mono"><strong>{fmt(dashboardDetail.retirementRow?.pensionCreditAcc || 0)}</strong>원</span></div>
                 <div className="stat-row"><span className="stat-label">은퇴 시뮬 총자산</span><span className="mono"><strong>{fmt(dashboardDetail.retirementRow?.total || 0)}</strong>원</span></div>
                 <div className="stat-row"><span className="stat-label">배당 버킷 예상</span><span className="mono"><strong>{fmt(dashboardDetail.retirementRow?.dividend || 0)}</strong>원</span></div>
-              </div>
-            </div>
-
-            <div className="mini-summary-bars future-status-bars">
+                <div className="mini-summary-bars future-status-bars">
                   <div className="mini-bar-line"><span>은퇴 목표 도달률</span><div className="mini-bar-track"><div className="mini-bar-fill dark" style={{ width: `${clamp((dashboardDetail.retirementRow?.total || 0) / Math.max(n(data.settings.retirementTargetAmount), 1) * 100, 0, 100)}%` }} /></div></div>
                   <div className="mini-bar-line"><span>라이프이벤트 준비율</span><div className="mini-bar-track"><div className="mini-bar-fill dark" style={{ width: `${clamp(dashboardChartData.totalEventTarget > 0 ? dashboardChartData.totalEventPrepared / dashboardChartData.totalEventTarget * 100 : 0, 0, 100)}%` }} /></div></div>
                 </div>
