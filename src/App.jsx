@@ -46,6 +46,10 @@ const DEFAULT_SETTINGS = {
   includeEmergencyFundInNetWorth:true, spouseEnabled:true, childrenCount:0, dependentsCount:0,
   rebalanceBandPct:5, takeProfitPct:20, dipBuy3PctAmount:1000000, dipBuy5PctAmount:1000000, dipBuy10PctAmount:1000000,
   retirementTargetAmount:2000000000,
+  fxUsdKrw:0,
+  fxAsOf:"",
+  marketDataLastUpdated:"",
+  autoUpdateMarketDataOnStart:false,
   autoTriggerEnabled:true,
   autoRebalanceTriggerEnabled:true,
   autoBuyTriggerEnabled:true,
@@ -140,6 +144,10 @@ function migrateData(d) {
   x.settings.autoBuyTriggerEnabled = x.settings.autoBuyTriggerEnabled !== false;
   x.settings.triggerMonthlyInvestAmount = n(x.settings.triggerMonthlyInvestAmount || x.settings.monthlyInvestDefault || x.settings.monthlyInvestStage1 || 0);
   x.settings.triggerCashAvailable = n(x.settings.triggerCashAvailable || 0);
+  x.settings.fxUsdKrw = n(x.settings.fxUsdKrw || 0);
+  x.settings.fxAsOf = x.settings.fxAsOf || "";
+  x.settings.marketDataLastUpdated = x.settings.marketDataLastUpdated || "";
+  x.settings.autoUpdateMarketDataOnStart = x.settings.autoUpdateMarketDataOnStart === true;
   return x;
 }
 function loadData() {
@@ -422,6 +430,9 @@ input,select,textarea{font-family:inherit}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .field textarea{min-height:80px;resize:vertical}
 .field select option{background:var(--surface2)}
+.table-wrap input,.table-wrap select,.table-wrap textarea{width:100%;min-width:92px;padding:9px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--surface2);color:var(--text);font-size:13px;transition:.15s;outline:none;font-family:inherit}
+.table-wrap input:focus,.table-wrap select:focus,.table-wrap textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.table-wrap input::placeholder{color:var(--text3)}
 .form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .form-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .form-actions{display:flex;gap:8px;margin-top:14px}
@@ -1360,6 +1371,17 @@ function AutoTriggerCard({rows,settings}){
 // ─── Portfolio Tab ────────────────────────────────────────────────────────────
 function normalizeStockQuery(v){ return String(v||"").toLowerCase().replace(/\s+/g,"").replace(/[()\-_.]/g,""); }
 function buildServerSymbolFromRow(row){ if(row.symbol) return row.symbol; if((row.market==="KRX"||row.market==="KRX ETF")&&/^\d{6}$/.test(String(row.code||row.ticker||""))) return `${String(row.code||row.ticker).padStart(6,"0")}.KS`; return String(row.ticker||row.code||"").trim().toUpperCase(); }
+function normalizeCurrency(v){ return String(v||"KRW").trim().toUpperCase(); }
+function getFxUsdKrw(settings){ return n(settings?.fxUsdKrw||0)>0?n(settings.fxUsdKrw):1; }
+function priceToKRW(row, settings){ const price=n(row.currentPrice||row.avgPrice); return normalizeCurrency(row.currency)==="USD" ? price*getFxUsdKrw(settings) : price; }
+function investedToKRW(row, settings){ const price=n(row.avgPrice); return normalizeCurrency(row.currency)==="USD" ? price*getFxUsdKrw(settings) : price; }
+async function fetchFxUsdKrw(){
+  const endpoints=["/api/fx?base=USD&quote=KRW","/api/exchange-rate?base=USD&quote=KRW"];
+  for(const url of endpoints){
+    try{ const r=await fetch(url); if(!r.ok) continue; const j=await r.json(); const rate=n(j.rate||j.usdKrw||j.USDKRW||j.item?.rate); if(rate>0) return {rate,asOf:j.asOf||j.date||j.item?.asOf||new Date().toISOString(),source:url}; }catch{}
+  }
+  throw new Error("환율 API 응답 없음");
+}
 
 function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
   const ef=()=>({ id:"",account:accountOptions[0]?.name||"",name:"",code:"",ticker:"",symbol:"",market:"",currency:"KRW",quoteAsOf:"",qty:"",avgPrice:"",currentPrice:"",targetAmount:"",riskSigma:"0.22",assetClass:"나스닥",memo:"" });
@@ -1367,6 +1389,8 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
   const [kw,setKw]=useState(""),  [sugs,setSugs]=useState([]),  [isOpen,setIsOpen]=useState(false);
   const [fetching,setFetching]=useState(false),  [bulkUp,setBulkUp]=useState(false),  [qErr,setQErr]=useState("");
   const [serverOk,setServerOk]=useState("checking");
+  const [marketMsg,setMarketMsg]=useState("");
+  const [fxBusy,setFxBusy]=useState(false);
 
   useEffect(()=>{ if(!form.account&&accountOptions[0]) setForm(f=>({...f,account:accountOptions[0].name})); },[accountOptions]);
   useEffect(()=>{
@@ -1401,7 +1425,7 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
       const r=await fetch(`/api/quote?symbol=${encodeURIComponent(buildServerSymbolFromRow(next))}&name=${encodeURIComponent(item.name)}`);
       const j=await r.json();
       if(!r.ok||!j.ok||!j.item)throw new Error();
-      setForm(f=>({...f,currentPrice:j.item.currentPrice?String(j.item.currentPrice):f.currentPrice,quoteAsOf:j.item.asOf||f.quoteAsOf,symbol:j.item.symbol||f.symbol,market:j.item.market||f.market}));
+      setForm(f=>({...f,currentPrice:j.item.currentPrice?String(j.item.currentPrice):f.currentPrice,quoteAsOf:j.item.asOf||f.quoteAsOf,symbol:j.item.symbol||f.symbol,market:j.item.market||f.market,currency:j.item.currency||f.currency}));
     }catch{setQErr("현재가 자동 조회 실패. 직접 입력하세요.");}
     finally{setFetching(false);}
   };
@@ -1423,13 +1447,60 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
       const r=await fetch("/api/bulk-quotes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items})});
       const j=await r.json();
       if(!r.ok||!j.ok)throw new Error();
-      update(d=>({...d,portfolio:d.portfolio.map(p=>{ const hit=(j.results||[]).find(x=>x.id===p.id); if(!hit||!hit.ok) return p; return {...p,currentPrice:n(hit.currentPrice||p.currentPrice),quoteAsOf:hit.asOf||p.quoteAsOf,symbol:hit.symbol||p.symbol}; })}));
+      update(d=>({...d,settings:{...d.settings,marketDataLastUpdated:new Date().toISOString()},portfolio:d.portfolio.map(p=>{ const hit=(j.results||[]).find(x=>x.id===p.id); if(!hit||!hit.ok) return p; return {...p,currentPrice:n(hit.currentPrice||p.currentPrice),quoteAsOf:hit.asOf||p.quoteAsOf,symbol:hit.symbol||p.symbol,currency:hit.currency||p.currency}; })}));
+      setMarketMsg("현재가 갱신 완료");
     }catch{setQErr("전체 업데이트 실패");}
     finally{setBulkUp(false);}
   };
 
+  const updateFx=async()=>{
+    setFxBusy(true); setMarketMsg("");
+    try{
+      const fx=await fetchFxUsdKrw();
+      update(d=>({...d,settings:{...d.settings,fxUsdKrw:fx.rate,fxAsOf:fx.asOf,marketDataLastUpdated:new Date().toISOString()}}));
+      setMarketMsg(`환율 갱신 완료: 1 USD = ${fmt(fx.rate)} KRW`);
+    }catch{
+      setQErr("환율 자동 조회 실패. 설정에서 USD/KRW 환율을 직접 입력하세요.");
+    }finally{setFxBusy(false);}
+  };
+
+  const updateAllMarketData=async()=>{
+    await updateFx();
+    await bulkUpdate();
+  };
+
   return (
     <div className="stack">
+      <div className="card">
+        <div className="card-title">
+          <h3>🌐 시장 데이터 자동 업데이트</h3>
+          <div className="row">
+            <span className="badge badge-muted">USD/KRW {n(data.settings.fxUsdKrw)>0?fmt(data.settings.fxUsdKrw):"미설정"}</span>
+            <span className={`badge ${serverOk==="ok"?"badge-green":"badge-red"}`}>{serverOk==="ok"?"시세서버 연결":"시세서버 확인 필요"}</span>
+          </div>
+        </div>
+        <div className="g3">
+          <div className="card-sm">
+            <div className="kpi-label">환율 기준</div>
+            <div className="kpi-value" style={{fontSize:22}}>{n(data.settings.fxUsdKrw)>0?fmt(data.settings.fxUsdKrw):"-"}<span className="kpi-unit">KRW</span></div>
+            <div className="kpi-sub muted">{data.settings.fxAsOf?String(data.settings.fxAsOf).replace("T"," ").slice(0,19):"환율 미갱신"}</div>
+          </div>
+          <div className="card-sm">
+            <div className="kpi-label">마지막 갱신</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--text)",marginTop:8}}>{data.settings.marketDataLastUpdated?String(data.settings.marketDataLastUpdated).replace("T"," ").slice(0,19):"기록 없음"}</div>
+            <div className="kpi-sub muted">현재가·환율 갱신 기록</div>
+          </div>
+          <div className="card-sm">
+            <div className="row" style={{flexWrap:"wrap"}}>
+              <button className="btn btn-primary btn-sm" onClick={updateAllMarketData} disabled={bulkUp||fxBusy}>{bulkUp||fxBusy?"갱신 중":"현재가+환율 갱신"}</button>
+              <button className="btn btn-ghost btn-sm" onClick={updateFx} disabled={fxBusy}>{fxBusy?"환율 조회중":"환율만 갱신"}</button>
+              <button className="btn btn-ghost btn-sm" onClick={bulkUpdate} disabled={bulkUp||!data.portfolio.length}>{bulkUp?"현재가 조회중":"현재가만 갱신"}</button>
+            </div>
+            <div className="kpi-sub muted">USD 종목은 환율을 곱해 원화 평가금액에 반영됩니다.</div>
+          </div>
+        </div>
+        {marketMsg&&<div className="alert alert-ok" style={{marginTop:12}}>{marketMsg}</div>}
+      </div>
 
       {/* ── 리밸런싱 계산기 + 매수 알림 ── */}
       <div className="g2">
@@ -1518,13 +1589,13 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
         </div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>계좌</th><th>종목명</th><th>코드</th><th className="td-right">수량</th><th className="td-right">평단</th><th className="td-right">현재가</th><th className="td-right">매입원금</th><th className="td-right">평가금액</th><th className="td-right">손익</th><th className="td-right">수익률</th><th>작업</th></tr></thead>
+            <thead><tr><th>계좌</th><th>종목명</th><th>코드</th><th>통화</th><th className="td-right">수량</th><th className="td-right">평단</th><th className="td-right">현재가</th><th className="td-right">매입원금(KRW)</th><th className="td-right">평가금액(KRW)</th><th className="td-right">손익</th><th className="td-right">수익률</th><th>작업</th></tr></thead>
             <tbody>
               {data.portfolio.map(p=>{
-                const invested=n(p.qty)*n(p.avgPrice), value=n(p.qty)*n(p.currentPrice||p.avgPrice), profit=value-invested, rate=invested>0?profit/invested*100:0;
+                const unitAvgKRW=investedToKRW(p,data.settings), unitCurKRW=priceToKRW(p,data.settings), invested=n(p.qty)*unitAvgKRW, value=n(p.qty)*unitCurKRW, profit=value-invested, rate=invested>0?profit/invested*100:0;
                 return (
                   <tr key={p.id}>
-                    <td>{p.account}</td><td className="td-name">{p.name}</td><td style={{color:"var(--text3)"}}>{p.code}</td>
+                    <td>{p.account}</td><td className="td-name">{p.name}</td><td style={{color:"var(--text3)"}}>{p.code}</td><td><span className="badge badge-muted">{normalizeCurrency(p.currency)}</span></td>
                     <td className="td-right td-mono">{p.qty}</td>
                     <td className="td-right td-mono">{fmt(p.avgPrice)}</td>
                     <td className="td-right td-mono">{fmt(p.currentPrice||p.avgPrice)}</td>
@@ -1536,7 +1607,7 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
                   </tr>
                 );
               })}
-              {!data.portfolio.length&&<tr><td colSpan={11}><div className="empty">포트폴리오가 비어있습니다.</div></td></tr>}
+              {!data.portfolio.length&&<tr><td colSpan={12}><div className="empty">포트폴리오가 비어있습니다.</div></td></tr>}
             </tbody>
           </table>
         </div>
@@ -2056,6 +2127,20 @@ function SettingsTab({ data, update }) {
           </div>
         </div>
       </div>
+      <div className="card">
+        <div className="card-title">
+          <h3>시장 데이터 / 환율 설정</h3>
+          <span className="badge badge-muted">1단계: 실제 가격·환율 반영</span>
+        </div>
+        <div className="form-grid-3">
+          <Field label="USD/KRW 환율"><input value={s.fxUsdKrw||""} onChange={e=>set("fxUsdKrw",n(e.target.value))} placeholder="예: 1380"/></Field>
+          <Field label="환율 기준시각"><input value={s.fxAsOf?String(s.fxAsOf).replace("T"," ").slice(0,19):""} onChange={e=>set("fxAsOf",e.target.value)} placeholder="자동 갱신 시 입력"/></Field>
+          <Field label="마지막 시장데이터 갱신"><input value={s.marketDataLastUpdated?String(s.marketDataLastUpdated).replace("T"," ").slice(0,19):""} readOnly placeholder="자동 기록"/></Field>
+        </div>
+        <div style={{marginTop:10,fontSize:12,color:"var(--text3)",lineHeight:1.5}}>
+          해외주식·해외 ETF처럼 통화가 USD인 종목은 현재가와 평단에 USD/KRW 환율을 곱해 원화 평가금액으로 계산합니다. 자동 조회가 실패하면 이 환율을 직접 입력해도 됩니다.
+        </div>
+      </div>
       <InvestmentTargetSettings settings={s} set={set}/>
       <div className="g2">
         <div className="card">
@@ -2490,12 +2575,12 @@ export default function App() {
   },[data.transactions]);
 
   const financialAnalysis=useMemo(()=>{
-    const rows=data.portfolio.map(p=>({...p,value:n(p.qty)*n(p.currentPrice||p.avgPrice),invested:n(p.qty)*n(p.avgPrice)}));
+    const rows=data.portfolio.map(p=>({...p,value:n(p.qty)*priceToKRW(p,data.settings),invested:n(p.qty)*investedToKRW(p,data.settings),currency:normalizeCurrency(p.currency)}));
     const total=rows.reduce((s,r)=>s+r.value,0);
     const mapped=rows.map(r=>{const weight=total>0?r.value/total:0,sigma=n(r.riskSigma||0.22);return{...r,weight,sigma,loss1:-r.value*sigma,state:weight>0.3?"쏠림 경고":weight>0.2?"주의":"정상"};});
     const classMap={};mapped.forEach(r=>{classMap[r.assetClass||"기타"]=(classMap[r.assetClass||"기타"]||0)+r.value;});
     return{rows:mapped,total,byClass:classMap};
-  },[data.portfolio]);
+  },[data.portfolio,data.settings.fxUsdKrw]);
 
   const taxAnalysis=useMemo(()=>{
     const groups=[
@@ -2506,8 +2591,8 @@ export default function App() {
     ];
     return groups.map(g=>{
       const sel=data.portfolio.filter(g.predicate);
-      const value=sel.reduce((s,p)=>s+n(p.qty)*n(p.currentPrice||p.avgPrice),0);
-      const principal=sel.reduce((s,p)=>s+n(p.qty)*n(p.avgPrice),0);
+      const value=sel.reduce((s,p)=>s+n(p.qty)*priceToKRW(p,data.settings),0);
+      const principal=sel.reduce((s,p)=>s+n(p.qty)*investedToKRW(p,data.settings),0);
       const profit=value-principal;
       const estimatedTax=g.name==="ISA"?Math.max(profit-n(data.settings.isaTaxFreeLimit),0)*n(g.taxRate):g.taxRate>0?Math.max(profit,0)*n(g.taxRate):0;
       return{...g,count:sel.length,value,principal,profit,estimatedTax};
