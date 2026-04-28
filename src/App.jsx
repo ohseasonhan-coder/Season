@@ -744,6 +744,33 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 
 
 
+
+
+/* CFO Final */
+.cfo-hero,.goal-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(135deg,var(--surface),rgba(52,213,138,.08));border-color:rgba(52,213,138,.20)}
+.cfo-hero h2,.goal-hero h2{font-size:24px;font-weight:900;letter-spacing:-.04em;margin:4px 0}
+.cfo-hero p,.goal-hero p{font-size:13px;color:var(--text3);line-height:1.5}
+.cfo-score{font-size:52px;font-weight:900;letter-spacing:-.06em;line-height:1}
+.cfo-score span{font-size:18px;color:var(--text3);margin-left:3px}
+.cfo-step{display:grid;grid-template-columns:34px 1fr;gap:12px;padding:14px;border-radius:14px;border:1px solid var(--border);background:var(--surface2)}
+.cfo-step.danger{background:var(--red-bg);border-color:rgba(255,92,114,.25)}
+.cfo-step.warn{background:var(--amber-bg);border-color:rgba(240,180,41,.25)}
+.cfo-step.info{background:var(--accent-bg);border-color:rgba(108,125,255,.25)}
+.cfo-step.green{background:var(--green-bg);border-color:rgba(52,213,138,.25)}
+.cfo-step-no{width:30px;height:30px;border-radius:999px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-weight:900}
+.cfo-step strong{display:block;margin:7px 0 4px;font-size:14px;color:var(--text)}
+.cfo-step p{font-size:12px;color:var(--text2);line-height:1.5}
+.goal-item-pro{border:1px solid var(--border)}
+.goal-conflict{border-color:rgba(255,92,114,.35)!important;background:var(--red-bg)}
+.goal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.goal-head strong{font-size:15px;color:var(--text)}
+.goal-head p{font-size:11.5px;color:var(--text3);margin-top:3px}
+
+/* Goal Funding */
+.goal-item{padding:12px;border-bottom:1px solid var(--border)}
+.goal-head{display:flex;justify-content:space-between;font-weight:800}
+.goal-sub{font-size:12px;color:var(--text3);margin:4px 0}
+
 /* Decision Center */
 .decision-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(135deg,var(--surface),rgba(240,180,41,.08));border-color:rgba(240,180,41,.20)}
 .decision-hero h2{font-size:24px;font-weight:900;letter-spacing:-.04em;margin:4px 0}
@@ -2849,6 +2876,210 @@ function PlanningTab({ data, update, eventAnalysis }) {
 
 
 
+
+
+// ─── CFO Final Center ────────────────────────────────────────────────────────
+function CFOCenterTab({ data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim }) {
+  const cfo=useMemo(()=>{
+    const income=n(dashboard.income), expense=n(dashboard.expense), net=n(dashboard.net);
+    const savingsRate=income>0?net/income*100:0;
+    const emergencyMonths=expense>0?n(dashboardDetail.emergencyFund)/expense:0;
+    const portfolioTotal=n(financialAnalysis.total);
+    const retireLast=futureSim[futureSim.length-1]||{};
+    const target=n(data.settings?.retirementTargetAmount||0);
+    const retireRate=target>0?n(retireLast.total)/target*100:0;
+    const budgetOver=(budgetAnalysis||[]).filter(b=>b.status==="초과").length;
+    const pensionRemain=n(taxAnalysis?.pensionRemaining);
+    const isaRemain=n(taxAnalysis?.isaRemaining);
+    const goalNeeds=(data.events||[]).reduce((sum,e)=>{
+      const shortage=Math.max(n(e.amountNeeded)-n(e.currentPrepared),0);
+      const months=Math.max(n(e.yearsFromNow)*12,1);
+      return sum+shortage/months;
+    },0);
+
+    let score=50;
+    score+=clamp(savingsRate,-20,50)*0.45;
+    score+=clamp(emergencyMonths,0,12)*2.2;
+    score+=retireRate>=100?14:retireRate>=70?8:retireRate>=40?3:0;
+    score-=budgetOver*6;
+    score-=goalNeeds>Math.max(net,0)?12:0;
+    score=clamp(Math.round(score),0,100);
+
+    const agenda=[];
+    if(net<0) agenda.push({tone:"danger",area:"현금흐름",title:"적자 구조 먼저 해결",desc:`이번 달 ${fmt(Math.abs(net))}원 적자입니다. 투자보다 지출 통제가 우선입니다.`});
+    if(emergencyMonths<3) agenda.push({tone:"danger",area:"안전",title:"비상금 최소 3개월치 확보",desc:`현재 ${emergencyMonths.toFixed(1)}개월치입니다.`});
+    else if(emergencyMonths<6) agenda.push({tone:"warn",area:"안전",title:"비상금 6개월치 보강",desc:`6개월 기준까지 ${fmt(Math.max(expense*6-dashboardDetail.emergencyFund,0))}원 부족합니다.`});
+    if(budgetOver>0) agenda.push({tone:"warn",area:"소비",title:"예산 초과 항목 조정",desc:`초과 항목 ${budgetOver}개를 점검하세요.`});
+    if(goalNeeds>Math.max(net,0)) agenda.push({tone:"warn",area:"목표",title:"목표 적립과 투자금 충돌",desc:`목표별 월 필요액 ${fmt(goalNeeds)}원이 현재 여유현금을 압박합니다.`});
+    if(retireRate<70) agenda.push({tone:"warn",area:"은퇴",title:"은퇴 목표 달성률 점검",desc:`현재 가정상 목표 달성률은 ${fmtPct(retireRate)}입니다.`});
+    if(pensionRemain>0||isaRemain>0) agenda.push({tone:"info",area:"절세",title:"절세계좌 활용 여력",desc:`연금 잔여 ${fmt(pensionRemain)}원, ISA 잔여 ${fmt(isaRemain)}원 확인.`});
+    if(!agenda.length) agenda.push({tone:"green",area:"유지",title:"현재 전략 유지 가능",desc:"현금흐름, 비상금, 목표 진행에 큰 경고 신호가 없습니다."});
+
+    const nextSteps=agenda.slice(0,5).map((a,i)=>({no:i+1,...a}));
+    return {score,savingsRate,emergencyMonths,retireRate,goalNeeds,agenda,nextSteps,portfolioTotal};
+  },[data,dashboard,dashboardDetail,financialAnalysis,budgetAnalysis,taxAnalysis,futureSim]);
+
+  const color=cfo.score>=80?"var(--green)":cfo.score>=60?"var(--accent)":cfo.score>=45?"var(--amber)":"var(--red)";
+
+  return (
+    <div className="stack cfo-center">
+      <div className="card cfo-hero">
+        <div>
+          <div className="kpi-label">PERSONAL CFO FINAL BOARD</div>
+          <h2>개인 CFO 종합판단</h2>
+          <p>대시보드, 의사결정, 목표, 세금, 은퇴 데이터를 통합해 이번 달 최우선 행동을 정리합니다.</p>
+        </div>
+        <div className="cfo-score" style={{color}}>{cfo.score}<span>/100</span></div>
+      </div>
+
+      <div className="kpi-grid">
+        <KpiCard label="저축률" value={cfo.savingsRate} unit="%" accent/>
+        <KpiCard label="비상금 커버" value={cfo.emergencyMonths} unit="개월" tone={cfo.emergencyMonths>=6?"green":cfo.emergencyMonths>=3?"":"red"}/>
+        <KpiCard label="은퇴 목표 달성률" value={cfo.retireRate} unit="%" tone={cfo.retireRate>=100?"green":"red"}/>
+        <KpiCard label="목표별 월 필요액" value={cfo.goalNeeds} unit="원"/>
+      </div>
+
+      <div className="g2">
+        <div className="card">
+          <h3>이번 달 최우선 의사결정</h3>
+          <div className="stack" style={{gap:10}}>
+            {cfo.nextSteps.map(s=>(
+              <div key={s.no} className={`cfo-step ${s.tone}`}>
+                <div className="cfo-step-no">{s.no}</div>
+                <div>
+                  <span className="badge badge-accent">{s.area}</span>
+                  <strong>{s.title}</strong>
+                  <p>{s.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          <h3>CFO 요약</h3>
+          <div className="stat-row"><span className="stat-label">순현금흐름</span><span className={`stat-value ${dashboard.net>=0?"text-green":"text-red"}`}>{fmt(dashboard.net)}원</span></div>
+          <div className="stat-row"><span className="stat-label">투자 포트폴리오</span><span className="stat-value">{fmt(cfo.portfolioTotal)}원</span></div>
+          <div className="stat-row"><span className="stat-label">비상금</span><span className="stat-value">{fmt(dashboardDetail.emergencyFund)}원</span></div>
+          <div className="stat-row"><span className="stat-label">입력 점검 이슈</span><span className="stat-value">{dashboardDetail.totalValidationIssues}건</span></div>
+          <div className="alert alert-info" style={{marginTop:14}}>
+            <strong>판단 기준</strong>
+            <div style={{fontSize:12,marginTop:6,lineHeight:1.5}}>현금흐름 → 비상금 → 목표 충돌 → 절세 → 투자 순서로 우선순위를 정합니다.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ─── Goal Funding Tab ────────────────────────────────────────────────────────
+function GoalFundingTab({ data, update, dashboard, dashboardDetail, futureSim }) {
+  const empty={id:"",name:"",yearsFromNow:3,amountNeeded:"",currentPrepared:"",priority:"중간"};
+  const [form,setForm]=useState(empty);
+  const events=Array.isArray(data.events)?data.events:[];
+
+  const analysis=useMemo(()=>{
+    const income=n(dashboard.income);
+    const expense=n(dashboard.expense);
+    const net=n(dashboard.net);
+    const monthlyInvest=n(data.settings?.monthlyInvestDefault||data.settings?.monthlyInvestStage1||0);
+    const investCapacity=Math.max(income-expense,0);
+    return events.map(e=>{
+      const shortage=Math.max(n(e.amountNeeded)-n(e.currentPrepared),0);
+      const months=Math.max(n(e.yearsFromNow)*12,1);
+      const monthlyNeed=shortage/months;
+      const progress=n(e.amountNeeded)>0?n(e.currentPrepared)/n(e.amountNeeded)*100:0;
+      const conflict=monthlyNeed+monthlyInvest>investCapacity && shortage>0;
+      const afterGoalInvestCapacity=Math.max(investCapacity-monthlyNeed,0);
+      return {...e,shortage,monthlyNeed,progress,conflict,afterGoalInvestCapacity};
+    }).sort((a,b)=>{
+      const pa={높음:3,중간:2,낮음:1};
+      return (pa[b.priority]||0)-(pa[a.priority]||0)||b.monthlyNeed-a.monthlyNeed;
+    });
+  },[events,dashboard,data.settings]);
+
+  const totalMonthlyNeed=analysis.reduce((s,e)=>s+n(e.monthlyNeed),0);
+  const conflictCount=analysis.filter(e=>e.conflict).length;
+
+  const save=()=>{
+    if(!form.name||n(form.amountNeeded)<=0) return alert("목표명과 목표금액을 입력하세요.");
+    update(d=>{
+      const row={
+        ...form,
+        id:form.id||uid(),
+        yearsFromNow:n(form.yearsFromNow),
+        amountNeeded:n(form.amountNeeded),
+        currentPrepared:n(form.currentPrepared),
+      };
+      const list=form.id?d.events.map(e=>e.id===form.id?row:e):[...d.events,row];
+      return {...d,events:list};
+    });
+    setForm(empty);
+  };
+
+  const remove=(id)=>update(d=>({...d,events:d.events.filter(e=>e.id!==id)}));
+
+  return (
+    <div className="stack goal-center">
+      <div className="card goal-hero">
+        <div>
+          <div className="kpi-label">GOAL FUNDING</div>
+          <h2>목표별 자금관리</h2>
+          <p>차량, 여행, 비상금, 은퇴 외 목표의 필요 월 적립액과 투자 충돌을 자동 점검합니다.</p>
+        </div>
+      </div>
+
+      <div className="kpi-grid">
+        <KpiCard label="등록 목표" value={analysis.length} unit="개"/>
+        <KpiCard label="월 필요 적립액" value={totalMonthlyNeed} unit="원" accent/>
+        <KpiCard label="투자 충돌 목표" value={conflictCount} unit="개" tone={conflictCount?"red":"green"}/>
+        <KpiCard label="현재 순현금흐름" value={dashboard.net} unit="원" tone={dashboard.net>=0?"green":"red"}/>
+      </div>
+
+      <div className="card">
+        <h3>{form.id?"목표 수정":"목표 추가"}</h3>
+        <div className="form-grid">
+          <Field label="목표명"><input placeholder="예: 차량 교체, 가족여행" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field>
+          <Field label="목표금액"><input placeholder="0" value={form.amountNeeded} onChange={e=>setForm({...form,amountNeeded:n(e.target.value)})}/></Field>
+          <Field label="현재 준비금"><input placeholder="0" value={form.currentPrepared} onChange={e=>setForm({...form,currentPrepared:n(e.target.value)})}/></Field>
+          <Field label="기간(년)"><input type="number" value={form.yearsFromNow} onChange={e=>setForm({...form,yearsFromNow:n(e.target.value)})}/></Field>
+          <Field label="우선순위"><select value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}><option>높음</option><option>중간</option><option>낮음</option></select></Field>
+        </div>
+        <div className="form-actions">
+          <button className="btn btn-primary" onClick={save}>{form.id?"수정 저장":"목표 저장"}</button>
+          <button className="btn btn-ghost" onClick={()=>setForm(empty)}>초기화</button>
+        </div>
+      </div>
+
+      <div className="g2">
+        {analysis.map(g=>(
+          <div key={g.id} className={`card-sm goal-item-pro ${g.conflict?"goal-conflict":""}`}>
+            <div className="goal-head">
+              <div>
+                <strong>{g.name}</strong>
+                <p>{g.yearsFromNow}년 후 · 우선순위 {g.priority}</p>
+              </div>
+              <span className={`badge ${g.conflict?"badge-red":g.priority==="높음"?"badge-amber":"badge-accent"}`}>{g.conflict?"충돌":"정상"}</span>
+            </div>
+            <div className="progress" style={{margin:"12px 0 8px"}}>
+              <div className={`progress-fill ${g.conflict?"pf-red":"pf-accent"}`} style={{width:`${clamp(g.progress,0,100)}%`}}/>
+            </div>
+            <div className="stat-row"><span className="stat-label">달성률</span><span className="stat-value">{fmtPct(g.progress)}</span></div>
+            <div className="stat-row"><span className="stat-label">부족액</span><span className="stat-value">{fmt(g.shortage)}원</span></div>
+            <div className="stat-row"><span className="stat-label">월 필요 적립액</span><span className="stat-value text-accent">{fmt(g.monthlyNeed)}원</span></div>
+            <div className="stat-row"><span className="stat-label">목표 반영 후 투자여력</span><span className={`stat-value ${g.conflict?"text-red":"text-green"}`}>{fmt(g.afterGoalInvestCapacity)}원</span></div>
+            <div className="form-actions">
+              <button className="btn btn-sm btn-ghost" onClick={()=>setForm({...g})}>수정</button>
+              <button className="btn btn-sm btn-danger" onClick={()=>remove(g.id)}>삭제</button>
+            </div>
+          </div>
+        ))}
+        {!analysis.length&&<div className="empty">목표를 추가해주세요.</div>}
+      </div>
+    </div>
+  );
+}
+
 // ─── Decision Center Tab ──────────────────────────────────────────────────────
 function DecisionCenterTab({ data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim }) {
   const decisions=useMemo(()=>{
@@ -4401,13 +4632,15 @@ const NAV = [
   { id:"simulation", icon:"🔮", label:"미래시뮬레이션" },
   { id:"monthlyReport", icon:"🧾", label:"월간 리포트" },
   { id:"decision", icon:"🧭", label:"의사결정 센터" },
+  { id:"goals", icon:"🎯", label:"목표 자금관리" },
+  { id:"cfo", icon:"🏛️", label:"CFO 종합판단" },
   { section: "관리" },
   { id:"settings", icon:"⚙", label:"설정" },
   { id:"accounts", icon:"🏧", label:"계좌관리" },
   { id:"data", icon:"💾", label:"데이터·백업" },
 ];
 
-const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", risk:"리스크 분석", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", monthlyReport:"월간 리포트", decision:"의사결정 센터", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
+const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", risk:"리스크 분석", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", monthlyReport:"월간 리포트", decision:"의사결정 센터", goals:"목표 자금관리", cfo:"CFO 종합판단", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -4650,7 +4883,7 @@ export default function App() {
           </div>
 
           <div className="page">
-            {tab==="dashboard"&&<DashboardTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} dashboardChartData={dashboardChartData} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} monthlySeries={monthlySeries} eventAnalysis={eventAnalysis} futureSim={futureSim}/>}
+            {tab==="dashboard"&&<DashboardTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} dashboardChartData={dashboardChartData} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} monthlySeries={monthlySeries} eventAnalysis={eventAnalysis} futureSim={futureSim}/>}\n            {tab==="goals"&&<GoalFundingTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} futureSim={futureSim}/>}\n            {tab==="cfo"&&<CFOCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="transactions"&&<TransactionsTab data={data} update={update} accountNamesIn={accountNamesIn} accountNamesOut={accountNamesOut}/>}
             {tab==="assets"&&<AssetsTab data={data} update={update}/>}
             {tab==="portfolio"&&<PortfolioTab data={data} update={update} accountOptions={accountOptions} financialAnalysis={financialAnalysis}/>}
