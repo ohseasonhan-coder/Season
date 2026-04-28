@@ -142,6 +142,19 @@ function migrateData(d) {
   x.budgets = Array.isArray(d.budgets) && d.budgets.length ? d.budgets : DEFAULT_BUDGETS;
   x.events = Array.isArray(d.events) && d.events.length ? d.events : DEFAULT_EVENTS;
   x.settings = { ...DEFAULT_SETTINGS, ...(d.settings||{}) };
+  // 추가 연금 필드 보정: 과거 버전의 보훈연금 필드가 있으면 새 필드로 안전하게 이전
+  if (d.settings) {
+    if (x.settings.additionalPensionMonthly === undefined || x.settings.additionalPensionMonthly === null) {
+      x.settings.additionalPensionMonthly = n(d.settings.veteransPensionMonthly);
+    }
+    if (x.settings.additionalPensionAnnualIncrease === undefined || x.settings.additionalPensionAnnualIncrease === null) {
+      x.settings.additionalPensionAnnualIncrease = n(d.settings.veteransPensionAnnualIncrease);
+    }
+    if (!x.settings.additionalPensionName) x.settings.additionalPensionName = "추가 연금";
+    if (x.settings.additionalPensionEnabled === undefined || x.settings.additionalPensionEnabled === null) {
+      x.settings.additionalPensionEnabled = n(x.settings.additionalPensionMonthly) > 0;
+    }
+  }
   const legacyTargets = [
     { id:"target-nasdaq", name:"나스닥", expectedReturn:n(x.settings.annualReturnNasdaq || 0.12), targetWeight:n(x.settings.targetNasdaqWeight)+n(x.settings.targetNasdaqHWeight), memo:"기존 나스닥 목표비중에서 자동 전환" },
     { id:"target-dividend", name:"배당", expectedReturn:n(x.settings.annualReturnDividend || 0.08), targetWeight:n(x.settings.targetDividendWeight), memo:"기존 배당 목표비중에서 자동 전환" },
@@ -3075,18 +3088,33 @@ function SettingsTab({ data, update }) {
             <Field label="연 물가상승률"><input type="number" step="0.001" value={s.annualInflation} onChange={e=>set("annualInflation",Number(e.target.value))}/></Field>
             <Field label="은퇴 목표자산"><input value={s.retirementTargetAmount} onChange={e=>set("retirementTargetAmount",n(e.target.value))}/></Field>
             <Field label="은퇴 후 월 생활비"><input value={s.retirementMonthlyExpense} onChange={e=>set("retirementMonthlyExpense",n(e.target.value))}/></Field>
-            <Field label="추가 연금 사용">
-              <select value={s.additionalPensionEnabled?"사용":"미사용"} onChange={e=>set("additionalPensionEnabled",e.target.value==="사용")}>
-                <option>미사용</option><option>사용</option>
+            <Field label="추가 연금 사용 여부">
+              <select value={s.additionalPensionEnabled ? "사용" : "미사용"} onChange={e=>set("additionalPensionEnabled", e.target.value==="사용")}>
+                <option value="미사용">미사용</option>
+                <option value="사용">사용</option>
               </select>
             </Field>
-            <Field label="추가 연금 명칭"><input value={s.additionalPensionName||"추가 연금"} onChange={e=>set("additionalPensionName",e.target.value)}/></Field>
-            <Field label={`${s.additionalPensionName||"추가 연금"} 월 수령액`}><input value={s.additionalPensionMonthly} onChange={e=>set("additionalPensionMonthly",n(e.target.value))} disabled={!s.additionalPensionEnabled}/></Field>
-            <Field label="추가 연금 연 증가액"><input value={s.additionalPensionAnnualIncrease} onChange={e=>set("additionalPensionAnnualIncrease",n(e.target.value))} disabled={!s.additionalPensionEnabled}/></Field>
+            <Field label="추가 연금 명칭">
+              <input value={s.additionalPensionName ?? "추가 연금"} onChange={e=>set("additionalPensionName", e.target.value)} placeholder="예: 보훈연금, 장애인연금, 개인연금"/>
+            </Field>
+            <Field label="추가 연금 월 수령액">
+              <input value={s.additionalPensionMonthly ?? ""} onChange={e=>set("additionalPensionMonthly", n(e.target.value))} placeholder="0"/>
+            </Field>
+            <Field label="추가 연금 연 증가액">
+              <input value={s.additionalPensionAnnualIncrease ?? ""} onChange={e=>set("additionalPensionAnnualIncrease", n(e.target.value))} placeholder="0"/>
+            </Field>
             <Field label="여행비 예산"><input value={s.retirementTravelBucket} onChange={e=>set("retirementTravelBucket",n(e.target.value))}/></Field>
             <Field label="여행비 사용기간(년)"><input type="number" value={s.retirementTravelYears} onChange={e=>set("retirementTravelYears",n(e.target.value))}/></Field>
             <Field label="은퇴 후 운용수익률"><input type="number" step="0.001" value={s.postRetirementReturn} onChange={e=>set("postRetirementReturn",Number(e.target.value))}/></Field>
             <Field label="비교 은퇴나이"><input type="number" value={s.compareRetireAge} onChange={e=>set("compareRetireAge",n(e.target.value))}/></Field>
+          </div>
+          <div className={`alert ${s.additionalPensionEnabled?"alert-info":"alert-warn"}`} style={{marginTop:14}}>
+            <strong>추가 연금 반영 상태: {s.additionalPensionEnabled ? "사용" : "미사용"}</strong>
+            <div style={{marginTop:6,fontSize:12,lineHeight:1.5}}>
+              {s.additionalPensionEnabled
+                ? `${s.additionalPensionName || "추가 연금"} 월 ${fmt(s.additionalPensionMonthly || 0)}원, 연 증가액 ${fmt(s.additionalPensionAnnualIncrease || 0)}원이 은퇴 후 인출 시뮬레이션에 반영됩니다.`
+                : "미사용 상태에서는 입력값이 저장되어도 은퇴 시뮬레이션에는 0원으로 반영됩니다."}
+            </div>
           </div>
         </div>
         <div className="card">
