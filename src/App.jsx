@@ -239,8 +239,6 @@ input,select,textarea{font-family:inherit}
 .nav-item.active{background:var(--accent-bg);color:var(--accent);font-weight:600}
 .nav-item .nav-icon{font-size:15px;width:20px;text-align:center;flex-shrink:0}
 .nav-dot{width:6px;height:6px;border-radius:99px;background:var(--red);margin-left:auto;flex-shrink:0}
-
-
 /* Collapsible sidebar - Apple blur motion compact */
 .sidebar{
   transition:width .28s cubic-bezier(.2,.8,.2,1), padding .28s cubic-bezier(.2,.8,.2,1), background .28s ease, box-shadow .28s ease;
@@ -459,8 +457,6 @@ input,select,textarea{font-family:inherit}
 .form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .form-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .form-actions{display:flex;gap:8px;margin-top:14px}
-
-
 /* Field validation + AI suggestion */
 .field-label-with-alert{display:flex;align-items:center;gap:6px}
 .field-hint{font-size:10.5px;color:var(--text3);margin-top:5px;line-height:1.35}
@@ -542,8 +538,6 @@ input,select,textarea{font-family:inherit}
 .ai-suggest-desc{font-size:12px;color:var(--text2);line-height:1.5}
 .ai-chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .ai-chip{display:inline-flex;align-items:center;padding:4px 8px;border-radius:99px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);font-size:11px;color:var(--text2)}
-
-
 /* Compact status tooltip */
 .info-tooltip{
   position:relative;
@@ -739,14 +733,6 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .tab-chip{padding:7px 14px;border-radius:99px;font-size:12px;font-weight:600;border:none;cursor:pointer;transition:.15s;background:var(--surface2);color:var(--text2)}
 .tab-chip.active{background:var(--accent-bg);color:var(--accent)}
 .tab-chip:hover:not(.active){background:var(--surface3);color:var(--text)}
-
-
-
-
-
-
-
-
 /* Automation System */
 .automation-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.08));border-color:rgba(108,125,255,.20)}
 .automation-hero h2{font-size:24px;font-weight:900;letter-spacing:-.04em;margin:4px 0}
@@ -1039,8 +1025,6 @@ function FieldHint({ hint }) {
   if(!hint) return null;
   return <div className="field-hint">{hint}</div>;
 }
-
-
 function InfoTooltip({ label, message, tone="info" }) {
   if(!message) return null;
   return (
@@ -1062,8 +1046,6 @@ function Field({ label, error, warn, children }) {
     </div>
   );
 }
-
-
 // ─── Dashboard Tab ────────────────────────────────────────────────────────────
 function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, futureSim }) {
   const recentTx=dashboardDetail.recentTx||[];
@@ -1371,8 +1353,6 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
       return t.date===f.date&&n(t.amount)===f.amount&&String(t.content||"").trim()===f.content&&t.type===f.type;
     }).slice(0,5);
   },[data.transactions,normalizedForm,form.id]);
-
-
   const fieldAlerts=useMemo(()=>{
     const f=normalizedForm;
     const errors={}, warns={};
@@ -1393,8 +1373,6 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
     if(f.amount>=1000000&&!String(form.memo||"").trim()) warns.memo="100만원 이상 거래는 메모를 남기면 분석 정확도가 좋아집니다.";
     return {errors,warns};
   },[normalizedForm,form.memo,duplicateCandidates.length]);
-
-
   const fieldExamples={
     date:"예: 오늘 날짜 또는 거래일",
     type:"수입·지출·자산이동 중 선택",
@@ -1537,11 +1515,11 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
       });
       return {...d,transactions:current};
     });
-    alert(`${month} 고정거래 생성 완료\n추가: ${added}건 / 중복 제외: ${skipped}건`);
+    alert(`${month} 고정거래 생성 완료추가: ${added}건 / 중복 제외: ${skipped}건`);
   };
 
   const save=()=>{
-    if(!canSave) return alert(validationMessages.filter(x=>x.level==="danger").map(x=>`- ${x.title}`).join("\n"));
+    if(!canSave) return alert(validationMessages.filter(x=>x.level==="danger").map(x=>`- ${x.title}`).join(""));
     if(duplicateCandidates.length>0&&!confirm("같은 날짜·금액·내용의 거래가 이미 있습니다. 그래도 저장할까요?")) return;
     update(d=>{
       const row={...form,amount:n(form.amount),id:form.id||uid()};
@@ -1860,8 +1838,6 @@ function ChartTooltipPct({active,payload,label}){
     {payload.map((p,i)=><div key={i} style={{color:p.color,fontVariantNumeric:"tabular-nums"}}>{p.name}: {Number(p.value).toFixed(1)}%</div>)}
   </div>;
 }
-
-
 // ─── 투자전략 설정 헬퍼 ──────────────────────────────────────────────────────
 function getInvestmentTargets(settings){
   const list = Array.isArray(settings?.investmentTargets) ? settings.investmentTargets : [];
@@ -2065,8 +2041,6 @@ function DipBuyAlertCard({rows,settings}){
     </div>
   );
 }
-
-
 // ─── 자동 매수 / 리밸런싱 트리거 ─────────────────────────────────────────────
 function AutoTriggerCard({rows,settings}){
   const plan=buildAutoTriggerPlan(rows,settings);
@@ -2888,12 +2862,6 @@ function PlanningTab({ data, update, eventAnalysis }) {
     </div>
   );
 }
-
-
-
-
-
-
 // ─── Automation System Tab ───────────────────────────────────────────────────
 function AutomationSystemTab({ data, update, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim }) {
   const today=todayISO();
@@ -3074,8 +3042,6 @@ function AutomationSystemTab({ data, update, dashboard, dashboardDetail, financi
     </div>
   );
 }
-
-
 // ─── CFO Final Center ────────────────────────────────────────────────────────
 function CFOCenterTab({ data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim }) {
   const cfo=useMemo(()=>{
@@ -3168,8 +3134,6 @@ function CFOCenterTab({ data, dashboard, dashboardDetail, financialAnalysis, bud
     </div>
   );
 }
-
-
 // ─── Goal Funding Tab ────────────────────────────────────────────────────────
 function GoalFundingTab({ data, update, dashboard, dashboardDetail, futureSim }) {
   const empty={id:"",name:"",yearsFromNow:3,amountNeeded:"",currentPrepared:"",priority:"중간"};
@@ -3491,8 +3455,6 @@ function DecisionCenterTab({ data, dashboard, dashboardDetail, financialAnalysis
     </div>
   );
 }
-
-
 // ─── Monthly Report Tab ───────────────────────────────────────────────────────
 function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalysis, dashboard, dashboardDetail, taxAnalysis }) {
   const months=useMemo(()=>[...new Set((data.transactions||[]).map(t=>monthOf(t.date)).filter(Boolean))].sort().reverse(),[data.transactions]);
@@ -3552,9 +3514,9 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
       `수입은 ${fmt(income)}원, 지출은 ${fmt(expense)}원, 순현금흐름은 ${fmt(net)}원입니다.`,
       `저축률은 ${fmtPct(savingsRate)}이며, 전월 대비 지출 변화율은 ${fmtPct(expenseChange)}입니다.`,
       topExpenses[0]?`가장 큰 지출 항목은 ${topExpenses[0].cat} (${fmt(topExpenses[0].amount)}원)입니다.`:"지출 항목이 없습니다.",
-      issues.map(i=>`- ${i.title}: ${i.text}`).join("\\n"),
-      actions.map(a=>`- ${a.title}: ${a.text}`).join("\\n")
-    ].join("\\n");
+      issues.map(i=>`- ${i.title}: ${i.text}`).join("\"),
+      actions.map(a=>`- ${a.title}: ${a.text}`).join("\")
+    ].join("\");
 
     return {tx,income,expense,transfer,net,savingsRate,incomeChange,expenseChange,netChange,topExpenses,incomeBreakdown,highTx,topDays,budgetRows,overBudget,warningBudget,issues,actions,summaryText};
   },[data.transactions,month,monthlySeries,budgetAnalysis,taxAnalysis,dashboardDetail]);
@@ -3675,8 +3637,6 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
     </div>
   );
 }
-
-
 // ─── Simulation Tab ───────────────────────────────────────────────────────────
 function SimulationTab({ data, futureSim }) {
   const [scenario,setScenario]=useState("base");
@@ -4213,8 +4173,6 @@ function DataTab({ data, update, validations }) {
     </div>
   );
 }
-
-
 // ─── Professional Top 3 Engines ──────────────────────────────────────────────
 // 추가 기능: ① 리밸런싱 ② 리스크 분석 ③ 목표 달성/생존력 진단
 const pfPortfolioValue = (p) => n(p.qty) * n(p.currentPrice || p.avgPrice);
@@ -4810,8 +4768,6 @@ function Step2MddRiskPanel({ data, financialAnalysis }) {
     </div>
   );
 }
-
-
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 const NAV = [
   { section: "메인" },
@@ -5082,7 +5038,7 @@ export default function App() {
           </div>
 
           <div className="page">
-            {tab==="dashboard"&&<DashboardTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} dashboardChartData={dashboardChartData} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} monthlySeries={monthlySeries} eventAnalysis={eventAnalysis} futureSim={futureSim}/>}\n            {tab==="goals"&&<GoalFundingTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} futureSim={futureSim}/>}\n            {tab==="cfo"&&<CFOCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}\n            {tab==="automation"&&<AutomationSystemTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
+            {tab==="dashboard"&&<DashboardTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} dashboardChartData={dashboardChartData} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} monthlySeries={monthlySeries} eventAnalysis={eventAnalysis} futureSim={futureSim}/>}            {tab==="goals"&&<GoalFundingTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} futureSim={futureSim}/>}            {tab==="cfo"&&<CFOCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}            {tab==="automation"&&<AutomationSystemTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="transactions"&&<TransactionsTab data={data} update={update} accountNamesIn={accountNamesIn} accountNamesOut={accountNamesOut}/>}
             {tab==="assets"&&<AssetsTab data={data} update={update}/>}
             {tab==="portfolio"&&<PortfolioTab data={data} update={update} accountOptions={accountOptions} financialAnalysis={financialAnalysis}/>}
@@ -5092,7 +5048,7 @@ export default function App() {
             {tab==="risk"&&<Step2MddRiskPanel data={data} financialAnalysis={financialAnalysis}/>}
             {tab==="analysis"&&<AnalysisTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboardDetail={dashboardDetail}/>}
             {tab==="tax"&&<TaxTab data={data} update={update} taxAnalysis={taxAnalysis}/>}
-            {tab==="simulation"&&<SimulationTab data={data} futureSim={futureSim}/>}\n            {tab==="monthlyReport"&&<MonthlyReportTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboard={dashboard} dashboardDetail={dashboardDetail} taxAnalysis={taxAnalysis}/>}\n            {tab==="decision"&&<DecisionCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
+            {tab==="simulation"&&<SimulationTab data={data} futureSim={futureSim}/>}            {tab==="monthlyReport"&&<MonthlyReportTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboard={dashboard} dashboardDetail={dashboardDetail} taxAnalysis={taxAnalysis}/>}            {tab==="decision"&&<DecisionCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="settings"&&<SettingsTab data={data} update={update}/>}
             {tab==="accounts"&&<AccountsTab data={data} update={update}/>}
             {tab==="data"&&<DataTab data={data} update={update} validations={validations}/>}
