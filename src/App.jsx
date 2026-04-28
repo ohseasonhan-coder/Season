@@ -438,6 +438,32 @@ input,select,textarea{font-family:inherit}
 .form-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .form-actions{display:flex;gap:8px;margin-top:14px}
 
+
+/* Field validation + AI suggestion */
+.field-label-with-alert{display:flex;align-items:center;gap:6px}
+.field-alert-dot{
+  width:15px;height:15px;border-radius:99px;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:900;line-height:1;
+  cursor:help;transition:.16s ease;
+  box-shadow:0 0 0 1px rgba(255,255,255,.08), 0 6px 14px rgba(0,0,0,.18);
+}
+.field-alert-dot.danger{background:var(--red-bg);color:var(--red);border:1px solid rgba(255,92,114,.32)}
+.field-alert-dot.warn{background:var(--amber-bg);color:var(--amber);border:1px solid rgba(240,180,41,.32)}
+.field-alert-dot:hover{transform:translateY(-1px) scale(1.12);opacity:1}
+.field-has-error input,.field-has-error select,.field-has-error textarea{border-color:rgba(255,92,114,.55)!important;box-shadow:0 0 0 3px rgba(255,92,114,.10)}
+.field-has-warn input,.field-has-warn select,.field-has-warn textarea{border-color:rgba(240,180,41,.46)!important;box-shadow:0 0 0 3px rgba(240,180,41,.09)}
+.ai-suggest-card{
+  margin:14px 0 0;padding:14px;border-radius:var(--radius);
+  background:linear-gradient(135deg,rgba(108,125,255,.12),rgba(255,255,255,.035));
+  border:1px solid rgba(108,125,255,.22);
+  display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+}
+.ai-suggest-title{font-size:13px;font-weight:800;color:var(--text);margin-bottom:4px}
+.ai-suggest-desc{font-size:12px;color:var(--text2);line-height:1.5}
+.ai-chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.ai-chip{display:inline-flex;align-items:center;padding:4px 8px;border-radius:99px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);font-size:11px;color:var(--text2)}
+
 /* Table */
 .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
 table{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -713,7 +739,28 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
 }
 
 // ─── Field ─────────────────────────────────────────────────────────────────
-function Field({ label, children }) { return <div className="field"><label>{label}</label>{children}</div>; }
+
+function ValidationMark({ message, tone="danger" }) {
+  if(!message) return null;
+  return (
+    <span className={`field-alert-dot ${tone==="warn"?"warn":"danger"}`} title={message} aria-label={message}>
+      !
+    </span>
+  );
+}
+function Field({ label, error, warn, children }) {
+  const msg = error || warn;
+  return (
+    <div className={`field ${error?"field-has-error":warn?"field-has-warn":""}`}>
+      <label className="field-label-with-alert">
+        <span>{label}</span>
+        {msg && <ValidationMark message={msg} tone={error?"danger":"warn"}/>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
 
 // ─── Dashboard Tab ────────────────────────────────────────────────────────────
 function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, futureSim }) {
@@ -941,6 +988,75 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
     }).slice(0,5);
   },[data.transactions,normalizedForm,form.id]);
 
+
+  const fieldAlerts=useMemo(()=>{
+    const f=normalizedForm;
+    const errors={}, warns={};
+    if(!f.date) errors.date="거래일자를 입력하세요.";
+    if(!f.type) errors.type="수입·지출·자산이동 중 하나를 선택하세요.";
+    if(!f.cat1) errors.cat1="대분류를 선택하세요.";
+    if(!f.cat2) errors.cat2="소분류를 선택하세요.";
+    if(f.amount<=0) errors.amount="금액은 0보다 커야 합니다.";
+    if(!f.content) errors.content="검색·분석을 위해 거래 내용을 입력하세요.";
+    if(f.type==="수입"&&!f.inAccount) errors.inAccount="수입 거래는 입금계좌가 필요합니다.";
+    if(f.type==="지출"&&!f.outAccount) errors.outAccount="지출 거래는 출금계좌가 필요합니다.";
+    if(f.type==="자산이동"&&(!f.inAccount||!f.outAccount)) {
+      if(!f.inAccount) errors.inAccount="자산이동은 입금계좌가 필요합니다.";
+      if(!f.outAccount) errors.outAccount="자산이동은 출금계좌가 필요합니다.";
+    }
+    if(f.type==="자산이동"&&f.inAccount&&f.outAccount&&f.inAccount===f.outAccount) warns.outAccount="입금계좌와 출금계좌가 같습니다.";
+    if(duplicateCandidates.length>0) warns.content="같은 날짜·금액·내용의 거래가 이미 있습니다.";
+    if(f.amount>=1000000&&!String(form.memo||"").trim()) warns.memo="100만원 이상 거래는 메모를 남기면 분석 정확도가 좋아집니다.";
+    return {errors,warns};
+  },[normalizedForm,form.memo,duplicateCandidates.length]);
+
+  const aiSuggestion=useMemo(()=>{
+    const tx=(data.transactions||[]).filter(t=>!form.id||t.id!==form.id);
+    const f=normalizedForm;
+    const score=(t)=>{
+      let s=0;
+      if(f.type&&t.type===f.type) s+=4;
+      if(f.cat1&&t.cat1===f.cat1) s+=6;
+      if(f.cat2&&t.cat2===f.cat2) s+=8;
+      const content=String(f.content||"").trim();
+      if(content&&String(t.content||"").includes(content)) s+=4;
+      return s;
+    };
+    const candidates=tx.map(t=>({t,s:score(t)})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s||String(b.t.date).localeCompare(String(a.t.date))).slice(0,12);
+    if(!candidates.length) return null;
+    const best=candidates[0].t;
+    const sameCat=candidates.filter(x=>x.t.cat1===best.cat1&&x.t.cat2===best.cat2).map(x=>x.t);
+    const avgAmount=sameCat.length?Math.round(sameCat.reduce((sum,t)=>sum+n(t.amount),0)/sameCat.length):n(best.amount);
+    const mode=(arr)=>{const m=new Map();arr.filter(Boolean).forEach(v=>m.set(v,(m.get(v)||0)+1));return [...m.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||"";};
+    return {
+      type: f.type||best.type||"지출",
+      cat1: f.cat1||best.cat1||"",
+      cat2: f.cat2||best.cat2||"",
+      amount: f.amount>0?f.amount:avgAmount,
+      inAccount: f.inAccount||mode(candidates.map(x=>x.t.inAccount))||best.inAccount||"",
+      outAccount: f.outAccount||mode(candidates.map(x=>x.t.outAccount))||best.outAccount||"",
+      content: f.content||best.content||"",
+      memo: form.memo||best.memo||"",
+      count:candidates.length,
+      basis:best.content||best.cat2||best.cat1||"최근 거래"
+    };
+  },[data.transactions,normalizedForm,form.id,form.memo]);
+
+  const applyAiSuggestion=()=>{
+    if(!aiSuggestion) return;
+    setForm({
+      ...form,
+      type:aiSuggestion.type||form.type,
+      cat1:aiSuggestion.cat1||form.cat1,
+      cat2:aiSuggestion.cat2||form.cat2,
+      amount:aiSuggestion.amount||form.amount,
+      inAccount:aiSuggestion.inAccount||form.inAccount,
+      outAccount:aiSuggestion.outAccount||form.outAccount,
+      content:aiSuggestion.content||form.content,
+      memo:aiSuggestion.memo||form.memo
+    });
+  };
+
   const validationSummary=useMemo(()=>{
     const tx=data.transactions||[];
     const missing=tx.filter(t=>!t.date||!t.type||!t.cat1||!t.cat2||!t.content||n(t.amount)<=0).length;
@@ -1028,16 +1144,16 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
         {showForm&&(
           <>
             <div className="form-grid">
-              <Field label="날짜"><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></Field>
-              <Field label="구분"><select value={form.type} onChange={e=>setForm({...form,type:e.target.value,cat1:"",cat2:""})}><option>수입</option><option>지출</option><option>자산이동</option></select></Field>
-              <Field label="대분류"><select value={form.cat1} onChange={e=>setForm({...form,cat1:e.target.value,cat2:""})}><option value="">선택</option>{cat1Opts.map(x=><option key={x}>{x}</option>)}</select></Field>
-              <Field label="소분류"><select value={form.cat2} onChange={e=>setForm({...form,cat2:e.target.value})}><option value="">선택</option>{cat2Opts.map(x=><option key={x}>{x}</option>)}</select></Field>
-              <Field label="금액"><input value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="0"/></Field>
-              <Field label="입금계좌"><select value={form.inAccount} onChange={e=>setForm({...form,inAccount:e.target.value})}><option value="">선택</option>{accountNamesIn.map(x=><option key={x}>{x}</option>)}</select></Field>
-              <Field label="출금계좌"><select value={form.outAccount} onChange={e=>setForm({...form,outAccount:e.target.value})}><option value="">선택</option>{accountNamesOut.map(x=><option key={x}>{x}</option>)}</select></Field>
-              <Field label="내용"><input value={form.content} onChange={e=>setForm({...form,content:e.target.value})} placeholder="내용 입력"/></Field>
+              <Field label="날짜" error={fieldAlerts.errors.date}><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></Field>
+              <Field label="구분" error={fieldAlerts.errors.type}><select value={form.type} onChange={e=>setForm({...form,type:e.target.value,cat1:"",cat2:""})}><option>수입</option><option>지출</option><option>자산이동</option></select></Field>
+              <Field label="대분류" error={fieldAlerts.errors.cat1}><select value={form.cat1} onChange={e=>setForm({...form,cat1:e.target.value,cat2:""})}><option value="">선택</option>{cat1Opts.map(x=><option key={x}>{x}</option>)}</select></Field>
+              <Field label="소분류" error={fieldAlerts.errors.cat2}><select value={form.cat2} onChange={e=>setForm({...form,cat2:e.target.value})}><option value="">선택</option>{cat2Opts.map(x=><option key={x}>{x}</option>)}</select></Field>
+              <Field label="금액" error={fieldAlerts.errors.amount}><input value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="0"/></Field>
+              <Field label="입금계좌" error={fieldAlerts.errors.inAccount}><select value={form.inAccount} onChange={e=>setForm({...form,inAccount:e.target.value})}><option value="">선택</option>{accountNamesIn.map(x=><option key={x}>{x}</option>)}</select></Field>
+              <Field label="출금계좌" error={fieldAlerts.errors.outAccount} warn={fieldAlerts.warns.outAccount}><select value={form.outAccount} onChange={e=>setForm({...form,outAccount:e.target.value})}><option value="">선택</option>{accountNamesOut.map(x=><option key={x}>{x}</option>)}</select></Field>
+              <Field label="내용" error={fieldAlerts.errors.content} warn={fieldAlerts.warns.content}><input value={form.content} onChange={e=>setForm({...form,content:e.target.value})} placeholder="내용 입력"/></Field>
             </div>
-            <div style={{marginTop:10}}><Field label="메모"><textarea value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})} placeholder="고액 거래, 예외 거래, 카드 결제 예정 등 참고사항"/></Field></div>
+            <div style={{marginTop:10}}><Field label="메모" warn={fieldAlerts.warns.memo}><textarea value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})} placeholder="고액 거래, 예외 거래, 카드 결제 예정 등 참고사항"/></Field></div>
             <div className="g2" style={{marginTop:14}}>
               <div className={`alert ${canSave?"alert-ok":"alert-danger"}`}>
                 <strong>{canSave?"저장 가능":"저장 전 확인 필요"}</strong>
@@ -1048,20 +1164,23 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
                 <div style={{marginTop:6,color:"inherit",fontSize:12}}>같은 날짜·금액·내용 기준으로 자동 확인합니다.</div>
               </div>
             </div>
-            {validationMessages.length>0&&(
-              <div className="card-sm" style={{marginTop:14,background:"var(--surface2)"}}>
-                <div style={{fontSize:12,fontWeight:700,marginBottom:8}}>실시간 검증 결과</div>
-                <div className="stack" style={{gap:6}}>
-                  {validationMessages.map((m,i)=><div key={i} className={`alert ${m.level==="danger"?"alert-danger":m.level==="warn"?"alert-warn":"alert-info"}`} style={{padding:"8px 10px"}}><strong>{m.title}</strong><span style={{marginLeft:8,fontSize:12}}>{m.desc}</span></div>)}
+
+            {aiSuggestion&&(
+              <div className="ai-suggest-card">
+                <div>
+                  <div className="ai-suggest-title">🤖 AI 입력 추천</div>
+                  <div className="ai-suggest-desc">과거 유사 거래 {aiSuggestion.count}건을 기준으로 금액·계좌·분류를 추천합니다.</div>
+                  <div className="ai-chip-row">
+                    {aiSuggestion.cat1&&<span className="ai-chip">대분류 {aiSuggestion.cat1}</span>}
+                    {aiSuggestion.cat2&&<span className="ai-chip">소분류 {aiSuggestion.cat2}</span>}
+                    {aiSuggestion.amount>0&&<span className="ai-chip">금액 {fmt(aiSuggestion.amount)}원</span>}
+                    {(aiSuggestion.outAccount||aiSuggestion.inAccount)&&<span className="ai-chip">계좌 {aiSuggestion.outAccount||aiSuggestion.inAccount}</span>}
+                  </div>
                 </div>
+                <button className="btn btn-sm btn-primary" onClick={applyAiSuggestion}>추천 적용</button>
               </div>
             )}
-            {duplicateCandidates.length>0&&(
-              <div className="card-sm" style={{marginTop:14,background:"var(--surface2)"}}>
-                <div style={{fontSize:12,fontWeight:700,marginBottom:8}}>중복 의심 거래</div>
-                {duplicateCandidates.map(t=><div key={t.id} className="stat-row"><span>{t.date} · {t.content}</span><span className="stat-value">{fmt(t.amount)}원</span></div>)}
-              </div>
-            )}
+
             <div className="form-actions">
               <button className="btn btn-primary" onClick={save} disabled={!canSave}>{form.id?"수정 저장":"거래 저장"}</button>
               <button className="btn btn-ghost" onClick={()=>setForm(EMPTY)}>초기화</button>
