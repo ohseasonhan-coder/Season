@@ -2003,6 +2003,191 @@ function DataTab({ data, update, validations }) {
   );
 }
 
+
+// ─── Professional Top 3 Engines ──────────────────────────────────────────────
+// 추가 기능: ① 리밸런싱 ② 리스크 분석 ③ 목표 달성/생존력 진단
+const pfPortfolioValue = (p) => n(p.qty) * n(p.currentPrice || p.avgPrice);
+const pfAnnualToMonthly = (r) => Math.pow(1 + n(r), 1 / 12) - 1;
+
+function buildProfessionalRebalance(data) {
+  const s = data?.settings || {};
+  const portfolio = Array.isArray(data?.portfolio) ? data.portfolio : [];
+  const total = portfolio.reduce((sum, p) => sum + pfPortfolioValue(p), 0);
+  const targetMap = {
+    나스닥: n(s.targetNasdaqWeight) + n(s.targetNasdaqHWeight),
+    배당: n(s.targetDividendWeight),
+  };
+  const usedTarget = Object.values(targetMap).reduce((sum, v) => sum + n(v), 0);
+  if (usedTarget < 1) targetMap.기타 = 1 - usedTarget;
+  const grouped = {};
+  portfolio.forEach((p) => {
+    const cls = p.assetClass || "기타";
+    grouped[cls] = (grouped[cls] || 0) + pfPortfolioValue(p);
+  });
+  Object.keys(grouped).forEach((cls) => { if (targetMap[cls] === undefined) targetMap[cls] = 0; });
+  const bandPct = n(s.rebalanceBandPct || 5);
+  const rows = Object.entries(targetMap).map(([assetClass, targetWeight]) => {
+    const currentAmount = grouped[assetClass] || 0;
+    const currentWeight = total > 0 ? currentAmount / total : 0;
+    const targetAmount = total * targetWeight;
+    const gapAmount = targetAmount - currentAmount;
+    const gapPct = currentWeight - targetWeight;
+    let action = "유지";
+    if (Math.abs(gapPct * 100) > bandPct) action = gapAmount > 0 ? "매수 우선" : "비중 축소";
+    return { assetClass, currentAmount, currentWeight, targetWeight, targetAmount, gapAmount, gapPct, action };
+  }).sort((a,b)=>Math.abs(b.gapPct)-Math.abs(a.gapPct));
+  const alerts = rows.filter((r) => r.action !== "유지");
+  const monthlyInvest = n(s.monthlyInvestDefault || s.monthlyInvestStage1 || 0);
+  const positiveGap = rows.filter(r => r.gapAmount > 0).reduce((sum,r)=>sum+r.gapAmount,0);
+  const buyPlan = rows.filter(r => r.gapAmount > 0).map(r => ({
+    assetClass: r.assetClass,
+    investAmount: positiveGap > 0 ? Math.round(monthlyInvest * (r.gapAmount / positiveGap)) : 0,
+    reason: `${r.assetClass} 목표비중 부족분 보완`,
+  }));
+  return { total, bandPct, rows, alerts, buyPlan, status: alerts.length ? "리밸런싱 필요" : "정상 범위" };
+}
+
+function buildProfessionalRisk(data) {
+  const portfolio = Array.isArray(data?.portfolio) ? data.portfolio : [];
+  const total = portfolio.reduce((sum, p) => sum + pfPortfolioValue(p), 0);
+  const rows = portfolio.map((p) => {
+    const value = pfPortfolioValue(p);
+    const weight = total > 0 ? value / total : 0;
+    const sigma = n(p.riskSigma || 0.22);
+    return { id:p.id, name:p.name, assetClass:p.assetClass || "기타", value, weight, sigma, riskContribution: weight * sigma };
+  }).filter(r => r.value > 0).sort((a,b)=>b.riskContribution-a.riskContribution);
+  const weightedVolatility = rows.reduce((sum, r) => sum + r.riskContribution, 0);
+  const monthlyVol = weightedVolatility / Math.sqrt(12);
+  const oneMonthVaR95 = total * monthlyVol * 1.65;
+  const estimatedMddPct = clamp(weightedVolatility * 2.1, 0.05, 0.75);
+  const estimatedMddAmount = total * estimatedMddPct;
+  const concentration = rows.length ? Math.max(...rows.map(r => r.weight)) : 0;
+  const riskScore = Math.round(clamp(weightedVolatility * 220 + concentration * 45, 0, 100));
+  const riskLevel = riskScore >= 70 ? "높음" : riskScore >= 40 ? "중간" : "낮음";
+  const warnings = [];
+  if (concentration >= 0.7) warnings.push("단일 자산군 또는 종목 집중도가 높습니다.");
+  if (estimatedMddPct >= 0.35) warnings.push("큰 하락장에서 손실폭이 클 수 있습니다.");
+  if (weightedVolatility >= 0.2) warnings.push("포트폴리오 변동성이 높은 편입니다.");
+  return { total, rows, weightedVolatility, monthlyVol, oneMonthVaR95, estimatedMddPct, estimatedMddAmount, concentration, riskScore, riskLevel, warnings };
+}
+
+function buildProfessionalGoal(data, dashboard, dashboardDetail, monthlySeries) {
+  const s = data?.settings || {};
+  const nowNetWorth = n(s.currentNetWorthOverride) > 0 ? n(s.currentNetWorthOverride) : n(dashboard?.netWorth);
+  const target = n(s.retirementTargetAmount || 2000000000);
+  const currentAge = n(s.currentAge || 36);
+  const retireAge = n(s.retireAge || 55);
+  const yearsLeft = Math.max(retireAge - currentAge, 0);
+  const monthsLeft = yearsLeft * 12;
+  const annualReturn = n(s.annualReturnNasdaq || 0.1);
+  const monthlyReturn = pfAnnualToMonthly(annualReturn);
+  const monthlyInvest = n(s.monthlyInvestDefault || s.monthlyInvestStage1 || 0);
+  let projected = nowNetWorth;
+  for (let i = 0; i < monthsLeft; i++) projected = projected * (1 + monthlyReturn) + monthlyInvest;
+  let requiredMonthlyInvest = 0;
+  if (monthsLeft > 0 && monthlyReturn > 0) {
+    const fvCurrent = nowNetWorth * Math.pow(1 + monthlyReturn, monthsLeft);
+    const annuityFactor = (Math.pow(1 + monthlyReturn, monthsLeft) - 1) / monthlyReturn;
+    requiredMonthlyInvest = Math.max(0, (target - fvCurrent) / annuityFactor);
+  } else if (monthsLeft > 0) {
+    requiredMonthlyInvest = Math.max(0, (target - nowNetWorth) / monthsLeft);
+  }
+  const recent = Array.isArray(monthlySeries) ? monthlySeries.slice(-6) : [];
+  const avgExpense = recent.length ? recent.reduce((sum,r)=>sum+n(r.expense),0) / recent.length : n(dashboard?.expense);
+  const emergencyFund = n(dashboardDetail?.emergencyFund || dashboardDetail?.liquidAssets || 0);
+  const survivalMonths = avgExpense > 0 ? emergencyFund / avgExpense : 0;
+  const achievementRate = target > 0 ? projected / target : 0;
+  let status = achievementRate >= 1 ? "목표 달성 가능권" : achievementRate >= .75 ? "목표 근접" : "투자금 증액 필요";
+  if (survivalMonths < 6) status += " / 비상금 보강 필요";
+  return { nowNetWorth, target, currentAge, retireAge, yearsLeft, monthsLeft, annualReturn, monthlyInvest, projected, achievementRate, requiredMonthlyInvest, monthlyInvestGap: requiredMonthlyInvest - monthlyInvest, avgExpense, emergencyFund, survivalMonths, status };
+}
+
+function buildProfessionalDashboard(data, dashboard, dashboardDetail, monthlySeries) {
+  const rebalance = buildProfessionalRebalance(data);
+  const risk = buildProfessionalRisk(data);
+  const goal = buildProfessionalGoal(data, dashboard, dashboardDetail, monthlySeries);
+  const priorityActions = [];
+  if (rebalance.alerts.length) priorityActions.push({ level:"주의", title:"리밸런싱 필요", message:`${rebalance.alerts.length}개 자산군이 목표 비중 허용범위를 벗어났습니다.` });
+  if (risk.riskLevel === "높음") priorityActions.push({ level:"위험", title:"위험도 높음", message:`추정 최대낙폭은 약 ${fmtPct(risk.estimatedMddPct*100)}입니다.` });
+  if (goal.monthlyInvestGap > 0) priorityActions.push({ level:"계획", title:"목표 투자금 부족", message:`월 ${fmt(goal.monthlyInvestGap)}원 증액이 필요합니다.` });
+  if (goal.survivalMonths > 0 && goal.survivalMonths < 6) priorityActions.push({ level:"주의", title:"비상금 부족", message:`현재 비상금은 약 ${goal.survivalMonths.toFixed(1)}개월치입니다.` });
+  return { rebalance, risk, goal, priorityActions };
+}
+
+function ProfessionalTab({ data, dashboard, dashboardDetail, monthlySeries }) {
+  const pro = useMemo(() => buildProfessionalDashboard(data, dashboard, dashboardDetail, monthlySeries), [data, dashboard, dashboardDetail, monthlySeries]);
+  const { rebalance, risk, goal, priorityActions } = pro;
+  const levelClass = (v) => v === "위험" ? "badge-red" : v === "주의" ? "badge-amber" : "badge-accent";
+  return (
+    <div className="stack">
+      <div className="kpi-grid">
+        <KpiCard label="리밸런싱 상태" value={rebalance.alerts.length} unit="건" tone={rebalance.alerts.length ? "red" : "green"}/>
+        <KpiCard label="위험 점수" value={risk.riskScore} unit="점" tone={risk.riskLevel === "높음" ? "red" : risk.riskLevel === "중간" ? undefined : "green"}/>
+        <KpiCard label="목표 달성률" value={goal.achievementRate * 100} unit="%" accent/>
+        <KpiCard label="무소득 생존력" value={goal.survivalMonths} unit="개월" tone={goal.survivalMonths < 6 ? "red" : "green"}/>
+      </div>
+
+      <div className="card">
+        <div className="card-title"><h3>🧠 전문 진단 요약</h3><span className="badge badge-accent">Top 3 Engine</span></div>
+        {priorityActions.length ? priorityActions.map((a,i)=>(
+          <div key={i} className="insight-card" style={{marginBottom:10}}>
+            <div className="insight-icon" style={{background:a.level === "위험" ? "var(--red-bg)" : a.level === "주의" ? "var(--amber-bg)" : "var(--accent-bg)"}}>{a.level === "위험" ? "🚨" : a.level === "주의" ? "⚠️" : "📌"}</div>
+            <div className="insight-body"><h4>{a.title} <span className={`badge ${levelClass(a.level)}`}>{a.level}</span></h4><p>{a.message}</p></div>
+          </div>
+        )) : <div className="alert alert-ok">현재 입력값 기준으로 즉시 조치가 필요한 항목은 없습니다.</div>}
+      </div>
+
+      <div className="g3">
+        <div className="card">
+          <div className="card-title"><h3>⚖️ 리밸런싱 엔진</h3><span className={`badge ${rebalance.alerts.length ? "badge-amber" : "badge-green"}`}>{rebalance.status}</span></div>
+          <div className="stat-row"><span className="stat-label">포트폴리오 평가액</span><span className="stat-value">{fmt(rebalance.total)}원</span></div>
+          <div className="stat-row"><span className="stat-label">허용 편차</span><span className="stat-value">±{fmtPct(rebalance.bandPct)}</span></div>
+          <div className="hr" />
+          {rebalance.rows.map(r=>(
+            <div key={r.assetClass} style={{marginBottom:12}}>
+              <div className="row-between small"><span className="fw7">{r.assetClass}</span><span className={r.action === "유지" ? "text-green" : r.action === "비중 축소" ? "text-red" : "text-accent"}>{r.action}</span></div>
+              <div className="progress" style={{margin:"7px 0"}}><div className="progress-fill pf-accent" style={{width:`${clamp(r.currentWeight*100,0,100)}%`}}/></div>
+              <div className="row-between small muted"><span>현재 {fmtPct(r.currentWeight*100)} / 목표 {fmtPct(r.targetWeight*100)}</span><span>{r.gapAmount>=0?"부족":"초과"} {fmt(Math.abs(r.gapAmount))}원</span></div>
+            </div>
+          ))}
+          {rebalance.buyPlan.length > 0 && <div className="alert alert-info" style={{marginTop:12}}>이번달 신규 투자금은 {rebalance.buyPlan.map(p=>`${p.assetClass} ${fmt(p.investAmount)}원`).join(" · ")} 배분을 우선 검토하세요.</div>}
+        </div>
+
+        <div className="card">
+          <div className="card-title"><h3>🛡️ 리스크 분석</h3><span className={`badge ${risk.riskLevel === "높음" ? "badge-red" : risk.riskLevel === "중간" ? "badge-amber" : "badge-green"}`}>{risk.riskLevel}</span></div>
+          <div className="stat-row"><span className="stat-label">연 변동성 추정</span><span className="stat-value">{fmtPct(risk.weightedVolatility*100)}</span></div>
+          <div className="stat-row"><span className="stat-label">1개월 VaR 95%</span><span className="stat-value text-red">-{fmt(risk.oneMonthVaR95)}원</span></div>
+          <div className="stat-row"><span className="stat-label">추정 최대낙폭</span><span className="stat-value text-red">-{fmtPct(risk.estimatedMddPct*100)} / {fmt(risk.estimatedMddAmount)}원</span></div>
+          <div className="stat-row"><span className="stat-label">최대 집중도</span><span className="stat-value">{fmtPct(risk.concentration*100)}</span></div>
+          <div className="hr" />
+          {risk.rows.slice(0,5).map(r=>(
+            <div key={r.id} style={{marginBottom:10}}>
+              <div className="row-between small"><span className="fw7">{r.name}</span><span>{fmtPct(r.weight*100)}</span></div>
+              <div className="progress" style={{marginTop:6}}><div className="progress-fill pf-amber" style={{width:`${clamp(r.riskContribution*300,0,100)}%`}}/></div>
+            </div>
+          ))}
+          {risk.warnings.length > 0 && <div className="alert alert-warn" style={{marginTop:12}}>{risk.warnings.join(" ")}</div>}
+        </div>
+
+        <div className="card">
+          <div className="card-title"><h3>🎯 목표 달성·생존력</h3><span className="badge badge-accent">{goal.status}</span></div>
+          <GoalGauge value={goal.projected} target={goal.target} title="은퇴 목표 예상 달성률" />
+          <div className="hr" />
+          <div className="stat-row"><span className="stat-label">현재 순자산</span><span className="stat-value">{fmt(goal.nowNetWorth)}원</span></div>
+          <div className="stat-row"><span className="stat-label">은퇴 예상자산</span><span className="stat-value">{fmt(goal.projected)}원</span></div>
+          <div className="stat-row"><span className="stat-label">필요 월투자금</span><span className="stat-value">{fmt(goal.requiredMonthlyInvest)}원</span></div>
+          <div className="stat-row"><span className="stat-label">현재 대비 차이</span><span className={`stat-value ${goal.monthlyInvestGap>0?"text-red":"text-green"}`}>{goal.monthlyInvestGap>0?"+":""}{fmt(goal.monthlyInvestGap)}원</span></div>
+          <div className="stat-row"><span className="stat-label">최근 평균 지출</span><span className="stat-value">{fmt(goal.avgExpense)}원</span></div>
+        </div>
+      </div>
+
+      <div className="alert alert-info">
+        이 전문 기능은 현재 입력된 수량·현재가·평단·목표비중·월 투자금·수익률 가정을 바탕으로 계산합니다. 투자 판단의 참고용이며 실제 매수·매도 결정 전에는 계좌와 시장 상황을 다시 확인하세요.
+      </div>
+    </div>
+  );
+}
+
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 const NAV = [
   { section: "메인" },
@@ -2014,6 +2199,7 @@ const NAV = [
   { id:"budget", icon:"💰", label:"가계부" },
   { id:"planning", icon:"🎯", label:"목표·계획" },
   { section: "분석" },
+  { id:"professional", icon:"🧠", label:"전문진단" },
   { id:"analysis", icon:"📊", label:"재무분석" },
   { id:"tax", icon:"💸", label:"세금·절세" },
   { id:"simulation", icon:"🔮", label:"미래시뮬레이션" },
@@ -2023,7 +2209,7 @@ const NAV = [
   { id:"data", icon:"💾", label:"데이터·백업" },
 ];
 
-const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
+const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -2272,6 +2458,7 @@ export default function App() {
             {tab==="portfolio"&&<PortfolioTab data={data} update={update} accountOptions={accountOptions} financialAnalysis={financialAnalysis}/>}
             {tab==="budget"&&<BudgetTab data={data} update={update} budgetAnalysis={budgetAnalysis}/>}
             {tab==="planning"&&<PlanningTab data={data} update={update} eventAnalysis={eventAnalysis}/>}
+            {tab==="professional"&&<ProfessionalTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} monthlySeries={monthlySeries}/>}
             {tab==="analysis"&&<AnalysisTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboardDetail={dashboardDetail}/>}
             {tab==="tax"&&<TaxTab data={data} taxAnalysis={taxAnalysis}/>}
             {tab==="simulation"&&<SimulationTab data={data} futureSim={futureSim}/>}
