@@ -866,7 +866,11 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
   const [filterMonth,setFilterMonth]=useState(thisMonthISO());
   const [filterType,setFilterType]=useState("");
   const [filterCat1,setFilterCat1]=useState("");
+  const [autoFillMonth,setAutoFillMonth]=useState(thisMonthISO());
+  const [templateName,setTemplateName]=useState("");
 
+  const txTemplates=Array.isArray(data.settings?.transactionTemplates)?data.settings.transactionTemplates:[];
+  const fixedRules=Array.isArray(data.settings?.fixedTransactionRules)?data.settings.fixedTransactionRules:[];
   const cat1Opts=Object.keys(data.categories[form.type]||{});
   const cat2Opts=(data.categories[form.type]||{})[form.cat1]||[];
 
@@ -897,14 +901,97 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
     return{income,expense,net:income-expense};
   },[filtered]);
 
+  const normalizedForm=useMemo(()=>({
+    ...form,
+    amount:n(form.amount),
+    date:String(form.date||"").trim(),
+    type:String(form.type||"").trim(),
+    cat1:String(form.cat1||"").trim(),
+    cat2:String(form.cat2||"").trim(),
+    content:String(form.content||"").trim(),
+    inAccount:String(form.inAccount||"").trim(),
+    outAccount:String(form.outAccount||"").trim(),
+  }),[form]);
+
+  const validationMessages=useMemo(()=>{
+    const list=[]; const f=normalizedForm;
+    const add=(level,title,desc)=>list.push({level,title,desc});
+    if(!f.date) add("danger","날짜 누락","거래일자를 입력하세요.");
+    if(!f.type) add("danger","구분 누락","수입·지출·자산이동 중 하나를 선택하세요.");
+    if(!f.cat1) add("danger","대분류 누락","대분류를 선택하세요.");
+    if(!f.cat2) add("danger","소분류 누락","소분류를 선택하세요.");
+    if(f.amount<=0) add("danger","금액 오류","금액은 0보다 커야 합니다.");
+    if(!f.content) add("danger","내용 누락","검색·분석을 위해 거래 내용을 입력하세요.");
+    if(f.type==="수입"&&!f.inAccount) add("danger","입금계좌 누락","수입 거래는 입금계좌가 필요합니다.");
+    if(f.type==="지출"&&!f.outAccount) add("danger","출금계좌 누락","지출 거래는 출금계좌가 필요합니다.");
+    if(f.type==="자산이동"&&(!f.inAccount||!f.outAccount)) add("danger","이체 계좌 누락","자산이동은 입금계좌와 출금계좌가 모두 필요합니다.");
+    if(f.type==="자산이동"&&f.inAccount&&f.outAccount&&f.inAccount===f.outAccount) add("warn","동일 계좌 이동","입금계좌와 출금계좌가 같습니다.");
+    if(f.amount>=1000000&&!form.memo) add("warn","고액 거래 메모 권장","100만원 이상 거래는 메모를 남기면 분석 정확도가 좋아집니다.");
+    if(f.type==="지출"&&f.cat1==="기타지출") add("info","기타지출 확인","가능하면 구체적인 대분류로 바꾸는 것이 좋습니다.");
+    return list;
+  },[normalizedForm,form.memo]);
+  const canSave=validationMessages.filter(x=>x.level==="danger").length===0;
+
+  const duplicateCandidates=useMemo(()=>{
+    const f=normalizedForm;
+    if(!f.date||!f.content||f.amount<=0) return [];
+    return data.transactions.filter(t=>{
+      if(form.id&&t.id===form.id) return false;
+      return t.date===f.date&&n(t.amount)===f.amount&&String(t.content||"").trim()===f.content&&t.type===f.type;
+    }).slice(0,5);
+  },[data.transactions,normalizedForm,form.id]);
+
+  const validationSummary=useMemo(()=>{
+    const tx=data.transactions||[];
+    const missing=tx.filter(t=>!t.date||!t.type||!t.cat1||!t.cat2||!t.content||n(t.amount)<=0).length;
+    const accountMiss=tx.filter(t=>(t.type==="수입"&&!t.inAccount)||(t.type==="지출"&&!t.outAccount)||(t.type==="자산이동"&&(!t.inAccount||!t.outAccount))).length;
+    const keyCount=new Map();
+    tx.forEach(t=>{const k=[t.date,t.type,n(t.amount),String(t.content||"").trim()].join("|");keyCount.set(k,(keyCount.get(k)||0)+1);});
+    const duplicates=[...keyCount.values()].filter(v=>v>1).reduce((acc,v)=>acc+v,0);
+    return {missing,accountMiss,duplicates,total:missing+accountMiss+duplicates};
+  },[data.transactions]);
+
   const activeFilterCount=[filterMonth!==thisMonthISO(),!!filterType,!!filterCat1,!!search.trim()].filter(Boolean).length;
   const resetFilters=()=>{setSearch("");setFilterMonth(thisMonthISO());setFilterType("");setFilterCat1("");};
 
+  const saveTemplate=()=>{
+    if(!canSave) return alert("템플릿 저장 전 필수값을 먼저 채워주세요.");
+    const name=templateName.trim()||form.content||`${form.type} 템플릿`;
+    update(d=>({...d,settings:{...d.settings,transactionTemplates:[...(Array.isArray(d.settings.transactionTemplates)?d.settings.transactionTemplates:[]),{id:uid(),name,type:form.type,cat1:form.cat1,cat2:form.cat2,amount:n(form.amount),inAccount:form.inAccount,outAccount:form.outAccount,content:form.content,memo:form.memo}]}}));
+    setTemplateName("");
+  };
+  const applyTemplate=(tpl)=>{if(!tpl)return;setForm({...EMPTY,date:todayISO(),type:tpl.type||"지출",cat1:tpl.cat1||"",cat2:tpl.cat2||"",amount:tpl.amount||"",inAccount:tpl.inAccount||"",outAccount:tpl.outAccount||"",content:tpl.content||tpl.name||"",memo:tpl.memo||""});setShowForm(true);};
+  const deleteTemplate=(id)=>update(d=>({...d,settings:{...d.settings,transactionTemplates:(Array.isArray(d.settings.transactionTemplates)?d.settings.transactionTemplates:[]).filter(t=>t.id!==id)}}));
+  const addFixedRuleFromForm=()=>{
+    if(!canSave) return alert("고정거래 등록 전 필수값을 먼저 채워주세요.");
+    const day=clamp(Number(String(form.date||todayISO()).slice(8,10))||1,1,28);
+    const name=templateName.trim()||form.content||`${form.type} 고정거래`;
+    update(d=>({...d,settings:{...d.settings,fixedTransactionRules:[...(Array.isArray(d.settings.fixedTransactionRules)?d.settings.fixedTransactionRules:[]),{id:uid(),name,day,type:form.type,cat1:form.cat1,cat2:form.cat2,amount:n(form.amount),inAccount:form.inAccount,outAccount:form.outAccount,content:form.content,memo:form.memo,active:true}]}}));
+    setTemplateName("");
+  };
+  const deleteFixedRule=(id)=>update(d=>({...d,settings:{...d.settings,fixedTransactionRules:(Array.isArray(d.settings.fixedTransactionRules)?d.settings.fixedTransactionRules:[]).filter(r=>r.id!==id)}}));
+  const generateFixedTransactions=()=>{
+    const month=autoFillMonth||thisMonthISO();
+    const active=fixedRules.filter(r=>r.active!==false);
+    if(!active.length) return alert("등록된 고정거래가 없습니다.");
+    let added=0,skipped=0;
+    update(d=>{
+      const current=[...d.transactions];
+      active.forEach(r=>{
+        const date=`${month}-${String(clamp(n(r.day)||1,1,28)).padStart(2,"0")}`;
+        const exists=current.some(t=>t.date===date&&t.type===r.type&&n(t.amount)===n(r.amount)&&String(t.content||"").trim()===String(r.content||r.name||"").trim());
+        if(exists){skipped++;return;}
+        current.push({id:uid(),date,type:r.type,cat1:r.cat1,cat2:r.cat2,amount:n(r.amount),inAccount:r.inAccount||"",outAccount:r.outAccount||"",content:r.content||r.name,memo:r.memo||""});
+        added++;
+      });
+      return {...d,transactions:current};
+    });
+    alert(`${month} 고정거래 생성 완료\n추가: ${added}건 / 중복 제외: ${skipped}건`);
+  };
+
   const save=()=>{
-    if(!form.date||!form.type||!form.cat1||!form.cat2||n(form.amount)<=0||!form.content) return alert("필수값을 확인하세요.");
-    if(form.type==="수입"&&!form.inAccount) return alert("수입은 입금계좌가 필요합니다.");
-    if(form.type==="지출"&&!form.outAccount) return alert("지출은 출금계좌가 필요합니다.");
-    if(form.type==="자산이동"&&(!form.inAccount||!form.outAccount)) return alert("자산이동은 입출금계좌가 모두 필요합니다.");
+    if(!canSave) return alert(validationMessages.filter(x=>x.level==="danger").map(x=>`- ${x.title}`).join("\n"));
+    if(duplicateCandidates.length>0&&!confirm("같은 날짜·금액·내용의 거래가 이미 있습니다. 그래도 저장할까요?")) return;
     update(d=>{
       const row={...form,amount:n(form.amount),id:form.id||uid()};
       const list=form.id?d.transactions.map(t=>t.id===form.id?row:t):[...d.transactions,row];
@@ -927,9 +1014,15 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
 
   return (
     <div className="stack">
+      <div className="kpi-grid">
+        <KpiCard label="입력 검증 이슈" value={validationSummary.total} unit="건" tone={validationSummary.total?"red":"green"}/>
+        <KpiCard label="필수값 누락" value={validationSummary.missing} unit="건"/>
+        <KpiCard label="계좌 누락" value={validationSummary.accountMiss} unit="건"/>
+        <KpiCard label="중복 의심" value={validationSummary.duplicates} unit="건"/>
+      </div>
       <div className="card">
         <div className="card-title">
-          <h3>{form.id?"거래 수정":"거래 입력"}</h3>
+          <h3>{form.id?"거래 수정":"입력센터"} <span style={{fontSize:12,fontWeight:400,color:"var(--text3)",marginLeft:6}}>자동 검증 · 템플릿 · 고정거래</span></h3>
           <button onClick={()=>setShowForm(v=>!v)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:12,padding:"2px 6px"}}>{showForm?"▲ 접기":"▼ 펼치기"}</button>
         </div>
         {showForm&&(
@@ -944,13 +1037,64 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
               <Field label="출금계좌"><select value={form.outAccount} onChange={e=>setForm({...form,outAccount:e.target.value})}><option value="">선택</option>{accountNamesOut.map(x=><option key={x}>{x}</option>)}</select></Field>
               <Field label="내용"><input value={form.content} onChange={e=>setForm({...form,content:e.target.value})} placeholder="내용 입력"/></Field>
             </div>
-            <div style={{marginTop:10}}><Field label="메모"><textarea value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})}/></Field></div>
-            <div className="form-actions">
-              <button className="btn btn-primary" onClick={save}>{form.id?"수정 저장":"거래 저장"}</button>
-              <button className="btn btn-ghost" onClick={()=>setForm(EMPTY)}>초기화</button>
+            <div style={{marginTop:10}}><Field label="메모"><textarea value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})} placeholder="고액 거래, 예외 거래, 카드 결제 예정 등 참고사항"/></Field></div>
+            <div className="g2" style={{marginTop:14}}>
+              <div className={`alert ${canSave?"alert-ok":"alert-danger"}`}>
+                <strong>{canSave?"저장 가능":"저장 전 확인 필요"}</strong>
+                <div style={{marginTop:6,color:"inherit",fontSize:12}}>{canSave?"필수 검증을 통과했습니다.":"필수 입력값을 채워야 저장됩니다."}</div>
+              </div>
+              <div className={`alert ${duplicateCandidates.length?"alert-warn":"alert-info"}`}>
+                <strong>{duplicateCandidates.length?`중복 의심 ${duplicateCandidates.length}건`:"중복 의심 없음"}</strong>
+                <div style={{marginTop:6,color:"inherit",fontSize:12}}>같은 날짜·금액·내용 기준으로 자동 확인합니다.</div>
+              </div>
             </div>
+            {validationMessages.length>0&&(
+              <div className="card-sm" style={{marginTop:14,background:"var(--surface2)"}}>
+                <div style={{fontSize:12,fontWeight:700,marginBottom:8}}>실시간 검증 결과</div>
+                <div className="stack" style={{gap:6}}>
+                  {validationMessages.map((m,i)=><div key={i} className={`alert ${m.level==="danger"?"alert-danger":m.level==="warn"?"alert-warn":"alert-info"}`} style={{padding:"8px 10px"}}><strong>{m.title}</strong><span style={{marginLeft:8,fontSize:12}}>{m.desc}</span></div>)}
+                </div>
+              </div>
+            )}
+            {duplicateCandidates.length>0&&(
+              <div className="card-sm" style={{marginTop:14,background:"var(--surface2)"}}>
+                <div style={{fontSize:12,fontWeight:700,marginBottom:8}}>중복 의심 거래</div>
+                {duplicateCandidates.map(t=><div key={t.id} className="stat-row"><span>{t.date} · {t.content}</span><span className="stat-value">{fmt(t.amount)}원</span></div>)}
+              </div>
+            )}
+            <div className="form-actions">
+              <button className="btn btn-primary" onClick={save} disabled={!canSave}>{form.id?"수정 저장":"거래 저장"}</button>
+              <button className="btn btn-ghost" onClick={()=>setForm(EMPTY)}>초기화</button>
+              <button className="btn btn-success" onClick={saveTemplate}>현재 입력값 템플릿 저장</button>
+              <button className="btn btn-ghost" onClick={addFixedRuleFromForm}>고정거래 등록</button>
+            </div>
+            <div style={{marginTop:10,maxWidth:320}}><Field label="템플릿/고정거래 이름"><input value={templateName} onChange={e=>setTemplateName(e.target.value)} placeholder="예: 월급, 통신비, 보험료"/></Field></div>
           </>
         )}
+      </div>
+
+      <div className="g2">
+        <div className="card">
+          <div className="card-title"><h3>빠른 입력 템플릿</h3></div>
+          {txTemplates.length?(
+            <div className="table-wrap">
+              <table><thead><tr><th>이름</th><th>구분</th><th className="td-right">금액</th><th>작업</th></tr></thead><tbody>
+                {txTemplates.map(t=><tr key={t.id}><td className="td-name">{t.name}</td><td>{t.type}</td><td className="td-right td-mono">{fmt(t.amount)}</td><td><div className="row"><button className="btn btn-sm btn-ghost" onClick={()=>applyTemplate(t)}>적용</button><button className="btn btn-sm btn-danger" onClick={()=>deleteTemplate(t.id)}>삭제</button></div></td></tr>)}
+              </tbody></table>
+            </div>
+          ):<div className="empty">자주 쓰는 입력값을 템플릿으로 저장하면 원클릭 입력이 가능합니다.</div>}
+        </div>
+        <div className="card">
+          <div className="card-title"><h3>고정거래 자동 생성</h3></div>
+          <div className="form-grid-3" style={{gridTemplateColumns:"1fr auto auto",alignItems:"end"}}>
+            <Field label="생성 월"><input type="month" value={autoFillMonth} onChange={e=>setAutoFillMonth(e.target.value)}/></Field>
+            <button className="btn btn-primary" onClick={generateFixedTransactions}>해당 월 생성</button>
+            <span className="badge badge-muted">등록 {fixedRules.length}건</span>
+          </div>
+          <div style={{marginTop:14}}>
+            {fixedRules.length?fixedRules.map(r=><div key={r.id} className="stat-row"><span>{String(r.day).padStart(2,"0")}일 · {r.name}</span><span className="row"><span className="stat-value">{fmt(r.amount)}원</span><button className="btn btn-sm btn-danger" onClick={()=>deleteFixedRule(r.id)}>삭제</button></span></div>):<div className="empty">월급, 보험료, 통신비처럼 반복되는 거래를 고정거래로 등록하세요.</div>}
+          </div>
+        </div>
       </div>
 
       <div className="card">
