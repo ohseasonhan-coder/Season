@@ -39,6 +39,7 @@ const DEFAULT_SETTINGS = {
   annualReturnNasdaq:0.12, annualReturnDividend:0.08, annualRaise:0.03, annualInflation:0.025,
   isaAnnualLimit:20000000, isaCycleYears:5, isaPensionTransferDeduction:3000000, isaPensionTransferRatio:1,
   annualPensionContribution:0, pensionAnnualTaxCreditLimit:9000000, pensionTaxCreditRate:0.165,
+  annualIsaContributionCurrent:0, annualTaxableIncomeEstimate:0, annualTaxOptimizingCash:0, expectedTaxableProfitRate:0.08,
   isaTaxFreeLimit:2000000, isaTaxRate:0.099, taxableDividendTaxRate:0.154, cashTaxRate:0.154,
   targetNasdaqWeight:0.45, targetNasdaqHWeight:0.45, targetDividendWeight:0.10,
   monthlyInvestStage1:2000000, monthlyInvestStage2:2500000, monthlyInvestStage3:5000000,
@@ -1904,21 +1905,156 @@ function AnalysisTab({ data, monthlySeries, budgetAnalysis, financialAnalysis, d
   );
 }
 
-// ─── Tax Tab ──────────────────────────────────────────────────────────────────
-function TaxTab({ data, taxAnalysis }) {
+// ─── Tax / Optimization Tab ───────────────────────────────────────────────
+function calcTaxOptimization(data, taxAnalysis) {
+  const s = data.settings || {};
+  const groups = Object.fromEntries((taxAnalysis || []).map(g => [g.name, g]));
+  const isa = groups.ISA || { value:0, principal:0, profit:0, estimatedTax:0 };
+  const taxable = groups.일반계좌 || { value:0, principal:0, profit:0, estimatedTax:0 };
+  const pension = groups.연금저축 || { value:0 };
+  const irp = groups.IRP || { value:0 };
+
+  const pensionCurrent = Math.max(n(s.annualPensionContribution), 0);
+  const pensionLimit = Math.max(n(s.pensionAnnualTaxCreditLimit), 0);
+  const pensionGap = Math.max(pensionLimit - pensionCurrent, 0);
+  const pensionCreditRate = Math.max(n(s.pensionTaxCreditRate), 0);
+  const pensionExtraCredit = pensionGap * pensionCreditRate;
+
+  const isaCurrent = Math.max(n(s.annualIsaContributionCurrent), 0);
+  const isaLimit = Math.max(n(s.isaAnnualLimit), 0);
+  const isaGap = Math.max(isaLimit - isaCurrent, 0);
+  const normalTaxRate = Math.max(n(s.taxableDividendTaxRate), 0);
+  const isaTaxRate = Math.max(n(s.isaTaxRate), 0);
+  const isaTaxFreeLimit = Math.max(n(s.isaTaxFreeLimit), 0);
+  const expectedProfitRate = Math.max(n(s.expectedTaxableProfitRate || 0.08), 0);
+  const optimizingCash = Math.max(n(s.annualTaxOptimizingCash), 0);
+
+  const isaCurrentProfit = Math.max(n(isa.profit), 0);
+  const normalTaxIfIsaWasTaxable = isaCurrentProfit * normalTaxRate;
+  const isaTax = Math.max(isaCurrentProfit - isaTaxFreeLimit, 0) * isaTaxRate;
+  const isaSavedCurrent = Math.max(normalTaxIfIsaWasTaxable - isaTax, 0);
+
+  const taxableProfit = Math.max(n(taxable.profit), 0);
+  const taxableTaxNow = taxableProfit * normalTaxRate;
+
+  const possibleIsaMove = Math.min(optimizingCash || isaGap, isaGap);
+  const expectedProfitOnIsaMove = possibleIsaMove * expectedProfitRate;
+  const expectedNormalTax = expectedProfitOnIsaMove * normalTaxRate;
+  const expectedIsaTax = Math.max(expectedProfitOnIsaMove - Math.max(isaTaxFreeLimit - isaCurrentProfit, 0), 0) * isaTaxRate;
+  const expectedIsaSaving = Math.max(expectedNormalTax - expectedIsaTax, 0);
+
+  const totalImmediateBenefit = pensionExtraCredit + expectedIsaSaving;
+  const warnings = [];
+  if (pensionCurrent < pensionLimit) warnings.push(`연금 세액공제 한도가 ${fmt(pensionGap)}원 남아 있습니다.`);
+  if (isaCurrent < isaLimit) warnings.push(`ISA 연간 납입 여력이 ${fmt(isaGap)}원 남아 있습니다.`);
+  if (taxable.value > isa.value && isaGap > 0) warnings.push("일반계좌 비중이 ISA보다 크고 ISA 여력이 남아 있어 과세 효율 점검이 필요합니다.");
+  if (pensionCurrent > pensionLimit) warnings.push("연금 납입액이 세액공제 한도를 초과했습니다. 초과분은 공제 효과가 제한될 수 있습니다.");
+
+  const recommendations = [
+    {
+      title:"연금저축/IRP 세액공제 한도 채우기",
+      priority:pensionGap>0?"높음":"완료",
+      amount:pensionGap,
+      benefit:pensionExtraCredit,
+      reason:pensionGap>0 ? `추가 납입 시 예상 세액공제 ${fmt(pensionExtraCredit)}원` : "현재 설정 기준 세액공제 한도를 모두 채웠습니다.",
+    },
+    {
+      title:"ISA 납입 여력 우선 활용",
+      priority:isaGap>0?"높음":"완료",
+      amount:isaGap,
+      benefit:expectedIsaSaving,
+      reason:isaGap>0 ? `향후 기대수익 ${fmt(expectedProfitOnIsaMove)}원 가정 시 예상 절세 ${fmt(expectedIsaSaving)}원` : "현재 설정 기준 ISA 연간 한도를 모두 사용했습니다.",
+    },
+    {
+      title:"일반계좌 신규 매수 최소화",
+      priority:taxable.value>0&&isaGap>0?"중간":"점검",
+      amount:Math.min(taxable.value, isaGap),
+      benefit:taxableTaxNow,
+      reason:taxableProfit>0 ? `현재 일반계좌 평가이익 기준 추정 과세 노출 ${fmt(taxableTaxNow)}원` : "일반계좌 평가이익이 크지 않아 즉시 과세 부담은 제한적입니다.",
+    },
+  ];
+
+  return { isa, taxable, pension, irp, pensionCurrent, pensionLimit, pensionGap, pensionExtraCredit, isaCurrent, isaLimit, isaGap, isaSavedCurrent, taxableTaxNow, expectedIsaSaving, totalImmediateBenefit, warnings, recommendations };
+}
+
+function TaxTab({ data, update, taxAnalysis }) {
+  const s = data.settings || {};
+  const set = (k, v) => update(d => ({ ...d, settings:{ ...d.settings, [k]:v } }));
+  const opt = useMemo(() => calcTaxOptimization(data, taxAnalysis), [data, taxAnalysis]);
+  const priorityBadge = (p) => p === "높음" ? "badge-red" : p === "중간" ? "badge-amber" : p === "완료" ? "badge-green" : "badge-muted";
   return (
     <div className="stack">
       <div className="kpi-grid">
-        {taxAnalysis.map(g=>(
-          <div key={g.name} className="kpi-card">
-            <div className="kpi-label">{g.name}</div>
-            <div><span className="kpi-value">{fmt(g.value/10000)}</span><span className="kpi-unit">만원</span></div>
-            <div className="kpi-sub">
-              <span className="badge badge-muted" style={{fontSize:10}}>{g.taxLabel}</span>
-            </div>
-          </div>
-        ))}
+        <KpiCard label="추가 세액공제 가능액" value={opt.pensionExtraCredit} unit="원" accent/>
+        <KpiCard label="ISA 예상 절세효과" value={opt.expectedIsaSaving} unit="원"/>
+        <KpiCard label="일반계좌 과세 노출" value={opt.taxableTaxNow} unit="원" tone={opt.taxableTaxNow>0?"red":undefined}/>
+        <KpiCard label="총 최적화 기대효과" value={opt.totalImmediateBenefit} unit="원" tone="green"/>
       </div>
+
+      <div className="card">
+        <div className="card-title">
+          <h3>3단계 세금 최적화 입력값</h3>
+          <span className="badge badge-accent">수동 수정 가능</span>
+        </div>
+        <div className="form-grid">
+          <Field label="올해 ISA 납입액"><input value={s.annualIsaContributionCurrent||""} onChange={e=>set("annualIsaContributionCurrent", n(e.target.value))} placeholder="예: 12000000"/></Field>
+          <Field label="연금/IRP 올해 납입액"><input value={s.annualPensionContribution||""} onChange={e=>set("annualPensionContribution", n(e.target.value))} placeholder="예: 6000000"/></Field>
+          <Field label="세금 최적화 가능 현금"><input value={s.annualTaxOptimizingCash||""} onChange={e=>set("annualTaxOptimizingCash", n(e.target.value))} placeholder="예: 5000000"/></Field>
+          <Field label="과세계좌 기대수익률"><input type="number" step="0.001" value={s.expectedTaxableProfitRate??0.08} onChange={e=>set("expectedTaxableProfitRate", Number(e.target.value))}/></Field>
+        </div>
+        <div className="hr"/>
+        <div className="form-grid">
+          <Field label="ISA 연간 한도"><input value={s.isaAnnualLimit} onChange={e=>set("isaAnnualLimit", n(e.target.value))}/></Field>
+          <Field label="ISA 비과세 한도"><input value={s.isaTaxFreeLimit} onChange={e=>set("isaTaxFreeLimit", n(e.target.value))}/></Field>
+          <Field label="ISA 초과분 세율"><input type="number" step="0.001" value={s.isaTaxRate} onChange={e=>set("isaTaxRate", Number(e.target.value))}/></Field>
+          <Field label="일반 배당세율"><input type="number" step="0.001" value={s.taxableDividendTaxRate} onChange={e=>set("taxableDividendTaxRate", Number(e.target.value))}/></Field>
+          <Field label="연금 공제한도"><input value={s.pensionAnnualTaxCreditLimit} onChange={e=>set("pensionAnnualTaxCreditLimit", n(e.target.value))}/></Field>
+          <Field label="연금 세액공제율"><input type="number" step="0.001" value={s.pensionTaxCreditRate} onChange={e=>set("pensionTaxCreditRate", Number(e.target.value))}/></Field>
+        </div>
+        <p className="small muted" style={{marginTop:12}}>입력값은 앱 내부 시뮬레이션용입니다. 실제 세액공제 한도와 과세 방식은 소득구간·상품·계좌 유형에 따라 달라질 수 있습니다.</p>
+      </div>
+
+      <div className="g2">
+        <div className="card">
+          <div className="card-title"><h3>절세 우선순위</h3><span className="badge badge-muted">추천 순서</span></div>
+          <div className="stack">
+            {opt.recommendations.map((r,i)=>(
+              <div key={r.title} className="insight-card">
+                <div className="insight-icon" style={{background:i===0?"var(--green-bg)":i===1?"var(--accent-bg)":"var(--amber-bg)"}}>{i+1}</div>
+                <div className="insight-body" style={{flex:1}}>
+                  <div className="row-between">
+                    <h4>{r.title}</h4>
+                    <span className={`badge ${priorityBadge(r.priority)}`}>{r.priority}</span>
+                  </div>
+                  <p>{r.reason}</p>
+                  <div className="row" style={{marginTop:8,flexWrap:"wrap"}}>
+                    <span className="badge badge-muted">추천금액 {fmt(r.amount)}원</span>
+                    <span className="badge badge-green">기대효과 {fmt(r.benefit)}원</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-title"><h3>한도 사용 현황</h3><span className="badge badge-muted">올해 기준</span></div>
+          <div className="budget-item">
+            <div className="budget-header"><span className="budget-name">ISA 납입 한도</span><span className="budget-nums">{fmt(opt.isaCurrent)} / {fmt(opt.isaLimit)}원</span></div>
+            <div className="progress"><div className="progress-fill pf-accent" style={{width:`${clamp(opt.isaLimit>0?opt.isaCurrent/opt.isaLimit*100:0,0,100)}%`}}/></div>
+          </div>
+          <div className="budget-item">
+            <div className="budget-header"><span className="budget-name">연금 세액공제 한도</span><span className="budget-nums">{fmt(opt.pensionCurrent)} / {fmt(opt.pensionLimit)}원</span></div>
+            <div className="progress"><div className="progress-fill pf-green" style={{width:`${clamp(opt.pensionLimit>0?opt.pensionCurrent/opt.pensionLimit*100:0,0,100)}%`}}/></div>
+          </div>
+          <div className="hr"/>
+          <div className="stat-row"><span className="stat-label">ISA 남은 한도</span><span className="stat-value">{fmt(opt.isaGap)}원</span></div>
+          <div className="stat-row"><span className="stat-label">연금 남은 공제한도</span><span className="stat-value">{fmt(opt.pensionGap)}원</span></div>
+          <div className="stat-row"><span className="stat-label">ISA 현재 누적 절세효과</span><span className="stat-value text-green">{fmt(opt.isaSavedCurrent)}원</span></div>
+          {opt.warnings.length>0 && <div className="alert alert-warn" style={{marginTop:14}}>{opt.warnings[0]}</div>}
+        </div>
+      </div>
+
       <div className="card">
         <h3>계좌별 세금 분석</h3>
         <div className="table-wrap">
@@ -1940,6 +2076,8 @@ function TaxTab({ data, taxAnalysis }) {
           </table>
         </div>
       </div>
+
+      <div className="alert alert-info">이 화면은 세금 최적화를 위한 추정 도구입니다. 실제 신고·납입 전에는 증권사/국세청/세무 전문가 기준으로 확인하세요.</div>
     </div>
   );
 }
@@ -3147,7 +3285,7 @@ export default function App() {
             {tab==="professional"&&<ProfessionalTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} monthlySeries={monthlySeries}/>}
             {tab==="risk"&&<Step2MddRiskPanel data={data} financialAnalysis={financialAnalysis}/>}
             {tab==="analysis"&&<AnalysisTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboardDetail={dashboardDetail}/>}
-            {tab==="tax"&&<TaxTab data={data} taxAnalysis={taxAnalysis}/>}
+            {tab==="tax"&&<TaxTab data={data} update={update} taxAnalysis={taxAnalysis}/>}
             {tab==="simulation"&&<SimulationTab data={data} futureSim={futureSim}/>}
             {tab==="settings"&&<SettingsTab data={data} update={update}/>}
             {tab==="accounts"&&<AccountsTab data={data} update={update}/>}
