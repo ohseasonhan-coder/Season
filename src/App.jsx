@@ -746,6 +746,21 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 
 
 
+
+/* Automation System */
+.automation-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.08));border-color:rgba(108,125,255,.20)}
+.automation-hero h2{font-size:24px;font-weight:900;letter-spacing:-.04em;margin:4px 0}
+.automation-hero p{font-size:13px;color:var(--text3);line-height:1.5}
+.automation-score{font-size:52px;font-weight:900;letter-spacing:-.06em;line-height:1}
+.automation-score span{font-size:18px;color:var(--text3);margin-left:3px}
+.automation-alert{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:flex-start;padding:13px;border-radius:14px;border:1px solid var(--border);background:var(--surface2)}
+.automation-alert.danger{background:var(--red-bg);border-color:rgba(255,92,114,.28)}
+.automation-alert.warn{background:var(--amber-bg);border-color:rgba(240,180,41,.28)}
+.automation-alert.info{background:var(--accent-bg);border-color:rgba(108,125,255,.24)}
+.automation-alert strong{font-size:13px;color:var(--text)}
+.automation-alert p{font-size:12px;color:var(--text2);line-height:1.5;margin-top:3px}
+@media(max-width:900px){.automation-hero{flex-direction:column;align-items:flex-start}.automation-score{font-size:40px}}
+
 /* CFO Final */
 .cfo-hero,.goal-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(135deg,var(--surface),rgba(52,213,138,.08));border-color:rgba(52,213,138,.20)}
 .cfo-hero h2,.goal-hero h2{font-size:24px;font-weight:900;letter-spacing:-.04em;margin:4px 0}
@@ -2878,6 +2893,189 @@ function PlanningTab({ data, update, eventAnalysis }) {
 
 
 
+
+// ─── Automation System Tab ───────────────────────────────────────────────────
+function AutomationSystemTab({ data, update, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim }) {
+  const today=todayISO();
+  const thisMonth=thisMonthISO();
+
+  const settings=data.settings||{};
+  const auto=useMemo(()=>({
+    monthlyReportDay:n(settings.autoMonthlyReportDay||1),
+    backupReminderDays:n(settings.autoBackupReminderDays||14),
+    rebalanceEnabled:settings.autoCheckRebalance!==false,
+    budgetEnabled:settings.autoCheckBudget!==false,
+    goalEnabled:settings.autoCheckGoals!==false,
+    taxEnabled:settings.autoCheckTax!==false,
+    lastBackupAt:settings.lastBackupAt||"",
+    lastMonthlyReportAt:settings.lastMonthlyReportAt||"",
+    automationRunLog:Array.isArray(settings.automationRunLog)?settings.automationRunLog:[],
+  }),[settings]);
+
+  const runChecks=useMemo(()=>{
+    const alerts=[];
+    const actions=[];
+    const income=n(dashboard.income), expense=n(dashboard.expense), net=n(dashboard.net);
+    const emergencyMonths=expense>0?n(dashboardDetail.emergencyFund)/expense:0;
+
+    const day=Number(today.slice(8,10));
+    if(day>=auto.monthlyReportDay && String(auto.lastMonthlyReportAt||"").slice(0,7)!==thisMonth){
+      alerts.push({level:"info",area:"월간 리포트",title:"이번 달 리포트 생성 필요",text:`${thisMonth} 월간 리포트를 아직 확정하지 않았습니다.`});
+      actions.push({type:"monthlyReport",label:"월간 리포트 완료 처리",desc:"이번 달 리포트 확인 후 완료 처리"});
+    }
+
+    const lastBackup=auto.lastBackupAt?new Date(auto.lastBackupAt):null;
+    const diffDays=lastBackup?Math.floor((new Date(today)-lastBackup)/(1000*60*60*24)):999;
+    if(diffDays>=auto.backupReminderDays){
+      alerts.push({level:"warn",area:"백업",title:"백업 필요",text:lastBackup?`마지막 백업 후 ${diffDays}일이 지났습니다.`:"아직 백업 기록이 없습니다."});
+      actions.push({type:"backupMark",label:"백업 완료로 표시",desc:"백업 다운로드 후 완료 처리"});
+    }
+
+    if(auto.budgetEnabled){
+      const over=(budgetAnalysis||[]).filter(b=>b.status==="초과");
+      const warn=(budgetAnalysis||[]).filter(b=>b.status==="주의");
+      if(over.length>0) alerts.push({level:"warn",area:"예산",title:`예산 초과 ${over.length}개`,text:over.map(b=>b.cat1).slice(0,3).join(" · ")+" 항목을 확인하세요."});
+      else if(warn.length>0) alerts.push({level:"info",area:"예산",title:`예산 주의 ${warn.length}개`,text:warn.map(b=>b.cat1).slice(0,3).join(" · ")+" 항목 사용률이 높습니다."});
+    }
+
+    if(net<0) alerts.push({level:"danger",area:"현금흐름",title:"이번 달 적자",text:`수입보다 지출이 ${fmt(Math.abs(net))}원 많습니다.`});
+    if(emergencyMonths<3) alerts.push({level:"danger",area:"비상금",title:"비상금 부족",text:`현재 비상금은 약 ${emergencyMonths.toFixed(1)}개월치입니다.`});
+    else if(emergencyMonths<6) alerts.push({level:"warn",area:"비상금",title:"비상금 보강 권장",text:`현재 ${emergencyMonths.toFixed(1)}개월치입니다. 6개월치까지 보강을 권장합니다.`});
+
+    if(auto.rebalanceEnabled){
+      const total=n(financialAnalysis.total);
+      const rows=financialAnalysis.rows||[];
+      const targets=getInvestmentTargets(settings).filter(t=>n(t.targetWeight)>0);
+      const totalTarget=targets.reduce((s,t)=>s+n(t.targetWeight),0)||1;
+      const byClass={};
+      rows.forEach(r=>{const k=r.assetClass||"기타";byClass[k]=(byClass[k]||0)+n(r.value);});
+      const band=n(settings.rebalanceBandPct||5)/100;
+      targets.forEach(t=>{
+        const targetW=n(t.targetWeight)/totalTarget;
+        const currentW=total>0?n(byClass[t.name])/total:0;
+        const gap=targetW-currentW;
+        if(Math.abs(gap)>=band){
+          alerts.push({level:gap>0?"info":"warn",area:"리밸런싱",title:`${t.name} 비중 ${gap>0?"부족":"초과"}`,text:`현재 ${fmtPct(currentW*100)} / 목표 ${fmtPct(targetW*100)}입니다.`});
+        }
+      });
+    }
+
+    if(auto.taxEnabled){
+      if(n(taxAnalysis?.pensionRemaining)>0) alerts.push({level:"info",area:"절세",title:"연금 세액공제 여력",text:`잔여 한도 ${fmt(taxAnalysis.pensionRemaining)}원을 확인하세요.`});
+      if(n(taxAnalysis?.isaRemaining)>0) alerts.push({level:"info",area:"절세",title:"ISA 납입 여력",text:`잔여 한도 ${fmt(taxAnalysis.isaRemaining)}원을 확인하세요.`});
+    }
+
+    if(auto.goalEnabled){
+      const monthlyInvest=n(settings.monthlyInvestDefault||settings.monthlyInvestStage1||0);
+      const capacity=Math.max(income-expense,0);
+      (data.events||[]).forEach(e=>{
+        const shortage=Math.max(n(e.amountNeeded)-n(e.currentPrepared),0);
+        const monthlyNeed=shortage/Math.max(n(e.yearsFromNow)*12,1);
+        if(shortage>0 && monthlyNeed+monthlyInvest>capacity){
+          alerts.push({level:"warn",area:"목표",title:`${e.name} 목표 충돌`,text:`월 필요액 ${fmt(monthlyNeed)}원이 현재 투자계획과 충돌할 수 있습니다.`});
+        }
+      });
+    }
+
+    const danger=alerts.filter(a=>a.level==="danger").length;
+    const warn=alerts.filter(a=>a.level==="warn").length;
+    const info=alerts.filter(a=>a.level==="info").length;
+    const score=clamp(100-danger*25-warn*10-info*2,0,100);
+    return {alerts,actions,danger,warn,info,score};
+  },[data,settings,dashboard,dashboardDetail,financialAnalysis,budgetAnalysis,taxAnalysis,auto,today,thisMonth]);
+
+  const setAuto=(k,v)=>update(d=>({...d,settings:{...d.settings,[k]:v}}));
+  const markMonthlyReport=()=>update(d=>({...d,settings:{...d.settings,lastMonthlyReportAt:new Date().toISOString(),automationRunLog:[...(Array.isArray(d.settings.automationRunLog)?d.settings.automationRunLog:[]),{id:uid(),at:new Date().toISOString(),type:"monthlyReport",text:`${thisMonth} 월간 리포트 완료`}].slice(-50)}}));
+  const markBackup=()=>update(d=>({...d,settings:{...d.settings,lastBackupAt:today,automationRunLog:[...(Array.isArray(d.settings.automationRunLog)?d.settings.automationRunLog:[]),{id:uid(),at:new Date().toISOString(),type:"backup",text:"백업 완료 표시"}].slice(-50)}}));
+
+  const scoreColor=runChecks.score>=80?"var(--green)":runChecks.score>=60?"var(--accent)":runChecks.score>=40?"var(--amber)":"var(--red)";
+
+  return (
+    <div className="stack automation-system">
+      <div className="card automation-hero">
+        <div>
+          <div className="kpi-label">AUTOMATION SYSTEM</div>
+          <h2>자동으로 굴러가는 시스템</h2>
+          <p>매월 리포트, 백업 주기, 예산·리밸런싱·절세·목표 충돌을 자동 점검합니다.</p>
+        </div>
+        <div className="automation-score" style={{color:scoreColor}}>{runChecks.score}<span>/100</span></div>
+      </div>
+
+      <div className="kpi-grid">
+        <KpiCard label="긴급 경고" value={runChecks.danger} unit="건" tone={runChecks.danger?"red":"green"}/>
+        <KpiCard label="주의 알림" value={runChecks.warn} unit="건" tone={runChecks.warn?"red":"green"}/>
+        <KpiCard label="정보 알림" value={runChecks.info} unit="건" accent/>
+        <KpiCard label="자동 실행 로그" value={auto.automationRunLog.length} unit="건"/>
+      </div>
+
+      <div className="g2">
+        <div className="card">
+          <h3>자동 점검 설정</h3>
+          <div className="form-grid-3">
+            <Field label="월간 리포트 기준일"><input type="number" min="1" max="28" value={auto.monthlyReportDay} onChange={e=>setAuto("autoMonthlyReportDay",clamp(n(e.target.value),1,28))}/></Field>
+            <Field label="백업 알림 주기(일)"><input type="number" min="1" value={auto.backupReminderDays} onChange={e=>setAuto("autoBackupReminderDays",Math.max(n(e.target.value),1))}/></Field>
+            <Field label="리밸런싱 점검"><select value={auto.rebalanceEnabled?"사용":"미사용"} onChange={e=>setAuto("autoCheckRebalance",e.target.value==="사용")}><option>사용</option><option>미사용</option></select></Field>
+            <Field label="예산 점검"><select value={auto.budgetEnabled?"사용":"미사용"} onChange={e=>setAuto("autoCheckBudget",e.target.value==="사용")}><option>사용</option><option>미사용</option></select></Field>
+            <Field label="목표 충돌 점검"><select value={auto.goalEnabled?"사용":"미사용"} onChange={e=>setAuto("autoCheckGoals",e.target.value==="사용")}><option>사용</option><option>미사용</option></select></Field>
+            <Field label="절세 점검"><select value={auto.taxEnabled?"사용":"미사용"} onChange={e=>setAuto("autoCheckTax",e.target.value==="사용")}><option>사용</option><option>미사용</option></select></Field>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>자동 실행 버튼</h3>
+          <div className="stack" style={{gap:10}}>
+            <button className="btn btn-primary" onClick={markMonthlyReport}>이번 달 월간 리포트 완료 처리</button>
+            <button className="btn btn-ghost" onClick={markBackup}>백업 완료로 표시</button>
+            <div className="alert alert-info">
+              <strong>실행 방식</strong>
+              <div style={{marginTop:6,fontSize:12,lineHeight:1.5}}>브라우저 로컬 앱 특성상 실제 백그라운드 알림 대신, 앱을 열 때마다 조건을 자동 점검하고 이 화면에 알림을 표시합니다.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title"><h3>자동 점검 결과</h3><span className="badge badge-accent">{today}</span></div>
+        <div className="stack" style={{gap:10}}>
+          {runChecks.alerts.length?runChecks.alerts.map((a,i)=>(
+            <div key={i} className={`automation-alert ${a.level}`}>
+              <span className="badge badge-muted">{a.area}</span>
+              <div>
+                <strong>{a.title}</strong>
+                <p>{a.text}</p>
+              </div>
+            </div>
+          )):<div className="empty">현재 자동 점검 알림이 없습니다.</div>}
+        </div>
+      </div>
+
+      <div className="g2">
+        <div className="card">
+          <h3>권장 자동 행동</h3>
+          {runChecks.actions.length?runChecks.actions.map((a,i)=>(
+            <div key={i} className="allocation-row">
+              <div><strong>{a.label}</strong><p>{a.desc}</p></div>
+              {a.type==="monthlyReport"&&<button className="btn btn-sm btn-primary" onClick={markMonthlyReport}>완료</button>}
+              {a.type==="backupMark"&&<button className="btn btn-sm btn-ghost" onClick={markBackup}>완료</button>}
+            </div>
+          )):<div className="empty">지금 즉시 처리할 자동 행동이 없습니다.</div>}
+        </div>
+
+        <div className="card">
+          <h3>자동 실행 로그</h3>
+          {auto.automationRunLog.length?[...auto.automationRunLog].reverse().slice(0,10).map(log=>(
+            <div key={log.id} className="stat-row">
+              <span className="stat-label">{String(log.at||"").slice(0,10)} · {log.type}</span>
+              <span className="stat-value" style={{fontSize:12}}>{log.text}</span>
+            </div>
+          )):<div className="empty">아직 자동 실행 로그가 없습니다.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ─── CFO Final Center ────────────────────────────────────────────────────────
 function CFOCenterTab({ data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim }) {
   const cfo=useMemo(()=>{
@@ -4634,13 +4832,14 @@ const NAV = [
   { id:"decision", icon:"🧭", label:"의사결정 센터" },
   { id:"goals", icon:"🎯", label:"목표 자금관리" },
   { id:"cfo", icon:"🏛️", label:"CFO 종합판단" },
+  { id:"automation", icon:"🤖", label:"자동화 시스템" },
   { section: "관리" },
   { id:"settings", icon:"⚙", label:"설정" },
   { id:"accounts", icon:"🏧", label:"계좌관리" },
   { id:"data", icon:"💾", label:"데이터·백업" },
 ];
 
-const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", risk:"리스크 분석", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", monthlyReport:"월간 리포트", decision:"의사결정 센터", goals:"목표 자금관리", cfo:"CFO 종합판단", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
+const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", risk:"리스크 분석", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", monthlyReport:"월간 리포트", decision:"의사결정 센터", goals:"목표 자금관리", cfo:"CFO 종합판단", automation:"자동화 시스템", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -4883,7 +5082,7 @@ export default function App() {
           </div>
 
           <div className="page">
-            {tab==="dashboard"&&<DashboardTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} dashboardChartData={dashboardChartData} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} monthlySeries={monthlySeries} eventAnalysis={eventAnalysis} futureSim={futureSim}/>}\n            {tab==="goals"&&<GoalFundingTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} futureSim={futureSim}/>}\n            {tab==="cfo"&&<CFOCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
+            {tab==="dashboard"&&<DashboardTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} dashboardChartData={dashboardChartData} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} monthlySeries={monthlySeries} eventAnalysis={eventAnalysis} futureSim={futureSim}/>}\n            {tab==="goals"&&<GoalFundingTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} futureSim={futureSim}/>}\n            {tab==="cfo"&&<CFOCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}\n            {tab==="automation"&&<AutomationSystemTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="transactions"&&<TransactionsTab data={data} update={update} accountNamesIn={accountNamesIn} accountNamesOut={accountNamesOut}/>}
             {tab==="assets"&&<AssetsTab data={data} update={update}/>}
             {tab==="portfolio"&&<PortfolioTab data={data} update={update} accountOptions={accountOptions} financialAnalysis={financialAnalysis}/>}
