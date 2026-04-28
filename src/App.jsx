@@ -521,6 +521,96 @@ input,select,textarea{font-family:inherit}
 .ai-chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .ai-chip{display:inline-flex;align-items:center;padding:4px 8px;border-radius:99px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);font-size:11px;color:var(--text2)}
 
+
+/* Compact status tooltip */
+.info-tooltip{
+  position:relative;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:22px;
+  height:22px;
+  padding:0 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+  cursor:help;
+  border:1px solid rgba(255,255,255,.10);
+  background:rgba(255,255,255,.045);
+  color:var(--text2);
+  outline:none;
+}
+.info-tooltip.ok{background:var(--green-bg);color:var(--green);border-color:rgba(52,213,138,.25)}
+.info-tooltip.danger{background:var(--red-bg);color:var(--red);border-color:rgba(255,92,114,.28)}
+.info-tooltip.warn{background:var(--amber-bg);color:var(--amber);border-color:rgba(240,180,41,.28)}
+.info-tooltip.info{background:var(--accent-bg);color:var(--accent2);border-color:rgba(108,125,255,.24)}
+.info-tooltip::after{
+  content:attr(data-msg);
+  position:absolute;
+  top:130%;
+  left:50%;
+  transform:translateX(-50%) translateY(-4px);
+  min-width:max-content;
+  max-width:320px;
+  padding:8px 10px;
+  border-radius:10px;
+  background:rgba(20,22,28,.98);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 14px 30px rgba(0,0,0,.34);
+  font-size:11px;
+  font-weight:700;
+  line-height:1.45;
+  white-space:nowrap;
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  z-index:9999;
+  transition:opacity .14s ease, transform .14s ease, visibility .14s ease;
+}
+.info-tooltip::before{
+  content:"";
+  position:absolute;
+  top:105%;
+  left:50%;
+  transform:translateX(-50%) translateY(-4px);
+  border:5px solid transparent;
+  border-bottom-color:rgba(20,22,28,.98);
+  opacity:0;
+  visibility:hidden;
+  z-index:9999;
+  transition:opacity .14s ease, transform .14s ease, visibility .14s ease;
+}
+.info-tooltip:hover::after,.info-tooltip:hover::before,
+.info-tooltip:focus::after,.info-tooltip:focus::before{
+  opacity:1;visibility:visible;transform:translateX(-50%) translateY(0);
+}
+
+/* Reduce always-visible helper text */
+.field-hint{
+  opacity:0;
+  max-height:0;
+  overflow:hidden;
+  transition:opacity .14s ease, max-height .14s ease, margin-top .14s ease;
+  margin-top:0!important;
+}
+.field:hover .field-hint,
+.field:focus-within .field-hint{
+  opacity:1;
+  max-height:28px;
+  margin-top:5px!important;
+}
+.input-status-row{
+  margin-top:12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.input-status-left,.input-status-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.input-status-caption{font-size:11px;color:var(--text3)}
+
 /* Table */
 .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
 table{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -814,6 +904,16 @@ function ValidationMark({ message, tone="danger" }) {
 function FieldHint({ hint }) {
   if(!hint) return null;
   return <div className="field-hint">{hint}</div>;
+}
+
+
+function InfoTooltip({ label, message, tone="info" }) {
+  if(!message) return null;
+  return (
+    <span className={`info-tooltip ${tone}`} data-msg={message} tabIndex={0}>
+      {label}
+    </span>
+  );
 }
 
 function Field({ label, error, warn, children }) {
@@ -1249,12 +1349,14 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
 
   return (
     <div className="stack">
-      <div className="kpi-grid">
-        <KpiCard label="입력 검증 이슈" value={validationSummary.total} unit="건" tone={validationSummary.total?"red":"green"}/>
-        <KpiCard label="필수값 누락" value={validationSummary.missing} unit="건"/>
-        <KpiCard label="계좌 누락" value={validationSummary.accountMiss} unit="건"/>
-        <KpiCard label="중복 의심" value={validationSummary.duplicates} unit="건"/>
-      </div>
+      {validationSummary.total>0&&(
+        <div className="kpi-grid">
+          <KpiCard label="입력 검증 이슈" value={validationSummary.total} unit="건" tone="red"/>
+          <KpiCard label="필수값 누락" value={validationSummary.missing} unit="건"/>
+          <KpiCard label="계좌 누락" value={validationSummary.accountMiss} unit="건"/>
+          <KpiCard label="중복 의심" value={validationSummary.duplicates} unit="건"/>
+        </div>
+      )}
       <div className="card">
         <div className="card-title">
           <h3>{form.id?"거래 수정":"입력센터"} <span style={{fontSize:12,fontWeight:400,color:"var(--text3)",marginLeft:6}}>자동 검증 · 템플릿 · 고정거래</span></h3>
@@ -1306,14 +1408,26 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
                 <textarea value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})} placeholder="고액 거래, 예외 거래, 카드 결제 예정 등 참고사항"/>
                 <FieldHint hint={fieldExamples.memo}/>
               </Field></div>
-            <div className="g2" style={{marginTop:14}}>
-              <div className={`alert ${canSave?"alert-ok":"alert-danger"}`}>
-                <strong>{canSave?"저장 가능":"저장 전 확인 필요"}</strong>
-                <div style={{marginTop:6,color:"inherit",fontSize:12}}>{canSave?"필수 검증을 통과했습니다.":"필수 입력값을 채워야 저장됩니다."}</div>
+            <div className="input-status-row">
+              <div className="input-status-left">
+                <span className="input-status-caption">입력 상태</span>
+                <InfoTooltip
+                  label={canSave ? "저장 가능" : "확인 필요"}
+                  tone={canSave ? "ok" : "danger"}
+                  message={canSave ? "필수 검증을 통과했습니다." : "필수 입력값을 채워야 저장됩니다. 느낌표가 표시된 항목을 확인하세요."}
+                />
+                <InfoTooltip
+                  label={duplicateCandidates.length ? `중복 ${duplicateCandidates.length}` : "중복 없음"}
+                  tone={duplicateCandidates.length ? "warn" : "info"}
+                  message={duplicateCandidates.length ? "같은 날짜·금액·내용의 거래가 이미 있습니다. 저장 전 확인하세요." : "같은 날짜·금액·내용 기준으로 중복 의심 거래가 없습니다."}
+                />
               </div>
-              <div className={`alert ${duplicateCandidates.length?"alert-warn":"alert-info"}`}>
-                <strong>{duplicateCandidates.length?`중복 의심 ${duplicateCandidates.length}건`:"중복 의심 없음"}</strong>
-                <div style={{marginTop:6,color:"inherit",fontSize:12}}>같은 날짜·금액·내용 기준으로 자동 확인합니다.</div>
+              <div className="input-status-right">
+                <InfoTooltip
+                  label="도움말"
+                  tone="info"
+                  message="각 입력칸 옆 느낌표 또는 상태 배지를 올리면 필요한 안내가 표시됩니다."
+                />
               </div>
             </div>
 
