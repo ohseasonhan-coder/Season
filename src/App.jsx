@@ -441,18 +441,75 @@ input,select,textarea{font-family:inherit}
 
 /* Field validation + AI suggestion */
 .field-label-with-alert{display:flex;align-items:center;gap:6px}
+.field-hint{font-size:10.5px;color:var(--text3);margin-top:5px;line-height:1.35}
 .field-alert-dot{
+  position:relative;
   width:15px;height:15px;border-radius:99px;
   display:inline-flex;align-items:center;justify-content:center;
   font-size:10px;font-weight:900;line-height:1;
   cursor:help;transition:.16s ease;
   box-shadow:0 0 0 1px rgba(255,255,255,.08), 0 6px 14px rgba(0,0,0,.18);
+  outline:none;
 }
 .field-alert-dot.danger{background:var(--red-bg);color:var(--red);border:1px solid rgba(255,92,114,.32)}
 .field-alert-dot.warn{background:var(--amber-bg);color:var(--amber);border:1px solid rgba(240,180,41,.32)}
-.field-alert-dot:hover{transform:translateY(-1px) scale(1.12);opacity:1}
+.field-alert-dot:hover,.field-alert-dot:focus{transform:translateY(-1px) scale(1.12);opacity:1}
+.field-alert-dot::after{
+  content:attr(data-msg);
+  position:absolute;
+  bottom:140%;
+  left:50%;
+  transform:translateX(-50%) translateY(4px);
+  min-width:max-content;
+  max-width:260px;
+  padding:7px 9px;
+  border-radius:9px;
+  background:rgba(20,22,28,.98);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 12px 28px rgba(0,0,0,.36);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:-.01em;
+  white-space:nowrap;
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  z-index:9999;
+  transition:opacity .14s ease, transform .14s ease, visibility .14s ease;
+}
+.field-alert-dot::before{
+  content:"";
+  position:absolute;
+  bottom:118%;
+  left:50%;
+  transform:translateX(-50%) translateY(4px);
+  border:5px solid transparent;
+  border-top-color:rgba(20,22,28,.98);
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  z-index:9999;
+  transition:opacity .14s ease, transform .14s ease, visibility .14s ease;
+}
+.field-alert-dot:hover::after,.field-alert-dot:hover::before,
+.field-alert-dot:focus::after,.field-alert-dot:focus::before{
+  opacity:1;visibility:visible;transform:translateX(-50%) translateY(0);
+}
 .field-has-error input,.field-has-error select,.field-has-error textarea{border-color:rgba(255,92,114,.55)!important;box-shadow:0 0 0 3px rgba(255,92,114,.10)}
 .field-has-warn input,.field-has-warn select,.field-has-warn textarea{border-color:rgba(240,180,41,.46)!important;box-shadow:0 0 0 3px rgba(240,180,41,.09)}
+.suggestion-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.suggestion-chip{
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.045);
+  color:var(--text2);
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:10.5px;
+  font-weight:700;
+  transition:.15s ease;
+}
+.suggestion-chip:hover{background:rgba(108,125,255,.14);border-color:rgba(108,125,255,.24);color:var(--accent2);transform:translateY(-1px)}
 .ai-suggest-card{
   margin:14px 0 0;padding:14px;border-radius:var(--radius);
   background:linear-gradient(135deg,rgba(108,125,255,.12),rgba(255,255,255,.035));
@@ -743,11 +800,22 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
 function ValidationMark({ message, tone="danger" }) {
   if(!message) return null;
   return (
-    <span className={`field-alert-dot ${tone==="warn"?"warn":"danger"}`} title={message} aria-label={message}>
+    <span
+      className={`field-alert-dot ${tone==="warn"?"warn":"danger"}`}
+      data-msg={message}
+      tabIndex={0}
+      aria-label={message}
+    >
       !
     </span>
   );
 }
+
+function FieldHint({ hint }) {
+  if(!hint) return null;
+  return <div className="field-hint">{hint}</div>;
+}
+
 function Field({ label, error, warn, children }) {
   const msg = error || warn;
   return (
@@ -1010,6 +1078,57 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
     return {errors,warns};
   },[normalizedForm,form.memo,duplicateCandidates.length]);
 
+
+  const fieldExamples={
+    date:"예: 오늘 날짜 또는 거래일",
+    type:"수입·지출·자산이동 중 선택",
+    cat1:"예: 식비, 교통, 금융소득",
+    cat2:"예: 외식, 커피/간식, ETF매수",
+    amount:"예: 15000",
+    inAccount:"수입 또는 이체 입금 계좌",
+    outAccount:"지출 또는 이체 출금 계좌",
+    content:"예: 점심식사, 월급, 카드결제",
+    memo:"예: 고액 거래 사유, 예외사항"
+  };
+
+  const smartSuggestions=useMemo(()=>{
+    const tx=(data.transactions||[]).filter(t=>!form.id||t.id!==form.id);
+    const f=normalizedForm;
+    const pickTop=(arr,key,limit=5)=>{
+      const map=new Map();
+      arr.forEach(t=>{
+        const v=String(t[key]||"").trim();
+        if(!v) return;
+        map.set(v,(map.get(v)||0)+1);
+      });
+      return [...map.entries()].sort((a,b)=>b[1]-a[1]).slice(0,limit).map(([value,count])=>({value,count}));
+    };
+    const sameType=tx.filter(t=>!f.type||t.type===f.type);
+    const sameCat1=sameType.filter(t=>!f.cat1||t.cat1===f.cat1);
+    const sameCat2=sameCat1.filter(t=>!f.cat2||t.cat2===f.cat2);
+    return {
+      cat1: pickTop(sameType,"cat1"),
+      cat2: pickTop(sameCat1.length?sameCat1:sameType,"cat2"),
+      content: pickTop(sameCat2.length?sameCat2:sameCat1.length?sameCat1:sameType,"content",6),
+      inAccount: pickTop(sameCat2.length?sameCat2:sameType,"inAccount"),
+      outAccount: pickTop(sameCat2.length?sameCat2:sameType,"outAccount"),
+      amount: pickTop(sameCat2.length?sameCat2:sameCat1.length?sameCat1:sameType,"amount",5).map(x=>({...x,value:n(x.value)})).filter(x=>x.value>0)
+    };
+  },[data.transactions,normalizedForm,form.id]);
+
+  const SuggestionChips=({items,onPick,formatter=(v)=>v})=>{
+    if(!items||!items.length) return null;
+    return (
+      <div className="suggestion-chips">
+        {items.slice(0,5).map((it,i)=>(
+          <button key={`${it.value}-${i}`} type="button" className="suggestion-chip" onClick={()=>onPick(it.value)}>
+            {formatter(it.value)}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
   const aiSuggestion=useMemo(()=>{
     const tx=(data.transactions||[]).filter(t=>!form.id||t.id!==form.id);
     const f=normalizedForm;
@@ -1144,16 +1263,49 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
         {showForm&&(
           <>
             <div className="form-grid">
-              <Field label="날짜" error={fieldAlerts.errors.date}><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></Field>
-              <Field label="구분" error={fieldAlerts.errors.type}><select value={form.type} onChange={e=>setForm({...form,type:e.target.value,cat1:"",cat2:""})}><option>수입</option><option>지출</option><option>자산이동</option></select></Field>
-              <Field label="대분류" error={fieldAlerts.errors.cat1}><select value={form.cat1} onChange={e=>setForm({...form,cat1:e.target.value,cat2:""})}><option value="">선택</option>{cat1Opts.map(x=><option key={x}>{x}</option>)}</select></Field>
-              <Field label="소분류" error={fieldAlerts.errors.cat2}><select value={form.cat2} onChange={e=>setForm({...form,cat2:e.target.value})}><option value="">선택</option>{cat2Opts.map(x=><option key={x}>{x}</option>)}</select></Field>
-              <Field label="금액" error={fieldAlerts.errors.amount}><input value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="0"/></Field>
-              <Field label="입금계좌" error={fieldAlerts.errors.inAccount}><select value={form.inAccount} onChange={e=>setForm({...form,inAccount:e.target.value})}><option value="">선택</option>{accountNamesIn.map(x=><option key={x}>{x}</option>)}</select></Field>
-              <Field label="출금계좌" error={fieldAlerts.errors.outAccount} warn={fieldAlerts.warns.outAccount}><select value={form.outAccount} onChange={e=>setForm({...form,outAccount:e.target.value})}><option value="">선택</option>{accountNamesOut.map(x=><option key={x}>{x}</option>)}</select></Field>
-              <Field label="내용" error={fieldAlerts.errors.content} warn={fieldAlerts.warns.content}><input value={form.content} onChange={e=>setForm({...form,content:e.target.value})} placeholder="내용 입력"/></Field>
+              <Field label="날짜" error={fieldAlerts.errors.date}>
+                <input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/>
+                <FieldHint hint={fieldExamples.date}/>
+              </Field>
+              <Field label="구분" error={fieldAlerts.errors.type}>
+                <select value={form.type} onChange={e=>setForm({...form,type:e.target.value,cat1:"",cat2:""})}><option>수입</option><option>지출</option><option>자산이동</option></select>
+                <FieldHint hint={fieldExamples.type}/>
+              </Field>
+              <Field label="대분류" error={fieldAlerts.errors.cat1}>
+                <select value={form.cat1} onChange={e=>setForm({...form,cat1:e.target.value,cat2:""})}><option value="">선택</option>{cat1Opts.map(x=><option key={x}>{x}</option>)}</select>
+                <SuggestionChips items={smartSuggestions.cat1} onPick={(v)=>setForm({...form,cat1:v,cat2:""})}/>
+                <FieldHint hint={fieldExamples.cat1}/>
+              </Field>
+              <Field label="소분류" error={fieldAlerts.errors.cat2}>
+                <select value={form.cat2} onChange={e=>setForm({...form,cat2:e.target.value})}><option value="">선택</option>{cat2Opts.map(x=><option key={x}>{x}</option>)}</select>
+                <SuggestionChips items={smartSuggestions.cat2} onPick={(v)=>setForm({...form,cat2:v})}/>
+                <FieldHint hint={fieldExamples.cat2}/>
+              </Field>
+              <Field label="금액" error={fieldAlerts.errors.amount}>
+                <input value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="0"/>
+                <SuggestionChips items={smartSuggestions.amount} onPick={(v)=>setForm({...form,amount:v})} formatter={(v)=>`${fmt(v)}원`}/>
+                <FieldHint hint={fieldExamples.amount}/>
+              </Field>
+              <Field label="입금계좌" error={fieldAlerts.errors.inAccount}>
+                <select value={form.inAccount} onChange={e=>setForm({...form,inAccount:e.target.value})}><option value="">선택</option>{accountNamesIn.map(x=><option key={x}>{x}</option>)}</select>
+                <SuggestionChips items={smartSuggestions.inAccount} onPick={(v)=>setForm({...form,inAccount:v})}/>
+                <FieldHint hint={fieldExamples.inAccount}/>
+              </Field>
+              <Field label="출금계좌" error={fieldAlerts.errors.outAccount} warn={fieldAlerts.warns.outAccount}>
+                <select value={form.outAccount} onChange={e=>setForm({...form,outAccount:e.target.value})}><option value="">선택</option>{accountNamesOut.map(x=><option key={x}>{x}</option>)}</select>
+                <SuggestionChips items={smartSuggestions.outAccount} onPick={(v)=>setForm({...form,outAccount:v})}/>
+                <FieldHint hint={fieldExamples.outAccount}/>
+              </Field>
+              <Field label="내용" error={fieldAlerts.errors.content} warn={fieldAlerts.warns.content}>
+                <input value={form.content} onChange={e=>setForm({...form,content:e.target.value})} placeholder="내용 입력"/>
+                <SuggestionChips items={smartSuggestions.content} onPick={(v)=>setForm({...form,content:v})}/>
+                <FieldHint hint={fieldExamples.content}/>
+              </Field>
             </div>
-            <div style={{marginTop:10}}><Field label="메모" warn={fieldAlerts.warns.memo}><textarea value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})} placeholder="고액 거래, 예외 거래, 카드 결제 예정 등 참고사항"/></Field></div>
+            <div style={{marginTop:10}}><Field label="메모" warn={fieldAlerts.warns.memo}>
+                <textarea value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})} placeholder="고액 거래, 예외 거래, 카드 결제 예정 등 참고사항"/>
+                <FieldHint hint={fieldExamples.memo}/>
+              </Field></div>
             <div className="g2" style={{marginTop:14}}>
               <div className={`alert ${canSave?"alert-ok":"alert-danger"}`}>
                 <strong>{canSave?"저장 가능":"저장 전 확인 필요"}</strong>
