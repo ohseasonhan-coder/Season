@@ -130,7 +130,7 @@ function normalizeCategories(c) {
   return merged;
 }
 function emptyData() {
-  return { version:10, categories:DEFAULT_CATEGORIES, transactions:[], accounts:DEFAULT_ACCOUNTS, assets:DEFAULT_ASSETS, portfolio:DEFAULT_PORTFOLIO, budgets:DEFAULT_BUDGETS, events:DEFAULT_EVENTS, settings:DEFAULT_SETTINGS, lastSavedAt:null };
+  return { version:10, categories:DEFAULT_CATEGORIES, transactions:[], accounts:DEFAULT_ACCOUNTS, assets:DEFAULT_ASSETS, portfolio:DEFAULT_PORTFOLIO, budgets:DEFAULT_BUDGETS, events:DEFAULT_EVENTS, settings:DEFAULT_SETTINGS, assetSnapshots:[], lastSavedAt:null };
 }
 function migrateData(d) {
   const x = { ...emptyData(), ...d };
@@ -171,6 +171,15 @@ function migrateData(d) {
   x.settings.fxAsOf = x.settings.fxAsOf || "";
   x.settings.marketDataLastUpdated = x.settings.marketDataLastUpdated || "";
   x.settings.autoUpdateMarketDataOnStart = x.settings.autoUpdateMarketDataOnStart === true;
+  // 자산 스냅샷 마이그레이션
+  x.assetSnapshots = Array.isArray(d.assetSnapshots)
+    ? d.assetSnapshots.map(s=>({
+        id:s.id||uid(), month:s.month||"", savedAt:s.savedAt||"",
+        totalAssets:n(s.totalAssets), totalLiabs:n(s.totalLiabs),
+        portValue:n(s.portValue), netWorth:n(s.netWorth),
+        memo:s.memo||"", detail:Array.isArray(s.detail)?s.detail:[],
+      }))
+    : [];
   return x;
 }
 function loadData() {
@@ -862,6 +871,40 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
   .donut-wrap{grid-template-columns:1fr}
   .page{padding:20px}
 }
+
+/* ── 라이트 모드 ────────────────────────────────────────────────────────────── */
+:root[data-theme='light']{
+  --bg:#f5f6f8;--surface:#ffffff;--surface2:#f0f2f5;--surface3:#e8eaee;
+  --border:#d8dce4;--border2:#c8ccd6;
+  --text:#141720;--text2:#4a5168;--text3:#8892a8;
+  --accent:#5566ee;--accent2:#6677ff;--accent-bg:rgba(85,102,238,.10);
+  --green:#1a9e62;--green-bg:rgba(26,158,98,.10);
+  --red:#d93f55;--red-bg:rgba(217,63,85,.10);
+  --amber:#c9880e;--amber-bg:rgba(201,136,14,.10);
+  --shadow:0 2px 12px rgba(0,0,0,.10);--shadow-lg:0 8px 32px rgba(0,0,0,.14);
+}
+:root[data-theme='light'] body{background:var(--bg)}
+:root[data-theme='light'] .sidebar{background:rgba(255,255,255,.88);box-shadow:inset -1px 0 0 rgba(0,0,0,.06),12px 0 40px rgba(0,0,0,.07)}
+:root[data-theme='light'] .sidebar.collapsed{background:rgba(255,255,255,.94)}
+:root[data-theme='light'] .sidebar-toggle{border-color:rgba(0,0,0,.10);background:rgba(0,0,0,.04);color:rgba(20,23,32,.65)}
+:root[data-theme='light'] .sidebar-toggle:hover{background:rgba(0,0,0,.08);color:#141720;border-color:rgba(0,0,0,.16)}
+:root[data-theme='light'] .sidebar.collapsed .nav-item::after{background:rgba(240,242,245,.97);color:#141720;border-color:rgba(0,0,0,.12);box-shadow:0 8px 24px rgba(0,0,0,.12)}
+:root[data-theme='light'] .topbar{background:rgba(255,255,255,.92);backdrop-filter:blur(12px)}
+:root[data-theme='light'] .recharts-default-tooltip{background:#fff!important;border-color:#d8dce4!important;color:#141720!important}
+:root[data-theme='light'] .recharts-tooltip-label{color:#4a5168!important}
+:root[data-theme='light'] .recharts-legend-item-text{color:#4a5168!important}
+:root[data-theme='light'] table thead tr{background:var(--surface2)}
+:root[data-theme='light'] th{background:var(--surface2)}
+:root[data-theme='light'] tr:hover td{background:rgba(0,0,0,.025)}
+:root[data-theme='light'] *::-webkit-scrollbar-thumb{background:var(--border2)}
+:root[data-theme='light'] .kpi-accent{background:linear-gradient(135deg,var(--surface) 60%,rgba(85,102,238,.06))}
+:root[data-theme='light'] .kpi-card::after{background:linear-gradient(135deg,rgba(0,0,0,.015) 0%,transparent 60%)}
+:root[data-theme='light'] .auth-bar{background:rgba(255,255,255,.92)}
+
+/* ── 테마 토글 버튼 ─────────────────────────────────────────────────────────── */
+.theme-toggle{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:16px;transition:.18s ease;flex-shrink:0}
+.theme-toggle:hover{background:var(--surface3);color:var(--text);transform:translateY(-1px)}
+.theme-toggle:active{transform:translateY(0)}
 `;
 
 // ─── SVG Charts ───────────────────────────────────────────────────────────────
@@ -1553,83 +1596,55 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
   const remove=(id)=>update(d=>({...d,transactions:d.transactions.filter(t=>t.id!==id)}));
   const edit=(t)=>{setForm({...t});setShowForm(true);};
 
-  // ── 일괄 선택·수정·삭제 ──────────────────────────────────────────────────
+  // ── 일괄 선택·수정·삭제 ───────────────────────────────────────────────────
   const [selectedIds,setSelectedIds]=useState(new Set());
   const [bulkCat1,setBulkCat1]=useState("");
   const [bulkCat2,setBulkCat2]=useState("");
+  const [bulkType,setBulkType]=useState("");
 
-  // 필터된 목록 기준 전체선택 여부
-  const allFilteredSelected = filtered.length>0 && filtered.every(t=>selectedIds.has(t.id));
-  const someSelected = filtered.some(t=>selectedIds.has(t.id));
+  const allFilteredSelected=filtered.length>0&&filtered.every(t=>selectedIds.has(t.id));
+  const someSelected=filtered.some(t=>selectedIds.has(t.id));
 
-  const toggleSelect = (id) => setSelectedIds(prev=>{
-    const next=new Set(prev);
-    if(next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
-  const toggleAll = () => {
-    if(allFilteredSelected){
-      setSelectedIds(prev=>{const next=new Set(prev);filtered.forEach(t=>next.delete(t.id));return next;});
-    } else {
-      setSelectedIds(prev=>{const next=new Set(prev);filtered.forEach(t=>next.add(t.id));return next;});
-    }
+  const toggleSelect=(id)=>setSelectedIds(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next;});
+  const toggleAll=()=>{
+    if(allFilteredSelected){setSelectedIds(prev=>{const next=new Set(prev);filtered.forEach(t=>next.delete(t.id));return next;});}
+    else{setSelectedIds(prev=>{const next=new Set(prev);filtered.forEach(t=>next.add(t.id));return next;});}
   };
-  const clearSelection = () => setSelectedIds(new Set());
+  const clearSelection=()=>setSelectedIds(new Set());
 
-  // 일괄 삭제
-  const bulkDelete = () => {
-    const ids=selectedIds;
-    if(!ids.size) return;
-    if(!confirm(`선택한 ${ids.size}건을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
+  const bulkDelete=()=>{
+    if(!selectedIds.size) return;
+    if(!confirm(`선택한 ${selectedIds.size}건을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
+    const ids=new Set(selectedIds);
     update(d=>({...d,transactions:d.transactions.filter(t=>!ids.has(t.id))}));
     clearSelection();
   };
-
-  // 일괄 대분류 변경
-  const bulkChangeCat1 = () => {
+  const bulkChangeCat1=()=>{
     if(!bulkCat1) return alert("변경할 대분류를 선택하세요.");
-    const ids=selectedIds;
-    if(!ids.size) return;
-    update(d=>({...d,transactions:d.transactions.map(t=>
-      ids.has(t.id) ? {...t,cat1:bulkCat1,cat2:""} : t
-    )}));
+    if(!selectedIds.size) return;
+    const ids=new Set(selectedIds);
+    update(d=>({...d,transactions:d.transactions.map(t=>ids.has(t.id)?{...t,cat1:bulkCat1,cat2:""}:t)}));
     setBulkCat1(""); setBulkCat2(""); clearSelection();
   };
-
-  // 일괄 소분류 변경 (대분류 먼저 선택한 뒤)
-  const bulkChangeCat2 = () => {
+  const bulkChangeCat2=()=>{
     if(!bulkCat1||!bulkCat2) return alert("대분류와 소분류를 모두 선택하세요.");
-    const ids=selectedIds;
-    if(!ids.size) return;
-    update(d=>({...d,transactions:d.transactions.map(t=>
-      ids.has(t.id) ? {...t,cat1:bulkCat1,cat2:bulkCat2} : t
-    )}));
+    if(!selectedIds.size) return;
+    const ids=new Set(selectedIds);
+    update(d=>({...d,transactions:d.transactions.map(t=>ids.has(t.id)?{...t,cat1:bulkCat1,cat2:bulkCat2}:t)}));
     setBulkCat1(""); setBulkCat2(""); clearSelection();
   };
-
-  // 일괄 구분 변경 (수입/지출/자산이동)
-  const [bulkType,setBulkType]=useState("");
-  const bulkChangeType = () => {
+  const bulkChangeType=()=>{
     if(!bulkType) return alert("변경할 구분을 선택하세요.");
-    const ids=selectedIds;
-    if(!ids.size) return;
-    update(d=>({...d,transactions:d.transactions.map(t=>
-      ids.has(t.id) ? {...t,type:bulkType} : t
-    )}));
+    if(!selectedIds.size) return;
+    const ids=new Set(selectedIds);
+    update(d=>({...d,transactions:d.transactions.map(t=>ids.has(t.id)?{...t,type:bulkType}:t)}));
     setBulkType(""); clearSelection();
   };
-
-  // bulkCat2 옵션 (bulkCat1 선택 시 연동)
-  const bulkCat2Opts = useMemo(()=>{
-    const typeKeys=Object.keys(data.categories);
-    for(const tk of typeKeys){
-      if(data.categories[tk][bulkCat1]) return data.categories[tk][bulkCat1];
-    }
+  const bulkCat2Opts=useMemo(()=>{
+    for(const tk of Object.keys(data.categories)){if(data.categories[tk][bulkCat1]) return data.categories[tk][bulkCat1];}
     return [];
   },[bulkCat1,data.categories]);
-
-  // 일괄 조작 패널 표시 여부
-  const showBulkPanel = selectedIds.size>0;
+  const showBulkPanel=selectedIds.size>0;
 
   // 검색 하이라이트
   const Hl=({text=""})=>{
@@ -1821,87 +1836,46 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
 
         {/* ── 일괄 조작 패널 ── */}
         {showBulkPanel&&(
-          <div style={{
-            padding:"14px 16px",marginBottom:14,
-            background:"var(--accent-bg)",
-            border:"1px solid rgba(108,125,255,.3)",
-            borderRadius:12,
-            display:"flex",flexDirection:"column",gap:12,
-          }}>
+          <div style={{padding:"14px 16px",marginBottom:14,background:"var(--accent-bg)",border:"1px solid rgba(108,125,255,.3)",borderRadius:12,display:"flex",flexDirection:"column",gap:12}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-              <span style={{fontSize:13,fontWeight:700,color:"var(--accent)"}}>
-                ☑ {selectedIds.size}건 선택 — 일괄 작업
-              </span>
+              <span style={{fontSize:13,fontWeight:700,color:"var(--accent)"}}>☑ {selectedIds.size}건 선택 — 일괄 작업</span>
               <button onClick={clearSelection} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:12}}>선택 해제</button>
             </div>
-
-            {/* 액션 행 1: 삭제 + 구분 변경 */}
+            {/* 행 1: 삭제 + 구분 변경 */}
             <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-              <button
-                onClick={bulkDelete}
-                style={{padding:"8px 14px",borderRadius:10,border:"1px solid rgba(255,92,114,.4)",background:"var(--red-bg)",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}
-              >
+              <button onClick={bulkDelete} style={{padding:"8px 14px",borderRadius:10,border:"1px solid rgba(255,92,114,.4)",background:"var(--red-bg)",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
                 🗑 {selectedIds.size}건 삭제
               </button>
               <div style={{width:1,height:24,background:"rgba(255,255,255,.12)",flexShrink:0}}/>
-              <select
-                value={bulkType}
-                onChange={e=>setBulkType(e.target.value)}
-                style={{...inpS,width:"auto",minWidth:120,fontSize:12,padding:"7px 11px"}}
-              >
-                <option value="">구분 변경...</option>
-                <option>수입</option><option>지출</option><option>자산이동</option>
+              <select value={bulkType} onChange={e=>setBulkType(e.target.value)} style={{...inpS,width:"auto",minWidth:120,fontSize:12,padding:"7px 11px"}}>
+                <option value="">구분 변경...</option><option>수입</option><option>지출</option><option>자산이동</option>
               </select>
-              <button
-                onClick={bulkChangeType}
-                style={{padding:"8px 14px",borderRadius:10,border:"1px solid var(--border2)",background:"var(--surface)",color:"var(--text2)",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}
-              >
+              <button onClick={bulkChangeType} style={{padding:"8px 14px",borderRadius:10,border:"1px solid var(--border2)",background:"var(--surface)",color:"var(--text2)",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
                 구분 일괄 변경
               </button>
             </div>
-
-            {/* 액션 행 2: 카테고리 일괄 변경 */}
+            {/* 행 2: 카테고리 일괄 변경 */}
             <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
               <span style={{fontSize:12,color:"var(--text3)",flexShrink:0}}>카테고리 변경:</span>
-              <select
-                value={bulkCat1}
-                onChange={e=>{setBulkCat1(e.target.value);setBulkCat2("");}}
-                style={{...inpS,width:"auto",minWidth:130,fontSize:12,padding:"7px 11px"}}
-              >
+              <select value={bulkCat1} onChange={e=>{setBulkCat1(e.target.value);setBulkCat2("");}} style={{...inpS,width:"auto",minWidth:130,fontSize:12,padding:"7px 11px"}}>
                 <option value="">대분류 선택...</option>
                 {[...new Set(Object.values(data.categories).flatMap(g=>Object.keys(g)))].sort().map(x=><option key={x}>{x}</option>)}
               </select>
-              <button
-                onClick={bulkChangeCat1}
-                disabled={!bulkCat1}
-                style={{padding:"8px 14px",borderRadius:10,border:"1px solid var(--border2)",background:"var(--surface)",color:bulkCat1?"var(--text2)":"var(--text3)",fontSize:12,fontWeight:600,cursor:bulkCat1?"pointer":"not-allowed",fontFamily:"inherit",whiteSpace:"nowrap",opacity:bulkCat1?1:.5}}
-              >
+              <button onClick={bulkChangeCat1} disabled={!bulkCat1} style={{padding:"8px 14px",borderRadius:10,border:"1px solid var(--border2)",background:"var(--surface)",color:"var(--text2)",fontSize:12,fontWeight:600,cursor:bulkCat1?"pointer":"not-allowed",fontFamily:"inherit",whiteSpace:"nowrap",opacity:bulkCat1?1:.5}}>
                 대분류만 변경
               </button>
               {bulkCat1&&bulkCat2Opts.length>0&&(
                 <>
-                  <select
-                    value={bulkCat2}
-                    onChange={e=>setBulkCat2(e.target.value)}
-                    style={{...inpS,width:"auto",minWidth:130,fontSize:12,padding:"7px 11px"}}
-                  >
-                    <option value="">소분류 선택...</option>
-                    {bulkCat2Opts.map(x=><option key={x}>{x}</option>)}
+                  <select value={bulkCat2} onChange={e=>setBulkCat2(e.target.value)} style={{...inpS,width:"auto",minWidth:130,fontSize:12,padding:"7px 11px"}}>
+                    <option value="">소분류 선택...</option>{bulkCat2Opts.map(x=><option key={x}>{x}</option>)}
                   </select>
-                  <button
-                    onClick={bulkChangeCat2}
-                    disabled={!bulkCat2}
-                    style={{padding:"8px 14px",borderRadius:10,border:"1px solid var(--border2)",background:"var(--surface)",color:bulkCat2?"var(--text2)":"var(--text3)",fontSize:12,fontWeight:600,cursor:bulkCat2?"pointer":"not-allowed",fontFamily:"inherit",whiteSpace:"nowrap",opacity:bulkCat2?1:.5}}
-                  >
+                  <button onClick={bulkChangeCat2} disabled={!bulkCat2} style={{padding:"8px 14px",borderRadius:10,border:"1px solid var(--border2)",background:"var(--surface)",color:"var(--text2)",fontSize:12,fontWeight:600,cursor:bulkCat2?"pointer":"not-allowed",fontFamily:"inherit",whiteSpace:"nowrap",opacity:bulkCat2?1:.5}}>
                     대+소분류 변경
                   </button>
                 </>
               )}
             </div>
-
-            <div style={{fontSize:11,color:"rgba(108,125,255,.7)"}}>
-              💡 필터를 먼저 적용한 뒤 "전체 선택"으로 원하는 범위만 일괄 처리하세요.
-            </div>
+            <div style={{fontSize:11,color:"rgba(108,125,255,.7)"}}>💡 필터로 범위를 좁힌 뒤 헤더 체크박스로 전체 선택하면 빠르게 일괄 처리할 수 있습니다.</div>
           </div>
         )}
 
@@ -1926,14 +1900,8 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
             <thead>
               <tr>
                 <th style={{width:36,textAlign:"center",paddingLeft:10}}>
-                  <input
-                    type="checkbox"
-                    checked={allFilteredSelected}
-                    ref={el=>{if(el) el.indeterminate=someSelected&&!allFilteredSelected;}}
-                    onChange={toggleAll}
-                    style={{width:15,height:15,cursor:"pointer",accentColor:"var(--accent)"}}
-                    title={allFilteredSelected?"전체 해제":"전체 선택"}
-                  />
+                  <input type="checkbox" checked={allFilteredSelected} ref={el=>{if(el)el.indeterminate=someSelected&&!allFilteredSelected;}} onChange={toggleAll}
+                    style={{width:15,height:15,cursor:"pointer",accentColor:"var(--accent)"}} title={allFilteredSelected?"전체 해제":"전체 선택"}/>
                 </th>
                 <th>날짜</th><th>구분</th><th>대분류</th><th>소분류</th>
                 <th className="td-right">금액</th>
@@ -1942,16 +1910,11 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
             </thead>
             <tbody>
               {filtered.map(t=>{
-                const isSelected=selectedIds.has(t.id);
-                return (
-                  <tr key={t.id} style={{background:isSelected?"rgba(108,125,255,.07)":"",transition:"background .12s"}}>
+                const isSel=selectedIds.has(t.id);
+                return(
+                  <tr key={t.id} style={{background:isSel?"rgba(108,125,255,.07)":"",transition:"background .12s"}}>
                     <td style={{textAlign:"center",paddingLeft:10}}>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={()=>toggleSelect(t.id)}
-                        style={{width:15,height:15,cursor:"pointer",accentColor:"var(--accent)"}}
-                      />
+                      <input type="checkbox" checked={isSel} onChange={()=>toggleSelect(t.id)} style={{width:15,height:15,cursor:"pointer",accentColor:"var(--accent)"}}/>
                     </td>
                     <td>{t.date}</td>
                     <td><span className={`badge ${t.type==="수입"?"badge-green":t.type==="지출"?"badge-red":"badge-muted"}`}>{t.type}</span></td>
@@ -1982,9 +1945,12 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
 }
 
 // ─── Assets Tab ───────────────────────────────────────────────────────────────
-function AssetsTab({ data, update }) {
+function AssetsTab({ data, update, financialAnalysis }) {
   const empty={id:"",kind:"자산",category:"은행예금",name:"",current:"",previous:"",includeInEmergency:false,note:""};
   const [form,setForm]=useState(empty);
+  const [snapshotMemo,setSnapshotMemo]=useState("");
+  const [showSnapshotForm,setShowSnapshotForm]=useState(false);
+
   const save=()=>{
     if(!form.name) return alert("이름을 입력하세요.");
     update(d=>{
@@ -1994,9 +1960,176 @@ function AssetsTab({ data, update }) {
     });
     setForm(empty);
   };
-  const net=data.assets.filter(a=>a.kind==="자산").reduce((s,a)=>s+n(a.current),0)-data.assets.filter(a=>a.kind==="부채").reduce((s,a)=>s+n(a.current),0);
+
+  const totalAssets=data.assets.filter(a=>a.kind==="자산").reduce((s,a)=>s+n(a.current),0);
+  const totalLiabs=data.assets.filter(a=>a.kind==="부채").reduce((s,a)=>s+n(a.current),0);
+  const portValue=n(financialAnalysis?.total||0);
+  const net=totalAssets-totalLiabs+portValue;
+
+  const thisMonth=thisMonthISO();
+  const snapshots=data.assetSnapshots||[];
+  const thisMonthSnap=snapshots.find(s=>s.month===thisMonth);
+
+  const prevSnap=snapshots.length>=2?snapshots[snapshots.length-2]:null;
+  const latestSnap=snapshots.length>=1?snapshots[snapshots.length-1]:null;
+  const netWorthChange=prevSnap&&latestSnap?latestSnap.netWorth-prevSnap.netWorth:null;
+  const netWorthChangeRate=prevSnap&&latestSnap&&prevSnap.netWorth!==0?(latestSnap.netWorth-prevSnap.netWorth)/Math.abs(prevSnap.netWorth)*100:null;
+
+  const saveSnapshot=()=>{
+    const detail=data.assets.map(a=>({name:a.name,kind:a.kind,category:a.category||"",current:n(a.current)}));
+    const snap={id:uid(),month:thisMonth,savedAt:new Date().toISOString(),totalAssets,totalLiabs,portValue,netWorth:net,memo:snapshotMemo.trim(),detail};
+    update(d=>{
+      const prev=(d.assetSnapshots||[]).filter(s=>s.month!==thisMonth);
+      return {...d,assetSnapshots:[...prev,snap].sort((a,b)=>a.month.localeCompare(b.month))};
+    });
+    setSnapshotMemo(""); setShowSnapshotForm(false);
+  };
+  const deleteSnapshot=(id)=>{
+    if(!window.confirm("이 스냅샷을 삭제할까요?")) return;
+    update(d=>({...d,assetSnapshots:(d.assetSnapshots||[]).filter(s=>s.id!==id)}));
+  };
+
+  const chartData=snapshots.map(s=>({month:s.month.slice(5)+"월",순자산:s.netWorth,총자산:s.totalAssets+s.portValue,총부채:s.totalLiabs}));
+
   return (
     <div className="stack">
+      {/* 순자산 현황 + 스냅샷 저장 */}
+      <div className="card">
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:14}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>현재 순자산</div>
+            <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap"}}>
+              <span style={{fontSize:32,fontWeight:900,letterSpacing:"-.04em",color:"var(--accent)",fontVariantNumeric:"tabular-nums"}}>{fmt(net)}</span>
+              <span style={{fontSize:14,color:"var(--text3)"}}>원</span>
+              {netWorthChange!==null&&(
+                <span style={{fontSize:13,fontWeight:600,color:netWorthChange>=0?"var(--green)":"var(--red)",marginLeft:4}}>
+                  {netWorthChange>=0?"▲":"▼"} {fmt(Math.abs(netWorthChange))}원
+                  {netWorthChangeRate!==null&&` (${netWorthChangeRate>=0?"+":""}${netWorthChangeRate.toFixed(1)}%)`}
+                  <span style={{fontSize:11,fontWeight:400,color:"var(--text3)",marginLeft:4}}>전월 대비</span>
+                </span>
+              )}
+            </div>
+            <div style={{display:"flex",gap:20,marginTop:8,fontSize:12,color:"var(--text3)"}}>
+              <span>자산 <strong style={{color:"var(--text)",fontVariantNumeric:"tabular-nums"}}>{fmt(totalAssets)}원</strong></span>
+              <span>부채 <strong style={{color:"var(--red)",fontVariantNumeric:"tabular-nums"}}>{fmt(totalLiabs)}원</strong></span>
+              <span>포트폴리오 <strong style={{color:"var(--accent)",fontVariantNumeric:"tabular-nums"}}>{fmt(portValue)}원</strong></span>
+            </div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8,alignItems:"flex-end"}}>
+            {thisMonthSnap
+              ?<div style={{fontSize:12,color:"var(--green)",display:"flex",alignItems:"center",gap:8}}>
+                  <span>✅ {thisMonth} 저장됨</span>
+                  <button className="btn btn-sm btn-ghost" onClick={()=>setShowSnapshotForm(v=>!v)}>덮어쓰기</button>
+                </div>
+              :<button className="btn btn-primary" onClick={()=>setShowSnapshotForm(v=>!v)}>📸 이번 달 스냅샷 저장</button>
+            }
+            {showSnapshotForm&&(
+              <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                <input style={{padding:"8px 12px",border:"1px solid var(--border2)",borderRadius:10,background:"var(--surface2)",color:"var(--text)",fontSize:12,outline:"none",minWidth:180}} placeholder="메모 (선택)" value={snapshotMemo} onChange={e=>setSnapshotMemo(e.target.value)}/>
+                <button className="btn btn-primary btn-sm" onClick={saveSnapshot}>저장</button>
+                <button className="btn btn-ghost btn-sm" onClick={()=>{setShowSnapshotForm(false);setSnapshotMemo("");}}>취소</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 순자산 성장 차트 */}
+      {chartData.length>=2?(
+        <div className="card">
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+            <h3 style={{margin:0}}>📈 순자산 성장 추이</h3>
+            <span style={{fontSize:11,color:"var(--text3)"}}>{chartData.length}개월 기록</span>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={chartData} margin={{top:8,right:8,bottom:0,left:-12}}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)"/>
+              <XAxis dataKey="month" tick={{fontSize:11,fill:"#5a6278"}} axisLine={false} tickLine={false}/>
+              <YAxis tick={{fontSize:10,fill:"#5a6278"}} tickFormatter={v=>`${Math.round(v/100000000)}억`} axisLine={false} tickLine={false}/>
+              <Tooltip content={<ChartTooltip/>}/>
+              <Legend wrapperStyle={{fontSize:11,color:"#9ba3b5",paddingTop:8}}/>
+              <Area type="monotone" dataKey="총자산" fill="rgba(108,125,255,.10)" stroke="#6c7dff" strokeWidth={1.5} strokeDasharray="4 3" name="총자산" dot={false}/>
+              <Area type="monotone" dataKey="순자산" fill="rgba(52,213,138,.14)" stroke="#34d58a" strokeWidth={2.5} name="순자산" dot={{r:4,fill:"#34d58a",strokeWidth:0}} activeDot={{r:6}}/>
+            </ComposedChart>
+          </ResponsiveContainer>
+          {/* 통계 카드 */}
+          {(()=>{
+            const first=snapshots[0],last=snapshots[snapshots.length-1];
+            const totalChange=last.netWorth-first.netWorth;
+            const totalMonths=snapshots.length-1;
+            const avgMonthly=totalMonths>0?totalChange/totalMonths:0;
+            return(
+              <div style={{marginTop:12,display:"flex",gap:10,flexWrap:"wrap"}}>
+                {[
+                  ["전체 기간 변화",`${first.month} → ${last.month}`,totalChange,`${totalMonths}개월`],
+                  ["월평균 증가","연환산 "+fmt(avgMonthly*12)+"원",avgMonthly,"/월"],
+                  ["누적 증가율",first.netWorth!==0?`최고 ${fmt(Math.max(...snapshots.map(s=>s.netWorth)))}원`:"",first.netWorth!==0?totalChange/Math.abs(first.netWorth)*100:null,"%"],
+                ].map(([title,sub,val,unit])=>(
+                  <div key={title} style={{flex:1,minWidth:140,padding:"10px 14px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
+                    <div style={{fontSize:10,color:"var(--text3)",marginBottom:4,textTransform:"uppercase",letterSpacing:".05em"}}>{title}</div>
+                    <div style={{fontSize:15,fontWeight:700,color:val===null?"var(--text3)":val>=0?"var(--green)":"var(--red)",fontVariantNumeric:"tabular-nums"}}>
+                      {val===null?"—":unit==="%"?`${val>=0?"+":""}${val.toFixed(1)}${unit}`:`${val>=0?"+":""}${fmt(val)}원${unit}`}
+                    </div>
+                    {sub&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>{sub}</div>}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      ):chartData.length===1?(
+        <div className="card" style={{textAlign:"center",padding:"24px"}}>
+          <div style={{fontSize:32,marginBottom:8}}>📸</div>
+          <div style={{fontSize:14,fontWeight:600,color:"var(--text)",marginBottom:6}}>스냅샷 1개 저장됨</div>
+          <div style={{fontSize:13,color:"var(--text3)"}}>다음 달에도 저장하면 순자산 성장 차트가 나타납니다.</div>
+        </div>
+      ):(
+        <div className="card" style={{textAlign:"center",padding:"32px"}}>
+          <div style={{fontSize:40,marginBottom:10}}>📊</div>
+          <div style={{fontSize:14,fontWeight:600,color:"var(--text)",marginBottom:8}}>순자산 성장 차트</div>
+          <div style={{fontSize:13,color:"var(--text3)",lineHeight:1.6}}>
+            위의 <strong style={{color:"var(--accent)"}}>📸 이번 달 스냅샷 저장</strong> 버튼을 누르면<br/>매월 순자산 변화를 시각화할 수 있습니다.
+          </div>
+        </div>
+      )}
+
+      {/* 스냅샷 내역 표 */}
+      {snapshots.length>0&&(
+        <div className="card">
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+            <h3 style={{margin:0}}>스냅샷 내역 ({snapshots.length}개월)</h3>
+            <span style={{fontSize:11,color:"var(--text3)"}}>매월 1회 저장 권장</span>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>월</th><th className="td-right">총자산</th><th className="td-right">총부채</th><th className="td-right">포트폴리오</th><th className="td-right">순자산</th><th className="td-right">전월 대비</th><th>메모</th><th>저장일</th><th>작업</th></tr></thead>
+              <tbody>
+                {[...snapshots].reverse().map((s,ri)=>{
+                  const prev=snapshots[snapshots.length-1-ri-1];
+                  const diff=prev?s.netWorth-prev.netWorth:null;
+                  return(
+                    <tr key={s.id}>
+                      <td style={{fontWeight:600,color:"var(--text)"}}>{s.month}</td>
+                      <td className="td-right td-mono">{fmt(s.totalAssets)}</td>
+                      <td className="td-right td-mono" style={{color:"var(--red)"}}>{fmt(s.totalLiabs)}</td>
+                      <td className="td-right td-mono" style={{color:"var(--accent)"}}>{fmt(s.portValue)}</td>
+                      <td className="td-right td-mono" style={{fontWeight:700,color:"var(--text)"}}>{fmt(s.netWorth)}</td>
+                      <td className="td-right td-mono">
+                        {diff!==null?<span style={{color:diff>=0?"var(--green)":"var(--red)",fontWeight:600}}>{diff>=0?"+":""}{fmt(diff)}</span>:<span style={{color:"var(--text3)"}}>—</span>}
+                      </td>
+                      <td style={{color:"var(--text3)",fontSize:12}}>{s.memo||"—"}</td>
+                      <td style={{color:"var(--text3)",fontSize:11}}>{s.savedAt?new Date(s.savedAt).toLocaleDateString("ko-KR"):"—"}</td>
+                      <td><button className="btn btn-sm btn-danger" onClick={()=>deleteSnapshot(s.id)}>삭제</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 자산·부채 입력 폼 */}
       <div className="card">
         <h3>자산·부채 입력</h3>
         <div className="form-grid">
@@ -2018,6 +2151,8 @@ function AssetsTab({ data, update }) {
           <span style={{fontSize:13,color:"var(--text3)"}}>순자산: <strong style={{color:"var(--text)"}}>{fmt(net)}원</strong></span>
         </div>
       </div>
+
+      {/* 자산·부채 목록 */}
       <div className="card">
         <h3>자산·부채 목록</h3>
         <div className="table-wrap">
@@ -5045,12 +5180,20 @@ export default function App() {
   const [data,setData]=useState(loadData);
   const [tab,setTab]=useState("dashboard");
   const [sidebarOpen,setSidebarOpen]=useState(true);
+  const [theme,setTheme]=useState(()=>localStorage.getItem("season-theme")||"dark");
   const [session,setSession]=useState(null);
   const [authLoading,setAuthLoading]=useState(true);
   const [syncState,setSyncState]=useState("");
   const [cloudReady,setCloudReady]=useState(false);
   const [showFab,setShowFab]=useState(false);
   const skipCloudSaveRef=useRef(false);
+
+  // 테마를 html[data-theme]에 적용 + localStorage 저장
+  useEffect(()=>{
+    document.documentElement.setAttribute("data-theme",theme);
+    localStorage.setItem("season-theme",theme);
+  },[theme]);
+  const toggleTheme=()=>setTheme(t=>t==="dark"?"light":"dark");
 
   useEffect(()=>{ saveData(data); },[data]);
 
@@ -5239,6 +5382,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <script dangerouslySetInnerHTML={{__html:`(function(){try{var t=localStorage.getItem('season-theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})()`}}/>
       <style>{STYLES}</style>
       <div className="shell">
         {/* Sidebar */}
@@ -5277,6 +5421,9 @@ export default function App() {
                   이번달 {dashboard.net>=0?"흑자":"적자"} {fmt(Math.abs(dashboard.net))}원
                 </span>
               )}
+              <button className="theme-toggle" onClick={toggleTheme} title={theme==="dark"?"라이트 모드로 전환":"다크 모드로 전환"} aria-label={theme==="dark"?"라이트 모드로 전환":"다크 모드로 전환"}>
+                {theme==="dark"?"☀️":"🌙"}
+              </button>
             </div>
           </div>
 
@@ -5286,7 +5433,7 @@ export default function App() {
             {tab==="cfo"&&<CFOCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="automation"&&<AutomationSystemTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="transactions"&&<TransactionsTab data={data} update={update} accountNamesIn={accountNamesIn} accountNamesOut={accountNamesOut}/>}
-            {tab==="assets"&&<AssetsTab data={data} update={update}/>}
+            {tab==="assets"&&<AssetsTab data={data} update={update} financialAnalysis={financialAnalysis}/>}
             {tab==="portfolio"&&<PortfolioTab data={data} update={update} accountOptions={accountOptions} financialAnalysis={financialAnalysis}/>}
             {tab==="budget"&&<BudgetTab data={data} update={update} budgetAnalysis={budgetAnalysis}/>}
             {tab==="planning"&&<PlanningTab data={data} update={update} eventAnalysis={eventAnalysis}/>}
