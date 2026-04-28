@@ -743,6 +743,29 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 
 
 
+
+/* Decision Center */
+.decision-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(135deg,var(--surface),rgba(240,180,41,.08));border-color:rgba(240,180,41,.20)}
+.decision-hero h2{font-size:24px;font-weight:900;letter-spacing:-.04em;margin:4px 0}
+.decision-hero p{font-size:13px;color:var(--text3);line-height:1.5}
+.decision-score{font-size:48px;font-weight:900;letter-spacing:-.06em;line-height:1}
+.decision-score span{font-size:17px;color:var(--text3);margin-left:3px}
+.decision-card{border:1px solid var(--border);background:var(--surface2);border-radius:14px;padding:14px}
+.decision-card.danger{background:var(--red-bg);border-color:rgba(255,92,114,.25)}
+.decision-card.warn{background:var(--amber-bg);border-color:rgba(240,180,41,.25)}
+.decision-card.info{background:var(--accent-bg);border-color:rgba(108,125,255,.25)}
+.decision-card.green{background:var(--green-bg);border-color:rgba(52,213,138,.25)}
+.decision-card-head{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.decision-card-head strong{font-size:13px;color:var(--text)}
+.decision-card p{font-size:12px;color:var(--text2);line-height:1.5}
+.decision-action{margin-top:9px;font-size:12px;font-weight:800;color:var(--text)}
+.allocation-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.allocation-row:last-child{border-bottom:none}
+.allocation-row strong{font-size:13px;color:var(--text)}
+.allocation-row p{font-size:11.5px;color:var(--text3);margin-top:3px}
+.allocation-row span{font-size:13px;font-weight:900;color:var(--accent);font-variant-numeric:tabular-nums;white-space:nowrap}
+@media(max-width:900px){.decision-hero{flex-direction:column;align-items:flex-start}.decision-score{font-size:40px}}
+
 /* Monthly Report */
 .report-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.08));border-color:rgba(108,125,255,.20)}
 .report-hero h2{font-size:24px;font-weight:900;letter-spacing:-.04em;margin:4px 0}
@@ -2825,6 +2848,222 @@ function PlanningTab({ data, update, eventAnalysis }) {
 }
 
 
+
+// ─── Decision Center Tab ──────────────────────────────────────────────────────
+function DecisionCenterTab({ data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim }) {
+  const decisions=useMemo(()=>{
+    const s=data.settings||{};
+    const income=n(dashboard.income);
+    const expense=n(dashboard.expense);
+    const net=n(dashboard.net);
+    const monthlyInvest=n(s.triggerMonthlyInvestAmount||s.monthlyInvestDefault||s.monthlyInvestStage1||0);
+    const emergencyFund=n(dashboardDetail.emergencyFund);
+    const emergencyMonths=expense>0?emergencyFund/expense:0;
+    const targetEmergency=expense*6;
+    const emergencyGap=Math.max(targetEmergency-emergencyFund,0);
+    const investableCash=Math.max(net,0);
+    const budgetOver=(budgetAnalysis||[]).filter(b=>b.status==="초과");
+    const budgetWarn=(budgetAnalysis||[]).filter(b=>b.status==="주의");
+
+    const portfolioTotal=n(financialAnalysis.total);
+    const rows=financialAnalysis.rows||[];
+    const targets=getInvestmentTargets(s).filter(t=>n(t.targetWeight)>0);
+    const totalTargetWeight=targets.reduce((sum,t)=>sum+n(t.targetWeight),0)||1;
+    const byClass={};
+    rows.forEach(r=>{
+      const key=r.assetClass||"기타";
+      byClass[key]=(byClass[key]||0)+n(r.value);
+    });
+
+    const rebalance=[];
+    targets.forEach(t=>{
+      const targetWeight=n(t.targetWeight)/totalTargetWeight;
+      const currentValue=n(byClass[t.name]);
+      const currentWeight=portfolioTotal>0?currentValue/portfolioTotal:0;
+      const gapWeight=targetWeight-currentWeight;
+      const gapAmount=gapWeight*Math.max(portfolioTotal+monthlyInvest,1);
+      const band=n(s.rebalanceBandPct||5)/100;
+      if(Math.abs(gapWeight)>=band || Math.abs(gapAmount)>=100000){
+        rebalance.push({
+          name:t.name,
+          targetWeight,
+          currentWeight,
+          gapWeight,
+          gapAmount,
+          action:gapAmount>0?"매수 우선":"비중 축소",
+          priority:Math.abs(gapWeight)>=band*2?"높음":"중간"
+        });
+      }
+    });
+    rebalance.sort((a,b)=>Math.abs(b.gapAmount)-Math.abs(a.gapAmount));
+
+    const taxActions=[];
+    const pensionRemain=n(taxAnalysis?.pensionRemaining);
+    const isaRemain=n(taxAnalysis?.isaRemaining);
+    if(pensionRemain>0) taxActions.push({title:"연금/IRP 세액공제 여력",amount:pensionRemain,text:`세액공제 한도 잔여 ${fmt(pensionRemain)}원을 확인하세요.`});
+    if(isaRemain>0) taxActions.push({title:"ISA 납입 여력",amount:isaRemain,text:`ISA 잔여 납입 가능액 ${fmt(isaRemain)}원을 활용할 수 있습니다.`});
+
+    const lifeConflicts=(data.events||[]).map(e=>{
+      const shortage=Math.max(n(e.amountNeeded)-n(e.currentPrepared),0);
+      const months=Math.max(n(e.yearsFromNow)*12,1);
+      const monthlyNeed=shortage/months;
+      const conflict=monthlyNeed>0 && monthlyNeed+monthlyInvest>Math.max(income-expense+monthlyInvest,0);
+      return {...e,shortage,monthlyNeed,conflict};
+    }).filter(e=>e.shortage>0).sort((a,b)=>n(b.priority==="높음")-n(a.priority==="높음") || b.monthlyNeed-a.monthlyNeed);
+
+    const cards=[];
+    if(net<0){
+      cards.push({rank:1,tone:"danger",tag:"현금흐름",title:"이번 달 투자보다 지출 점검 우선",text:`현재 ${fmt(Math.abs(net))}원 적자입니다. 자동투자 또는 추가매수 전 지출을 먼저 확인하세요.`,action:"지출 조정"});
+    } else if(emergencyMonths<3){
+      cards.push({rank:1,tone:"danger",tag:"안전",title:"비상금 우선 보강",text:`비상금이 약 ${emergencyMonths.toFixed(1)}개월치입니다. 최소 3개월까지는 투자보다 비상금 보강이 우선입니다.`,action:`비상금 ${fmt(Math.min(investableCash, emergencyGap))}원 배정`});
+    } else if(emergencyMonths<6){
+      cards.push({rank:1,tone:"warn",tag:"안전",title:"비상금 6개월치까지 보강",text:`현재 ${emergencyMonths.toFixed(1)}개월치입니다. 6개월치 목표까지 ${fmt(emergencyGap)}원이 부족합니다.`,action:"투자금 일부를 비상금으로 분배"});
+    } else {
+      cards.push({rank:1,tone:"green",tag:"투자",title:"투자 진행 가능",text:`비상금 기준이 양호합니다. 이번 달 투자 가능 현금은 약 ${fmt(investableCash)}원입니다.`,action:"목표비중 기준 매수"});
+    }
+
+    if(rebalance.length>0){
+      const top=rebalance[0];
+      cards.push({rank:2,tone:top.gapAmount>0?"info":"warn",tag:"리밸런싱",title:`${top.name} ${top.action}`,text:`현재 ${fmtPct(top.currentWeight*100)} / 목표 ${fmtPct(top.targetWeight*100)}입니다.`,action:`${top.name} ${top.gapAmount>0?fmt(Math.abs(top.gapAmount))+"원 매수 검토":"비중 축소 검토"}`});
+    } else {
+      cards.push({rank:2,tone:"green",tag:"리밸런싱",title:"목표비중 이탈 크지 않음",text:"현재 포트폴리오가 설정한 목표비중에서 크게 벗어나지 않았습니다.",action:"기존 매수 유지"});
+    }
+
+    if(budgetOver.length>0){
+      cards.push({rank:3,tone:"warn",tag:"소비",title:"예산 초과 항목 조정",text:`${budgetOver.map(b=>b.cat1).slice(0,3).join(" · ")} 항목이 예산을 초과했습니다.`,action:"다음 달 예산 재배분"});
+    }
+
+    if(taxActions.length>0){
+      cards.push({rank:4,tone:"info",tag:"절세",title:taxActions[0].title,text:taxActions[0].text,action:"절세 납입 검토"});
+    }
+
+    if(lifeConflicts.some(e=>e.conflict)){
+      const e=lifeConflicts.find(e=>e.conflict);
+      cards.push({rank:5,tone:"danger",tag:"목표",title:`${e.name} 준비금 충돌`,text:`목표 준비에 월 ${fmt(e.monthlyNeed)}원이 필요해 현재 투자계획과 충돌 가능성이 있습니다.`,action:"목표 금액/기간 조정"});
+    } else if(lifeConflicts.length>0){
+      const e=lifeConflicts[0];
+      cards.push({rank:5,tone:"info",tag:"목표",title:`${e.name} 준비`,text:`부족액 ${fmt(e.shortage)}원, 월 필요액 ${fmt(e.monthlyNeed)}원입니다.`,action:"목표별 적립 설정"});
+    }
+
+    const allocation=[];
+    let remaining=investableCash;
+    if(net>0){
+      if(emergencyMonths<6){
+        const toEmergency=Math.min(remaining, emergencyGap, Math.max(remaining*0.6,0));
+        if(toEmergency>0){allocation.push({name:"비상금",amount:toEmergency,reason:"6개월치 안전자금 확보"});remaining-=toEmergency;}
+      }
+      if(taxActions.length>0 && remaining>0){
+        const toTax=Math.min(remaining, taxActions[0].amount, Math.max(remaining*0.4,0));
+        if(toTax>0){allocation.push({name:"절세계좌",amount:toTax,reason:taxActions[0].title});remaining-=toTax;}
+      }
+      if(remaining>0 && rebalance.length>0){
+        const positive=rebalance.filter(r=>r.gapAmount>0);
+        const totalGap=positive.reduce((sum,r)=>sum+Math.max(r.gapAmount,0),0)||1;
+        positive.slice(0,3).forEach(r=>{
+          const amt=Math.min(remaining, remaining*(r.gapAmount/totalGap));
+          if(amt>0) allocation.push({name:r.name,amount:amt,reason:"목표비중 부족분 보완"});
+        });
+      } else if(remaining>0) {
+        allocation.push({name:"기본 투자",amount:remaining,reason:"목표비중 이탈 없음"});
+      }
+    }
+
+    const score=cards.reduce((acc,c)=>acc+(c.tone==="danger"?-20:c.tone==="warn"?-8:c.tone==="info"?2:6),70);
+    const decisionScore=clamp(Math.round(score),0,100);
+
+    return {cards:cards.sort((a,b)=>a.rank-b.rank),rebalance,taxActions,lifeConflicts,allocation,decisionScore,emergencyMonths,investableCash,budgetOver,budgetWarn};
+  },[data,dashboard,dashboardDetail,financialAnalysis,budgetAnalysis,taxAnalysis]);
+
+  const scoreTone=decisions.decisionScore>=80?"green":decisions.decisionScore>=60?"accent":decisions.decisionScore>=45?"amber":"red";
+  const scoreColor=scoreTone==="green"?"var(--green)":scoreTone==="accent"?"var(--accent)":scoreTone==="amber"?"var(--amber)":"var(--red)";
+
+  return (
+    <div className="stack decision-center">
+      <div className="card decision-hero">
+        <div>
+          <div className="kpi-label">DECISION CENTER</div>
+          <h2>의사결정 센터</h2>
+          <p>현금흐름, 비상금, 리밸런싱, 절세, 목표 준비금을 한 화면에서 판단합니다.</p>
+        </div>
+        <div className="decision-score" style={{color:scoreColor}}>
+          {decisions.decisionScore}<span>/100</span>
+        </div>
+      </div>
+
+      <div className="kpi-grid">
+        <KpiCard label="이번 달 투자 가능 현금" value={decisions.investableCash} unit="원" tone={decisions.investableCash>=0?"green":"red"}/>
+        <KpiCard label="비상금 커버" value={decisions.emergencyMonths} unit="개월" accent/>
+        <KpiCard label="리밸런싱 후보" value={decisions.rebalance.length} unit="건"/>
+        <KpiCard label="예산 초과" value={decisions.budgetOver.length} unit="건" tone={decisions.budgetOver.length?"red":"green"}/>
+      </div>
+
+      <div className="g2">
+        <div className="card">
+          <div className="card-title"><h3>우선순위 결정 카드</h3></div>
+          <div className="stack" style={{gap:10}}>
+            {decisions.cards.map((c,i)=>(
+              <div key={i} className={`decision-card ${c.tone}`}>
+                <div className="decision-card-head">
+                  <span className="badge badge-accent">{c.tag}</span>
+                  <strong>{c.title}</strong>
+                </div>
+                <p>{c.text}</p>
+                <div className="decision-action">👉 {c.action}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-title"><h3>이번 달 자금 배분안</h3></div>
+          {decisions.allocation.length?decisions.allocation.map((a,i)=>(
+            <div key={i} className="allocation-row">
+              <div>
+                <strong>{a.name}</strong>
+                <p>{a.reason}</p>
+              </div>
+              <span>{fmt(a.amount)}원</span>
+            </div>
+          )):<div className="empty">배분 가능한 잉여 현금이 없거나 지출 점검이 우선입니다.</div>}
+        </div>
+      </div>
+
+      <div className="g3">
+        <div className="card">
+          <h3>리밸런싱 판단</h3>
+          {decisions.rebalance.length?decisions.rebalance.slice(0,6).map(r=>(
+            <div key={r.name} className="stat-row">
+              <span className="stat-label">{r.name} · {r.action}</span>
+              <span className={`stat-value ${r.gapAmount>0?"text-green":"text-red"}`}>{fmt(Math.abs(r.gapAmount))}원</span>
+            </div>
+          )):<div className="empty">목표비중 이탈이 크지 않습니다.</div>}
+        </div>
+
+        <div className="card">
+          <h3>절세 판단</h3>
+          {decisions.taxActions.length?decisions.taxActions.map((t,i)=>(
+            <div key={i} className="stat-row">
+              <span className="stat-label">{t.title}</span>
+              <span className="stat-value text-green">{fmt(t.amount)}원</span>
+            </div>
+          )):<div className="empty">현재 확인된 절세 행동 후보가 없습니다.</div>}
+        </div>
+
+        <div className="card">
+          <h3>목표 충돌 점검</h3>
+          {decisions.lifeConflicts.length?decisions.lifeConflicts.slice(0,5).map(e=>(
+            <div key={e.id} className="stat-row">
+              <span className="stat-label">{e.name} {e.conflict?"⚠️":""}</span>
+              <span className="stat-value">{fmt(e.monthlyNeed)}원/월</span>
+            </div>
+          )):<div className="empty">등록된 목표 준비 부족액이 없습니다.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ─── Monthly Report Tab ───────────────────────────────────────────────────────
 function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalysis, dashboard, dashboardDetail, taxAnalysis }) {
   const months=useMemo(()=>[...new Set((data.transactions||[]).map(t=>monthOf(t.date)).filter(Boolean))].sort().reverse(),[data.transactions]);
@@ -4161,13 +4400,14 @@ const NAV = [
   { id:"tax", icon:"💸", label:"세금·절세" },
   { id:"simulation", icon:"🔮", label:"미래시뮬레이션" },
   { id:"monthlyReport", icon:"🧾", label:"월간 리포트" },
+  { id:"decision", icon:"🧭", label:"의사결정 센터" },
   { section: "관리" },
   { id:"settings", icon:"⚙", label:"설정" },
   { id:"accounts", icon:"🏧", label:"계좌관리" },
   { id:"data", icon:"💾", label:"데이터·백업" },
 ];
 
-const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", risk:"리스크 분석", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", monthlyReport:"월간 리포트", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
+const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", risk:"리스크 분석", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", monthlyReport:"월간 리포트", decision:"의사결정 센터", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -4420,7 +4660,7 @@ export default function App() {
             {tab==="risk"&&<Step2MddRiskPanel data={data} financialAnalysis={financialAnalysis}/>}
             {tab==="analysis"&&<AnalysisTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboardDetail={dashboardDetail}/>}
             {tab==="tax"&&<TaxTab data={data} update={update} taxAnalysis={taxAnalysis}/>}
-            {tab==="simulation"&&<SimulationTab data={data} futureSim={futureSim}/>}\n            {tab==="monthlyReport"&&<MonthlyReportTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboard={dashboard} dashboardDetail={dashboardDetail} taxAnalysis={taxAnalysis}/>}
+            {tab==="simulation"&&<SimulationTab data={data} futureSim={futureSim}/>}\n            {tab==="monthlyReport"&&<MonthlyReportTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboard={dashboard} dashboardDetail={dashboardDetail} taxAnalysis={taxAnalysis}/>}\n            {tab==="decision"&&<DecisionCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="settings"&&<SettingsTab data={data} update={update}/>}
             {tab==="accounts"&&<AccountsTab data={data} update={update}/>}
             {tab==="data"&&<DataTab data={data} update={update} validations={validations}/>}
