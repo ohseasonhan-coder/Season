@@ -47,6 +47,15 @@ const DEFAULT_SETTINGS = {
   includeEmergencyFundInNetWorth:true, spouseEnabled:true, childrenCount:0, dependentsCount:0,
   rebalanceBandPct:5, takeProfitPct:20, dipBuy3PctAmount:1000000, dipBuy5PctAmount:1000000, dipBuy10PctAmount:1000000,
   retirementTargetAmount:2000000000,
+  retirementMonthlyExpense:5000000,
+  retirementTravelBucket:500000000,
+  retirementTravelYears:5,
+  additionalPensionEnabled:false,
+  additionalPensionName:"추가 연금",
+  additionalPensionMonthly:0,
+  additionalPensionAnnualIncrease:0,
+  postRetirementReturn:0.07,
+  compareRetireAge:60,
   fxUsdKrw:0,
   fxAsOf:"",
   marketDataLastUpdated:"",
@@ -718,6 +727,14 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .tab-chip.active{background:var(--accent-bg);color:var(--accent)}
 .tab-chip:hover:not(.active){background:var(--surface3);color:var(--text)}
 
+
+
+/* Retirement Pro */
+.retirement-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(135deg,var(--surface),rgba(52,213,138,.07));border-color:rgba(52,213,138,.20)}
+.retirement-hero h2{font-size:24px;font-weight:900;letter-spacing:-.04em;margin:4px 0}
+.retirement-hero p{font-size:13px;color:var(--text3);line-height:1.5}
+.retirement-pro .compact-insight{min-height:76px}
+@media(max-width:900px){.retirement-hero{flex-direction:column;align-items:flex-start}}
 
 /* Dashboard Pro */
 .dashboard-hero{display:grid;grid-template-columns:1.1fr 1.4fr;gap:14px}
@@ -2781,22 +2798,198 @@ function PlanningTab({ data, update, eventAnalysis }) {
 
 // ─── Simulation Tab ───────────────────────────────────────────────────────────
 function SimulationTab({ data, futureSim }) {
-  const last=futureSim[futureSim.length-1];
+  const [scenario,setScenario]=useState("base");
+  const s=data.settings;
+  const baseLast=futureSim[futureSim.length-1];
+
+  const advanced=useMemo(()=>{
+    const currentAge=n(s.currentAge), retireAge=n(s.retireAge), compareAge=n(s.compareRetireAge||60), lifeAge=n(s.lifeExpectancy||100);
+    const inflation=n(s.annualInflation||0.025);
+    const postReturn=n(s.postRetirementReturn||0.07);
+    const monthlyExpense0=n(s.retirementMonthlyExpense||5000000);
+    const additionalPensionEnabled=!!s.additionalPensionEnabled;
+    const pension0=additionalPensionEnabled?n(s.additionalPensionMonthly||0):0;
+    const pensionAnnualInc=additionalPensionEnabled?n(s.additionalPensionAnnualIncrease||0):0;
+    const additionalPensionName=s.additionalPensionName||"추가 연금";
+    const travelBucket=n(s.retirementTravelBucket||0);
+    const travelYears=Math.max(n(s.retirementTravelYears||5),1);
+    const target=n(s.retirementTargetAmount||0);
+
+    const buildAccumulation=(targetRetireAge)=>{
+      const years=Math.max(targetRetireAge-currentAge,0);
+      let nasdaq=0,dividend=0,isaBalance=0,isaPrincipalInCycle=0,realizedIsaTaxSavedAcc=0,pensionCreditAcc=0,total=0;
+      const wN=n(s.targetNasdaqWeight)+n(s.targetNasdaqHWeight),wD=n(s.targetDividendWeight);
+      const weightedReturn=(n(s.annualReturnNasdaq)*(wN||0))+(n(s.annualReturnDividend)*(wD||0));
+      const isaAnnualLimit=Math.max(n(s.isaAnnualLimit),0),isaCycleYears=Math.max(n(s.isaCycleYears),1);
+      const isaTaxFreeLimit=Math.max(n(s.isaTaxFreeLimit),0),isaTaxRate=Math.max(n(s.isaTaxRate),0);
+      const normalTaxRate=Math.max(n(s.taxableDividendTaxRate),0);
+      const pensionTaxCreditRate=Math.max(n(s.pensionTaxCreditRate),0);
+      const annualPensionContribution=Math.max(n(s.annualPensionContribution),0);
+      const pensionAnnualTaxCreditLimit=Math.max(n(s.pensionAnnualTaxCreditLimit),0);
+      const rows=[];
+      for(let year=1;year<=years;year++){
+        let monthlyInvest=n(s.monthlyInvestStage3);
+        if(year<=n(s.stage1Years))monthlyInvest=n(s.monthlyInvestStage1);
+        else if(year<=n(s.stage2Years))monthlyInvest=n(s.monthlyInvestStage2);
+        const annualInvest=monthlyInvest*12;
+        nasdaq=(nasdaq+annualInvest*wN)*(1+n(s.annualReturnNasdaq));
+        dividend=(dividend+annualInvest*wD)*(1+n(s.annualReturnDividend));
+        total=nasdaq+dividend;
+        const annualIsaContribution=Math.min(annualInvest,isaAnnualLimit);
+        const yearInCycle=((year-1)%isaCycleYears)+1;
+        if(yearInCycle===1){isaBalance=0;isaPrincipalInCycle=0;}
+        isaPrincipalInCycle+=annualIsaContribution;
+        isaBalance=(isaBalance+annualIsaContribution)*(1+weightedReturn);
+        const isaProfitInCycle=Math.max(isaBalance-isaPrincipalInCycle,0);
+        const normalTaxIfTaxable=isaProfitInCycle*normalTaxRate;
+        const isaTax=isaProfitInCycle<=isaTaxFreeLimit?0:(isaProfitInCycle-isaTaxFreeLimit)*isaTaxRate;
+        const currentCycleTaxSaved=Math.max(normalTaxIfTaxable-isaTax,0);
+        if(yearInCycle===isaCycleYears) realizedIsaTaxSavedAcc+=currentCycleTaxSaved;
+        pensionCreditAcc+=Math.min(annualPensionContribution,pensionAnnualTaxCreditLimit)*pensionTaxCreditRate;
+        rows.push({year,age:currentAge+year,monthlyInvest,total,nasdaq,dividend,isaTaxSaved:realizedIsaTaxSavedAcc+(yearInCycle===isaCycleYears?0:currentCycleTaxSaved),pensionCreditAcc});
+      }
+      return {rows,last:rows[rows.length-1]||{age:targetRetireAge,total:0,nasdaq:0,dividend:0,isaTaxSaved:0,pensionCreditAcc:0}};
+    };
+
+    const buildWithdrawal=(retireAge, startAsset)=>{
+      const rows=[];
+      let asset=Math.max(n(startAsset)-travelBucket,0);
+      let travelSpentAcc=travelBucket;
+      for(let age=retireAge; age<=lifeAge; age++){
+        const y=age-retireAge;
+        const annualExpense=monthlyExpense0*12*Math.pow(1+inflation,y);
+        const annualPension=(pension0+(pensionAnnualInc*y))*12;
+        const travelExtra=y<travelYears ? travelBucket/travelYears : 0;
+        const needWithdraw=Math.max(annualExpense+travelExtra-annualPension,0);
+        const beginAsset=asset;
+        asset=Math.max((asset-needWithdraw)*(1+postReturn),0);
+        rows.push({age,year:y+1,beginAsset,annualExpense,annualPension,travelExtra,needWithdraw,endAsset:asset,shortfall:beginAsset<needWithdraw});
+      }
+      const firstZero=rows.find(r=>r.endAsset<=0);
+      return {rows,success:!firstZero,firstZeroAge:firstZero?.age||null,last:rows[rows.length-1]};
+    };
+
+    const baseAcc=buildAccumulation(retireAge);
+    const compareAcc=buildAccumulation(compareAge);
+    const baseWithdraw=buildWithdrawal(retireAge,baseAcc.last.total);
+    const compareWithdraw=buildWithdrawal(compareAge,compareAcc.last.total);
+
+    const scenarioReturnAdjust=scenario==="stress"?-0.03:scenario==="optimistic"?0.02:0;
+    const scenarioExpenseMultiplier=scenario==="stress"?1.15:scenario==="optimistic"?0.95:1;
+    const scenarioLabel=scenario==="stress"?"보수":scenario==="optimistic"?"낙관":"기본";
+
+    return {currentAge,retireAge,compareAge,lifeAge,target,baseAcc,compareAcc,baseWithdraw,compareWithdraw,scenarioReturnAdjust,scenarioExpenseMultiplier,scenarioLabel};
+  },[s,scenario]);
+
+  const base=advanced.baseAcc.last;
+  const w=advanced.baseWithdraw;
+  const compare=advanced.compareAcc.last;
+  const cw=advanced.compareWithdraw;
+  const survivalAge=w.success?advanced.lifeAge:w.firstZeroAge;
+  const targetRate=advanced.target>0?n(base.total)/advanced.target*100:0;
+
   return (
-    <div className="stack">
-      {last&&(
-        <div className="kpi-grid">
-          <KpiCard label={`은퇴(${data.settings.retireAge}세) 예상 총자산`} value={last.total} unit="원" accent/>
-          <KpiCard label="나스닥 버킷" value={last.nasdaq} unit="원"/>
-          <KpiCard label="배당ETF 버킷" value={last.dividend} unit="원"/>
-          <KpiCard label="ISA 절세 누적" value={last.isaTaxSaved} unit="원" tone="green"/>
+    <div className="stack retirement-pro">
+      <div className="card retirement-hero">
+        <div>
+          <div className="kpi-label">ADVANCED RETIREMENT SIMULATION</div>
+          <h2>은퇴 시뮬레이션 완전 고도화</h2>
+          <p>은퇴 전 적립, 은퇴 후 인출, 추가 연금, 물가상승률, 여행비 지출까지 통합 계산합니다.</p>
         </div>
-      )}
+        <div className="tab-row" style={{marginBottom:0}}>
+          <button className={`tab-chip ${scenario==="base"?"active":""}`} onClick={()=>setScenario("base")}>기본</button>
+          <button className={`tab-chip ${scenario==="stress"?"active":""}`} onClick={()=>setScenario("stress")}>보수</button>
+          <button className={`tab-chip ${scenario==="optimistic"?"active":""}`} onClick={()=>setScenario("optimistic")}>낙관</button>
+        </div>
+      </div>
+
+      <div className="kpi-grid">
+        <KpiCard label={`${advanced.retireAge}세 예상자산`} value={base.total} unit="원" accent/>
+        <KpiCard label="목표 달성률" value={targetRate} unit="%" tone={targetRate>=100?"green":"red"}/>
+        <KpiCard label="은퇴 후 생존 가능 나이" value={survivalAge||0} unit="세" tone={w.success?"green":"red"}/>
+        <KpiCard label={`${advanced.compareAge}세 은퇴 예상자산`} value={compare.total} unit="원"/>
+      </div>
+
+      <div className="g3">
+        <div className="card">
+          <h3>은퇴 후 인출 핵심</h3>
+          <div className="stat-row"><span className="stat-label">은퇴 후 월 생활비</span><span className="stat-value">{fmt(s.retirementMonthlyExpense)}원</span></div>
+          <div className="stat-row"><span className="stat-label">{s.additionalPensionEnabled?(s.additionalPensionName||"추가 연금"):"추가 연금 미사용"}</span><span className="stat-value text-green">{fmt(s.additionalPensionEnabled?s.additionalPensionMonthly:0)}원</span></div>
+          <div className="stat-row"><span className="stat-label">여행비 선차감</span><span className="stat-value">{fmt(s.retirementTravelBucket)}원</span></div>
+          <div className="stat-row"><span className="stat-label">은퇴 후 운용수익률</span><span className="stat-value">{fmtPct(n(s.postRetirementReturn)*100)}</span></div>
+          <div className="stat-row"><span className="stat-label">물가상승률</span><span className="stat-value">{fmtPct(n(s.annualInflation)*100)}</span></div>
+        </div>
+
+        <div className="card">
+          <h3>55세 vs 60세 비교</h3>
+          <div className="stat-row"><span className="stat-label">{advanced.retireAge}세 은퇴자산</span><span className="stat-value">{fmt(base.total)}원</span></div>
+          <div className="stat-row"><span className="stat-label">{advanced.compareAge}세 은퇴자산</span><span className="stat-value text-accent">{fmt(compare.total)}원</span></div>
+          <div className="stat-row"><span className="stat-label">차이</span><span className="stat-value text-green">{fmt(compare.total-base.total)}원</span></div>
+          <div className="stat-row"><span className="stat-label">{advanced.retireAge}세 생존</span><span className={`stat-value ${w.success?"text-green":"text-red"}`}>{w.success?"기대수명까지":"중도 고갈"}</span></div>
+          <div className="stat-row"><span className="stat-label">{advanced.compareAge}세 생존</span><span className={`stat-value ${cw.success?"text-green":"text-red"}`}>{cw.success?"기대수명까지":"중도 고갈"}</span></div>
+        </div>
+
+        <div className="card">
+          <h3>판단 요약</h3>
+          <div className={`compact-insight ${targetRate>=100?"green":"warn"}`}>
+            <span>{targetRate>=100?"✅":"⚠️"}</span>
+            <div><strong>목표 달성률</strong><p>{fmtPct(targetRate)}입니다. {targetRate>=100?"현재 가정상 목표를 초과합니다.":"월 투자금 또는 은퇴 나이 조정 검토가 필요합니다."}</p></div>
+          </div>
+          <div className={`compact-insight ${w.success?"green":"danger"}`} style={{marginTop:8}}>
+            <span>{w.success?"🛡️":"🔥"}</span>
+            <div><strong>은퇴 후 고갈 위험</strong><p>{w.success?`${advanced.lifeAge}세까지 자산 유지 가능`:`${w.firstZeroAge}세 전후 자산 고갈 가능`}</p></div>
+          </div>
+        </div>
+      </div>
+
+      <div className="g2">
+        <div className="card">
+          <h3>은퇴 전 적립 시뮬레이션</h3>
+          <div className="table-wrap" style={{maxHeight:420}}>
+            <table>
+              <thead><tr><th>연도</th><th>나이</th><th className="td-right">월투자금</th><th className="td-right">나스닥</th><th className="td-right">배당</th><th className="td-right">총자산</th></tr></thead>
+              <tbody>
+                {advanced.baseAcc.rows.map(r=>(
+                  <tr key={r.year}>
+                    <td>{new Date().getFullYear()+r.year-1}</td><td>{r.age}</td>
+                    <td className="td-right td-mono">{fmt(r.monthlyInvest)}</td>
+                    <td className="td-right td-mono">{fmt(r.nasdaq)}</td>
+                    <td className="td-right td-mono">{fmt(r.dividend)}</td>
+                    <td className="td-right td-mono text-accent">{fmt(r.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>은퇴 후 인출 시뮬레이션</h3>
+          <div className="table-wrap" style={{maxHeight:420}}>
+            <table>
+              <thead><tr><th>나이</th><th className="td-right">생활비</th><th className="td-right">연금</th><th className="td-right">여행비</th><th className="td-right">인출액</th><th className="td-right">연말자산</th></tr></thead>
+              <tbody>
+                {advanced.baseWithdraw.rows.map(r=>(
+                  <tr key={r.age}>
+                    <td>{r.age}</td>
+                    <td className="td-right td-mono">{fmt(r.annualExpense)}</td>
+                    <td className="td-right td-mono text-green">{fmt(r.annualPension)}</td>
+                    <td className="td-right td-mono">{fmt(r.travelExtra)}</td>
+                    <td className="td-right td-mono text-red">{fmt(r.needWithdraw)}</td>
+                    <td className={`td-right td-mono ${r.endAsset>0?"text-accent":"text-red"}`}>{fmt(r.endAsset)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <div className="card">
-        <h3>연도별 시뮬레이션 결과</h3>
-        <div className="table-wrap" style={{maxHeight:500}}>
+        <h3>기존 연도별 시뮬레이션 결과</h3>
+        <div className="table-wrap" style={{maxHeight:360}}>
           <table>
-            <thead><tr><th>연도</th><th>나이</th><th>년차</th><th className="td-right">월투자금</th><th className="td-right">나스닥</th><th className="td-right">배당ETF</th><th className="td-right">ISA잔액</th><th className="td-right">ISA절세누적</th><th className="td-right">연금세액공제누적</th><th className="td-right">총자산</th></tr></thead>
+            <thead><tr><th>연도</th><th>나이</th><th>년차</th><th className="td-right">월투자금</th><th className="td-right">나스닥</th><th className="td-right">배당ETF</th><th className="td-right">ISA절세누적</th><th className="td-right">연금세액공제누적</th><th className="td-right">총자산</th></tr></thead>
             <tbody>
               {futureSim.map(r=>(
                 <tr key={r.year}>
@@ -2804,13 +2997,12 @@ function SimulationTab({ data, futureSim }) {
                   <td className="td-right td-mono">{fmt(r.monthlyInvest)}</td>
                   <td className="td-right td-mono">{fmt(r.nasdaq)}</td>
                   <td className="td-right td-mono">{fmt(r.dividend)}</td>
-                  <td className="td-right td-mono">{fmt(r.isaBalance)}</td>
                   <td className="td-right td-mono text-green">{fmt(r.isaTaxSaved)}</td>
                   <td className="td-right td-mono text-green">{fmt(r.pensionCreditAcc)}</td>
                   <td className="td-right td-mono text-accent">{fmt(r.total)}</td>
                 </tr>
               ))}
-              {!futureSim.length&&<tr><td colSpan={10}><div className="empty">설정값을 확인하세요.</div></td></tr>}
+              {!futureSim.length&&<tr><td colSpan={9}><div className="empty">설정값을 확인하세요.</div></td></tr>}
             </tbody>
           </table>
         </div>
@@ -2818,7 +3010,6 @@ function SimulationTab({ data, futureSim }) {
     </div>
   );
 }
-
 
 function InvestmentTargetSettings({settings,set}){
   const rows=getInvestmentTargets(settings);
@@ -2883,6 +3074,19 @@ function SettingsTab({ data, update }) {
             <Field label="월급(배우자)"><input value={s.monthlySalary2} onChange={e=>set("monthlySalary2",n(e.target.value))}/></Field>
             <Field label="연 물가상승률"><input type="number" step="0.001" value={s.annualInflation} onChange={e=>set("annualInflation",Number(e.target.value))}/></Field>
             <Field label="은퇴 목표자산"><input value={s.retirementTargetAmount} onChange={e=>set("retirementTargetAmount",n(e.target.value))}/></Field>
+            <Field label="은퇴 후 월 생활비"><input value={s.retirementMonthlyExpense} onChange={e=>set("retirementMonthlyExpense",n(e.target.value))}/></Field>
+            <Field label="추가 연금 사용">
+              <select value={s.additionalPensionEnabled?"사용":"미사용"} onChange={e=>set("additionalPensionEnabled",e.target.value==="사용")}>
+                <option>미사용</option><option>사용</option>
+              </select>
+            </Field>
+            <Field label="추가 연금 명칭"><input value={s.additionalPensionName||"추가 연금"} onChange={e=>set("additionalPensionName",e.target.value)}/></Field>
+            <Field label={`${s.additionalPensionName||"추가 연금"} 월 수령액`}><input value={s.additionalPensionMonthly} onChange={e=>set("additionalPensionMonthly",n(e.target.value))} disabled={!s.additionalPensionEnabled}/></Field>
+            <Field label="추가 연금 연 증가액"><input value={s.additionalPensionAnnualIncrease} onChange={e=>set("additionalPensionAnnualIncrease",n(e.target.value))} disabled={!s.additionalPensionEnabled}/></Field>
+            <Field label="여행비 예산"><input value={s.retirementTravelBucket} onChange={e=>set("retirementTravelBucket",n(e.target.value))}/></Field>
+            <Field label="여행비 사용기간(년)"><input type="number" value={s.retirementTravelYears} onChange={e=>set("retirementTravelYears",n(e.target.value))}/></Field>
+            <Field label="은퇴 후 운용수익률"><input type="number" step="0.001" value={s.postRetirementReturn} onChange={e=>set("postRetirementReturn",Number(e.target.value))}/></Field>
+            <Field label="비교 은퇴나이"><input type="number" value={s.compareRetireAge} onChange={e=>set("compareRetireAge",n(e.target.value))}/></Field>
           </div>
         </div>
         <div className="card">
