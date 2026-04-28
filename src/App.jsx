@@ -46,6 +46,17 @@ const DEFAULT_SETTINGS = {
   includeEmergencyFundInNetWorth:true, spouseEnabled:true, childrenCount:0, dependentsCount:0,
   rebalanceBandPct:5, takeProfitPct:20, dipBuy3PctAmount:1000000, dipBuy5PctAmount:1000000, dipBuy10PctAmount:1000000,
   retirementTargetAmount:2000000000,
+  autoTriggerEnabled:true,
+  autoRebalanceTriggerEnabled:true,
+  autoBuyTriggerEnabled:true,
+  triggerMonthlyInvestAmount:2000000,
+  triggerCashAvailable:0,
+  investmentTargets:[
+    { id:"target-nasdaq", name:"나스닥", expectedReturn:0.12, targetWeight:0.90, memo:"TIGER 나스닥100 / H 포함" },
+    { id:"target-dividend", name:"배당", expectedReturn:0.08, targetWeight:0.10, memo:"배당 ETF" },
+    { id:"target-cash", name:"현금", expectedReturn:0.03, targetWeight:0.00, memo:"KOFR·파킹통장 등" },
+    { id:"target-other", name:"기타", expectedReturn:0.06, targetWeight:0.00, memo:"개별주·기타 ETF" },
+  ],
 };
 const DEFAULT_BUDGETS = [
   { id:uid(), cat1:"식비", budget:800000, targetWeight:0.15 },
@@ -117,6 +128,18 @@ function migrateData(d) {
   x.budgets = Array.isArray(d.budgets) && d.budgets.length ? d.budgets : DEFAULT_BUDGETS;
   x.events = Array.isArray(d.events) && d.events.length ? d.events : DEFAULT_EVENTS;
   x.settings = { ...DEFAULT_SETTINGS, ...(d.settings||{}) };
+  const legacyTargets = [
+    { id:"target-nasdaq", name:"나스닥", expectedReturn:n(x.settings.annualReturnNasdaq || 0.12), targetWeight:n(x.settings.targetNasdaqWeight)+n(x.settings.targetNasdaqHWeight), memo:"기존 나스닥 목표비중에서 자동 전환" },
+    { id:"target-dividend", name:"배당", expectedReturn:n(x.settings.annualReturnDividend || 0.08), targetWeight:n(x.settings.targetDividendWeight), memo:"기존 배당 목표비중에서 자동 전환" },
+  ];
+  x.settings.investmentTargets = Array.isArray(x.settings.investmentTargets) && x.settings.investmentTargets.length
+    ? x.settings.investmentTargets.map((t,i)=>({ id:t.id||uid(), name:t.name||`전략${i+1}`, expectedReturn:n(t.expectedReturn), targetWeight:n(t.targetWeight), memo:t.memo||"" }))
+    : legacyTargets;
+  x.settings.autoTriggerEnabled = x.settings.autoTriggerEnabled !== false;
+  x.settings.autoRebalanceTriggerEnabled = x.settings.autoRebalanceTriggerEnabled !== false;
+  x.settings.autoBuyTriggerEnabled = x.settings.autoBuyTriggerEnabled !== false;
+  x.settings.triggerMonthlyInvestAmount = n(x.settings.triggerMonthlyInvestAmount || x.settings.monthlyInvestDefault || x.settings.monthlyInvestStage1 || 0);
+  x.settings.triggerCashAvailable = n(x.settings.triggerCashAvailable || 0);
   return x;
 }
 function loadData() {
@@ -1081,13 +1104,86 @@ function ChartTooltipPct({active,payload,label}){
   </div>;
 }
 
+
+// ─── 투자전략 설정 헬퍼 ──────────────────────────────────────────────────────
+function getInvestmentTargets(settings){
+  const list = Array.isArray(settings?.investmentTargets) ? settings.investmentTargets : [];
+  const normalized = list
+    .map((t,i)=>({ id:t.id||`target-${i}`, name:String(t.name||"").trim()||`전략${i+1}`, expectedReturn:n(t.expectedReturn), targetWeight:n(t.targetWeight), memo:t.memo||"" }))
+    .filter(t=>t.name);
+  if(normalized.length) return normalized;
+  return [
+    {id:"target-nasdaq",name:"나스닥",expectedReturn:n(settings?.annualReturnNasdaq||0.12),targetWeight:n(settings?.targetNasdaqWeight)+n(settings?.targetNasdaqHWeight),memo:"기존 설정 자동 변환"},
+    {id:"target-dividend",name:"배당",expectedReturn:n(settings?.annualReturnDividend||0.08),targetWeight:n(settings?.targetDividendWeight),memo:"기존 설정 자동 변환"},
+  ];
+}
+function getInvestmentTargetMap(settings){
+  const map={};
+  getInvestmentTargets(settings).forEach(t=>{ map[t.name]=n(t.targetWeight); });
+  return map;
+}
+function getWeightedExpectedReturn(settings){
+  const targets=getInvestmentTargets(settings);
+  const totalW=targets.reduce((sum,t)=>sum+n(t.targetWeight),0);
+  if(totalW<=0) return n(settings?.annualReturnNasdaq||0.1);
+  return targets.reduce((sum,t)=>sum+n(t.expectedReturn)*n(t.targetWeight),0)/totalW;
+}
+function buildAutoTriggerPlan(rows, settings){
+  const s=settings||{};
+  const enabled=s.autoTriggerEnabled!==false;
+  const total=rows.reduce((sum,r)=>sum+n(r.value),0);
+  const investPool=n(s.triggerCashAvailable)>0?n(s.triggerCashAvailable):n(s.triggerMonthlyInvestAmount||s.monthlyInvestDefault||s.monthlyInvestStage1||0);
+  const band=n(s.rebalanceBandPct||5);
+  const targetMap=getInvestmentTargetMap(s);
+  const byClass={};
+  rows.forEach(r=>{ const cls=r.assetClass||"기타"; byClass[cls]=(byClass[cls]||0)+n(r.value); });
+  Object.keys(byClass).forEach(cls=>{ if(targetMap[cls]===undefined) targetMap[cls]=0; });
+  const sumTarget=Object.values(targetMap).reduce((a,b)=>a+n(b),0);
+  if(sumTarget<1 && targetMap["기타"]===undefined) targetMap["기타"]=1-sumTarget;
+  const rebalanceSignals=Object.entries(targetMap).map(([assetClass,targetWeight])=>{
+    const currentAmount=byClass[assetClass]||0;
+    const currentWeight=total>0?currentAmount/total:0;
+    const gapPct=(targetWeight-currentWeight)*100;
+    const gapAmount=targetWeight*total-currentAmount;
+    const action=Math.abs(gapPct)<=band?"대기":gapAmount>0?"매수 우선":"비중 축소";
+    return {assetClass,targetWeight,currentWeight,gapPct,gapAmount,action};
+  }).sort((a,b)=>Math.abs(b.gapPct)-Math.abs(a.gapPct));
+  const buyTargets=rebalanceSignals.filter(x=>x.gapAmount>0 && x.action!=="대기");
+  const gapTotal=buyTargets.reduce((sum,x)=>sum+x.gapAmount,0);
+  const rebalancePlan=enabled && s.autoRebalanceTriggerEnabled!==false ? buyTargets.map(x=>({
+    type:"리밸런싱",
+    assetClass:x.assetClass,
+    action:"신규 투자금 우선 배분",
+    amount:gapTotal>0?Math.round(investPool*x.gapAmount/gapTotal):0,
+    reason:`목표비중 대비 ${fmtPct(Math.abs(x.gapPct))} 부족`,
+  })).filter(x=>x.amount>0) : [];
+  const dipCandidates=rows.filter(r=>n(r.avgPrice)>0&&n(r.currentPrice||r.avgPrice)>0).map(r=>{
+    const cur=n(r.currentPrice||r.avgPrice), avg=n(r.avgPrice), dropPct=(cur-avg)/avg*100;
+    let trigger=null, amount=0;
+    if(dropPct<=-10){trigger="-10%";amount=n(s.dipBuy10PctAmount);}
+    else if(dropPct<=-5){trigger="-5%";amount=n(s.dipBuy5PctAmount);}
+    else if(dropPct<=-3){trigger="-3%";amount=n(s.dipBuy3PctAmount);}
+    return {...r,cur,avg,dropPct,trigger,amount};
+  }).filter(r=>r.trigger&&r.amount>0).sort((a,b)=>a.dropPct-b.dropPct);
+  const dipPlan=enabled && s.autoBuyTriggerEnabled!==false ? dipCandidates.map(r=>({
+    type:"하락매수",
+    assetClass:r.assetClass||"기타",
+    name:r.name,
+    action:`${r.trigger} 구간 추가매수`,
+    amount:r.amount,
+    reason:`평단 대비 ${fmtPct(r.dropPct)} 하락`,
+  })) : [];
+  return {enabled,investPool,rebalanceSignals,rebalancePlan,dipPlan,all:[...dipPlan,...rebalancePlan]};
+}
+
 // ─── 리밸런싱 계산기 ──────────────────────────────────────────────────────────
 function RebalanceCard({financialAnalysis,settings}){
   const{rows,total,byClass}=financialAnalysis;
   const band=n(settings.rebalanceBandPct),takeProfit=n(settings.takeProfitPct);
-  const targetMap={"나스닥":n(settings.targetNasdaqWeight)+n(settings.targetNasdaqHWeight),"배당":n(settings.targetDividendWeight)};
-  const explicitSum=Object.values(targetMap).reduce((s,v)=>s+v,0);
-  if(explicitSum<1) targetMap["기타"]=parseFloat((1-explicitSum).toFixed(4));
+  const targetMap=getInvestmentTargetMap(settings);
+  Object.keys(byClass).forEach(cls=>{ if(targetMap[cls]===undefined) targetMap[cls]=0; });
+  const explicitSum=Object.values(targetMap).reduce((s,v)=>s+n(v),0);
+  if(explicitSum<1 && targetMap["기타"]===undefined) targetMap["기타"]=parseFloat((1-explicitSum).toFixed(4));
   const classRows=Object.entries(byClass).map(([cls,val])=>{
     const cw=total>0?val/total:0,tw=targetMap[cls]??0,diff=cw-tw,diffPct=diff*100,needAmount=Math.abs(diff)*total;
     const status=Math.abs(diffPct)<=band?"정상":diff>0?"매도 필요":"매수 필요";
@@ -1209,6 +1305,54 @@ function DipBuyAlertCard({rows,settings}){
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ─── 자동 매수 / 리밸런싱 트리거 ─────────────────────────────────────────────
+function AutoTriggerCard({rows,settings}){
+  const plan=buildAutoTriggerPlan(rows,settings);
+  const enabled=plan.enabled;
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div className={`alert ${enabled?"alert-info":"alert-warn"}`}>
+        {enabled?`자동 트리거 감시 중 · 실행 예산 ${fmt(plan.investPool)}원 기준`:`자동 트리거가 꺼져 있습니다. 설정 탭에서 켤 수 있습니다.`}
+      </div>
+      {plan.all.length>0 ? (
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>구분</th><th>대상</th><th>동작</th><th className="td-right">추천금액</th><th>근거</th></tr></thead>
+            <tbody>
+              {plan.all.map((x,i)=>(
+                <tr key={`${x.type}-${x.name||x.assetClass}-${i}`}>
+                  <td><span className={`badge ${x.type==="하락매수"?"badge-accent":"badge-amber"}`}>{x.type}</span></td>
+                  <td className="td-name">{x.name||x.assetClass}</td>
+                  <td>{x.action}</td>
+                  <td className="td-right td-mono text-accent">{fmt(x.amount)}원</td>
+                  <td>{x.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="empty">현재 조건에서는 자동 매수 또는 리밸런싱 실행 후보가 없습니다.</div>
+      )}
+      {plan.rebalanceSignals.length>0&&(<div>
+        <div style={{fontSize:12,fontWeight:700,color:"var(--text3)",letterSpacing:".06em",textTransform:"uppercase",margin:"4px 0 8px"}}>트리거 감시 상태</div>
+        {plan.rebalanceSignals.map(s=>(
+          <div key={s.assetClass} style={{display:"flex",alignItems:"center",gap:10,marginBottom:7,fontSize:12}}>
+            <span style={{minWidth:85,fontWeight:700,color:"var(--text)"}}>{s.assetClass}</span>
+            <div style={{flex:1,height:6,borderRadius:99,background:"var(--surface3)",overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${clamp(s.currentWeight*100,0,100)}%`,background:s.action==="대기"?"var(--green)":s.action==="비중 축소"?"var(--red)":"var(--accent)",borderRadius:99}}/>
+            </div>
+            <span style={{minWidth:120,textAlign:"right",color:"var(--text3)"}}>현재 {fmtPct(s.currentWeight*100)} / 목표 {fmtPct(s.targetWeight*100)}</span>
+            <span className={`badge ${s.action==="대기"?"badge-green":s.action==="비중 축소"?"badge-red":"badge-accent"}`}>{s.action}</span>
+          </div>
+        ))}
+      </div>)}
+      <div style={{fontSize:11,color:"var(--text3)",lineHeight:1.5}}>※ 실제 증권사 주문은 실행하지 않습니다. 이 앱은 조건 충족 시 “매수/배분 후보”를 계산해 보여주는 안전한 수동 실행 방식입니다.</div>
     </div>
   );
 }
@@ -1831,6 +1975,53 @@ function SimulationTab({ data, futureSim }) {
   );
 }
 
+
+function InvestmentTargetSettings({settings,set}){
+  const rows=getInvestmentTargets(settings);
+  const updateRow=(id,patch)=>{
+    set("investmentTargets", rows.map(r=>r.id===id?{...r,...patch}:r));
+  };
+  const addRow=()=>{
+    set("investmentTargets", [...rows,{id:uid(),name:"새 전략",expectedReturn:0.08,targetWeight:0,memo:""}]);
+  };
+  const removeRow=(id)=>{
+    set("investmentTargets", rows.filter(r=>r.id!==id));
+  };
+  const totalWeight=rows.reduce((sum,r)=>sum+n(r.targetWeight),0);
+  const weightedReturn=getWeightedExpectedReturn(settings);
+  return (
+    <div className="card">
+      <div className="card-title">
+        <h3>투자 수익률 / 목표 비중</h3>
+        <div className="row">
+          <span className={`badge ${Math.abs(totalWeight-1)<=0.001?"badge-green":"badge-amber"}`}>합계 {fmtPct(totalWeight*100)}</span>
+          <span className="badge badge-accent">가중 기대수익률 {fmtPct(weightedReturn*100)}</span>
+          <button className="btn btn-sm btn-ghost" onClick={addRow}>+ 전략 추가</button>
+        </div>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>전략/자산군명</th><th>연 기대수익률</th><th>목표비중</th><th>메모</th><th>작업</th></tr></thead>
+          <tbody>
+            {rows.map(r=>(
+              <tr key={r.id}>
+                <td><input value={r.name} onChange={e=>updateRow(r.id,{name:e.target.value})} placeholder="예: 나스닥, 배당, 현금"/></td>
+                <td><input type="number" step="0.001" value={r.expectedReturn} onChange={e=>updateRow(r.id,{expectedReturn:Number(e.target.value)})}/></td>
+                <td><input type="number" step="0.01" value={r.targetWeight} onChange={e=>updateRow(r.id,{targetWeight:Number(e.target.value)})}/></td>
+                <td><input value={r.memo||""} onChange={e=>updateRow(r.id,{memo:e.target.value})} placeholder="설명"/></td>
+                <td><button className="btn btn-sm btn-danger" onClick={()=>removeRow(r.id)}>삭제</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{marginTop:10,fontSize:12,color:Math.abs(totalWeight-1)<=0.001?"var(--text3)":"var(--amber)",lineHeight:1.5}}>
+        목표비중은 0~1로 입력합니다. 예: 90% = 0.90. 포트폴리오 종목의 자산군명과 이 표의 전략명이 같아야 리밸런싱에 반영됩니다.
+      </div>
+    </div>
+  );
+}
+
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
 function SettingsTab({ data, update }) {
   const s=data.settings;
@@ -1865,18 +2056,8 @@ function SettingsTab({ data, update }) {
           </div>
         </div>
       </div>
+      <InvestmentTargetSettings settings={s} set={set}/>
       <div className="g2">
-        <div className="card">
-          <h3>투자 수익률 / 목표 비중</h3>
-          <div className="form-grid-3">
-            <Field label="나스닥 기대수익률"><input type="number" step="0.01" value={s.annualReturnNasdaq} onChange={e=>set("annualReturnNasdaq",Number(e.target.value))}/></Field>
-            <Field label="배당 기대수익률"><input type="number" step="0.01" value={s.annualReturnDividend} onChange={e=>set("annualReturnDividend",Number(e.target.value))}/></Field>
-            <Field label="연 투자증가율"><input type="number" step="0.01" value={s.annualRaise} onChange={e=>set("annualRaise",Number(e.target.value))}/></Field>
-            <Field label="나스닥100 비중"><input type="number" step="0.01" value={s.targetNasdaqWeight} onChange={e=>set("targetNasdaqWeight",Number(e.target.value))}/></Field>
-            <Field label="나스닥100(H) 비중"><input type="number" step="0.01" value={s.targetNasdaqHWeight} onChange={e=>set("targetNasdaqHWeight",Number(e.target.value))}/></Field>
-            <Field label="배당ETF 비중"><input type="number" step="0.01" value={s.targetDividendWeight} onChange={e=>set("targetDividendWeight",Number(e.target.value))}/></Field>
-          </div>
-        </div>
         <div className="card">
           <h3>투자 스케줄 / 규칙</h3>
           <div className="form-grid-3">
@@ -1889,6 +2070,12 @@ function SettingsTab({ data, update }) {
             <Field label="익절 기준(%)"><input value={s.takeProfitPct} onChange={e=>set("takeProfitPct",n(e.target.value))}/></Field>
             <Field label="-3% 추가매수"><input value={s.dipBuy3PctAmount} onChange={e=>set("dipBuy3PctAmount",n(e.target.value))}/></Field>
             <Field label="-5% 추가매수"><input value={s.dipBuy5PctAmount} onChange={e=>set("dipBuy5PctAmount",n(e.target.value))}/></Field>
+            <Field label="-10% 추가매수"><input value={s.dipBuy10PctAmount} onChange={e=>set("dipBuy10PctAmount",n(e.target.value))}/></Field>
+            <Field label="트리거 월 실행예산"><input value={s.triggerMonthlyInvestAmount} onChange={e=>set("triggerMonthlyInvestAmount",n(e.target.value))}/></Field>
+            <Field label="현재 사용가능 현금"><input value={s.triggerCashAvailable} onChange={e=>set("triggerCashAvailable",n(e.target.value))}/></Field>
+            <Field label="전체 자동 트리거"><select value={String(s.autoTriggerEnabled!==false)} onChange={e=>set("autoTriggerEnabled",e.target.value==="true")}><option value="true">켜기</option><option value="false">끄기</option></select></Field>
+            <Field label="리밸런싱 트리거"><select value={String(s.autoRebalanceTriggerEnabled!==false)} onChange={e=>set("autoRebalanceTriggerEnabled",e.target.value==="true")}><option value="true">켜기</option><option value="false">끄기</option></select></Field>
+            <Field label="하락매수 트리거"><select value={String(s.autoBuyTriggerEnabled!==false)} onChange={e=>set("autoBuyTriggerEnabled",e.target.value==="true")}><option value="true">켜기</option><option value="false">끄기</option></select></Field>
           </div>
         </div>
       </div>
@@ -2013,12 +2200,9 @@ function buildProfessionalRebalance(data) {
   const s = data?.settings || {};
   const portfolio = Array.isArray(data?.portfolio) ? data.portfolio : [];
   const total = portfolio.reduce((sum, p) => sum + pfPortfolioValue(p), 0);
-  const targetMap = {
-    나스닥: n(s.targetNasdaqWeight) + n(s.targetNasdaqHWeight),
-    배당: n(s.targetDividendWeight),
-  };
+  const targetMap = getInvestmentTargetMap(s);
   const usedTarget = Object.values(targetMap).reduce((sum, v) => sum + n(v), 0);
-  if (usedTarget < 1) targetMap.기타 = 1 - usedTarget;
+  if (usedTarget < 1 && targetMap.기타 === undefined) targetMap.기타 = 1 - usedTarget;
   const grouped = {};
   portfolio.forEach((p) => {
     const cls = p.assetClass || "기타";
@@ -2079,7 +2263,7 @@ function buildProfessionalGoal(data, dashboard, dashboardDetail, monthlySeries) 
   const retireAge = n(s.retireAge || 55);
   const yearsLeft = Math.max(retireAge - currentAge, 0);
   const monthsLeft = yearsLeft * 12;
-  const annualReturn = n(s.annualReturnNasdaq || 0.1);
+  const annualReturn = getWeightedExpectedReturn(s);
   const monthlyReturn = pfAnnualToMonthly(annualReturn);
   const monthlyInvest = n(s.monthlyInvestDefault || s.monthlyInvestStage1 || 0);
   let projected = nowNetWorth;
@@ -2106,17 +2290,19 @@ function buildProfessionalDashboard(data, dashboard, dashboardDetail, monthlySer
   const rebalance = buildProfessionalRebalance(data);
   const risk = buildProfessionalRisk(data);
   const goal = buildProfessionalGoal(data, dashboard, dashboardDetail, monthlySeries);
+  const triggers = buildAutoTriggerPlan(risk.rows.map(r=>({ ...r, avgPrice:(data.portfolio||[]).find(p=>p.id===r.id)?.avgPrice, currentPrice:(data.portfolio||[]).find(p=>p.id===r.id)?.currentPrice, qty:(data.portfolio||[]).find(p=>p.id===r.id)?.qty })), data.settings);
   const priorityActions = [];
+  if (triggers.all.length) priorityActions.push({ level:"계획", title:"자동 트리거 후보", message:`${triggers.all.length}개 매수·리밸런싱 후보가 있습니다.` });
   if (rebalance.alerts.length) priorityActions.push({ level:"주의", title:"리밸런싱 필요", message:`${rebalance.alerts.length}개 자산군이 목표 비중 허용범위를 벗어났습니다.` });
   if (risk.riskLevel === "높음") priorityActions.push({ level:"위험", title:"위험도 높음", message:`추정 최대낙폭은 약 ${fmtPct(risk.estimatedMddPct*100)}입니다.` });
   if (goal.monthlyInvestGap > 0) priorityActions.push({ level:"계획", title:"목표 투자금 부족", message:`월 ${fmt(goal.monthlyInvestGap)}원 증액이 필요합니다.` });
   if (goal.survivalMonths > 0 && goal.survivalMonths < 6) priorityActions.push({ level:"주의", title:"비상금 부족", message:`현재 비상금은 약 ${goal.survivalMonths.toFixed(1)}개월치입니다.` });
-  return { rebalance, risk, goal, priorityActions };
+  return { rebalance, risk, goal, triggers, priorityActions };
 }
 
 function ProfessionalTab({ data, dashboard, dashboardDetail, monthlySeries }) {
   const pro = useMemo(() => buildProfessionalDashboard(data, dashboard, dashboardDetail, monthlySeries), [data, dashboard, dashboardDetail, monthlySeries]);
-  const { rebalance, risk, goal, priorityActions } = pro;
+  const { rebalance, risk, goal, triggers, priorityActions } = pro;
   const levelClass = (v) => v === "위험" ? "badge-red" : v === "주의" ? "badge-amber" : "badge-accent";
   return (
     <div className="stack">
@@ -2179,6 +2365,11 @@ function ProfessionalTab({ data, dashboard, dashboardDetail, monthlySeries }) {
           <div className="stat-row"><span className="stat-label">현재 대비 차이</span><span className={`stat-value ${goal.monthlyInvestGap>0?"text-red":"text-green"}`}>{goal.monthlyInvestGap>0?"+":""}{fmt(goal.monthlyInvestGap)}원</span></div>
           <div className="stat-row"><span className="stat-label">최근 평균 지출</span><span className="stat-value">{fmt(goal.avgExpense)}원</span></div>
         </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title"><h3>🤖 자동 트리거 후보</h3><span className="badge badge-accent">Manual Execute</span></div>
+        <AutoTriggerCard rows={(data.portfolio||[]).map(p=>({ ...p, value:pfPortfolioValue(p), weight:0 }))} settings={data.settings}/>
       </div>
 
       <div className="alert alert-info">
