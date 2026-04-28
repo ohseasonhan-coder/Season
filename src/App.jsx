@@ -742,6 +742,21 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 
 
 
+
+/* Monthly Report */
+.report-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.08));border-color:rgba(108,125,255,.20)}
+.report-hero h2{font-size:24px;font-weight:900;letter-spacing:-.04em;margin:4px 0}
+.report-hero p{font-size:13px;color:var(--text3);line-height:1.5}
+.monthly-report textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+@media print{
+  .sidebar,.topbar,.auth-bar,.fab,.tab-row,.btn{display:none!important}
+  .main{margin-left:0!important;height:auto!important;overflow:visible!important}
+  .page{max-width:none!important;padding:0!important}
+  body{background:#fff!important;color:#111!important}
+  .card,.kpi-card,.card-sm{break-inside:avoid;background:#fff!important;color:#111!important;border-color:#ddd!important}
+}
+@media(max-width:900px){.report-hero{flex-direction:column;align-items:flex-start}}
+
 /* Retirement Pro */
 .retirement-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(135deg,var(--surface),rgba(52,213,138,.07));border-color:rgba(52,213,138,.20)}
 .retirement-hero h2{font-size:24px;font-weight:900;letter-spacing:-.04em;margin:4px 0}
@@ -2809,6 +2824,191 @@ function PlanningTab({ data, update, eventAnalysis }) {
   );
 }
 
+
+// ─── Monthly Report Tab ───────────────────────────────────────────────────────
+function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalysis, dashboard, dashboardDetail, taxAnalysis }) {
+  const months=useMemo(()=>[...new Set((data.transactions||[]).map(t=>monthOf(t.date)).filter(Boolean))].sort().reverse(),[data.transactions]);
+  const [month,setMonth]=useState(months[0]||thisMonthISO());
+
+  const report=useMemo(()=>{
+    const tx=(data.transactions||[]).filter(t=>monthOf(t.date)===month);
+    const income=tx.filter(t=>t.type==="수입").reduce((s,t)=>s+n(t.amount),0);
+    const expense=tx.filter(t=>t.type==="지출").reduce((s,t)=>s+n(t.amount),0);
+    const transfer=tx.filter(t=>t.type==="자산이동").reduce((s,t)=>s+n(t.amount),0);
+    const net=income-expense;
+    const savingsRate=income>0?net/income*100:0;
+
+    const prevMonth=(()=>{
+      const d=new Date(`${month}-01T00:00:00`);
+      d.setMonth(d.getMonth()-1);
+      return d.toISOString().slice(0,7);
+    })();
+    const prev=monthlySeries.find(r=>r.month===prevMonth)||{income:0,expense:0,net:0};
+    const incomeChange=n(prev.income)>0?(income-n(prev.income))/n(prev.income)*100:0;
+    const expenseChange=n(prev.expense)>0?(expense-n(prev.expense))/n(prev.expense)*100:0;
+    const netChange=n(prev.net)!==0?(net-n(prev.net))/Math.abs(n(prev.net))*100:0;
+
+    const catMap={};
+    tx.filter(t=>t.type==="지출").forEach(t=>{const k=t.cat1||"기타";catMap[k]=(catMap[k]||0)+n(t.amount);});
+    const topExpenses=Object.entries(catMap).map(([cat,amount])=>({cat,amount,rate:expense>0?amount/expense*100:0})).sort((a,b)=>b.amount-a.amount).slice(0,5);
+
+    const incomeMap={};
+    tx.filter(t=>t.type==="수입").forEach(t=>{const k=t.cat1||"기타";incomeMap[k]=(incomeMap[k]||0)+n(t.amount);});
+    const incomeBreakdown=Object.entries(incomeMap).map(([cat,amount])=>({cat,amount,rate:income>0?amount/income*100:0})).sort((a,b)=>b.amount-a.amount);
+
+    const highTx=tx.filter(t=>n(t.amount)>=1000000).sort((a,b)=>n(b.amount)-n(a.amount)).slice(0,5);
+    const dailyMap={};
+    tx.filter(t=>t.type==="지출").forEach(t=>{dailyMap[t.date]=(dailyMap[t.date]||0)+n(t.amount);});
+    const topDays=Object.entries(dailyMap).map(([date,amount])=>({date,amount})).sort((a,b)=>b.amount-a.amount).slice(0,3);
+
+    const budgetRows=(budgetAnalysis||[]).map(b=>({...b})).sort((a,b)=>n(b.rate)-n(a.rate));
+    const overBudget=budgetRows.filter(b=>b.status==="초과");
+    const warningBudget=budgetRows.filter(b=>b.status==="주의");
+
+    const issues=[];
+    if(net<0) issues.push({tone:"danger",title:"월간 적자",text:`이번 달은 ${fmt(Math.abs(net))}원 적자입니다.`});
+    if(expenseChange>20) issues.push({tone:"warn",title:"지출 급증",text:`전월 대비 지출이 ${fmtPct(expenseChange)} 증가했습니다.`});
+    if(overBudget.length>0) issues.push({tone:"warn",title:"예산 초과",text:`${overBudget.map(b=>b.cat1).slice(0,3).join(" · ")} 항목이 예산을 초과했습니다.`});
+    if(savingsRate<20) issues.push({tone:"warn",title:"저축률 낮음",text:`이번 달 저축률은 ${fmtPct(savingsRate)}입니다.`});
+    if(issues.length===0) issues.push({tone:"green",title:"월간 상태 양호",text:"큰 이상 신호 없이 관리되고 있습니다."});
+
+    const actions=[];
+    if(overBudget.length>0) actions.push({tag:"지출",title:"예산 초과 항목 조정",text:`다음 달 ${overBudget[0].cat1} 예산 또는 소비 패턴을 조정하세요.`});
+    if(net>0) actions.push({tag:"투자",title:"잉여 현금 배분",text:`이번 달 잉여 현금 ${fmt(net)}원 중 일부를 투자/비상금으로 배분하세요.`});
+    if(taxAnalysis?.pensionRemaining>0) actions.push({tag:"절세",title:"연금 세액공제 여력 확인",text:`연금 세액공제 한도 잔여분 ${fmt(taxAnalysis.pensionRemaining)}원을 확인하세요.`});
+    if(dashboardDetail?.emergencyFund<n(expense)*3) actions.push({tag:"안전",title:"비상금 보강",text:"월 지출 3~6개월치 비상금 확보를 우선 검토하세요."});
+    if(actions.length===0) actions.push({tag:"유지",title:"현재 전략 유지",text:"다음 달도 같은 기준으로 기록과 점검을 이어가세요."});
+
+    const summaryText=[
+      `${month} 월간 리포트`,
+      `수입은 ${fmt(income)}원, 지출은 ${fmt(expense)}원, 순현금흐름은 ${fmt(net)}원입니다.`,
+      `저축률은 ${fmtPct(savingsRate)}이며, 전월 대비 지출 변화율은 ${fmtPct(expenseChange)}입니다.`,
+      topExpenses[0]?`가장 큰 지출 항목은 ${topExpenses[0].cat} (${fmt(topExpenses[0].amount)}원)입니다.`:"지출 항목이 없습니다.",
+      issues.map(i=>`- ${i.title}: ${i.text}`).join("\\n"),
+      actions.map(a=>`- ${a.title}: ${a.text}`).join("\\n")
+    ].join("\\n");
+
+    return {tx,income,expense,transfer,net,savingsRate,incomeChange,expenseChange,netChange,topExpenses,incomeBreakdown,highTx,topDays,budgetRows,overBudget,warningBudget,issues,actions,summaryText};
+  },[data.transactions,month,monthlySeries,budgetAnalysis,taxAnalysis,dashboardDetail]);
+
+  const copyReport=async()=>{
+    try{await navigator.clipboard.writeText(report.summaryText);alert("월간 리포트 요약을 복사했습니다.");}
+    catch{alert("복사에 실패했습니다. 브라우저 권한을 확인하세요.");}
+  };
+
+  const printReport=()=>window.print();
+
+  return (
+    <div className="stack monthly-report">
+      <div className="card report-hero">
+        <div>
+          <div className="kpi-label">MONTHLY CFO REPORT</div>
+          <h2>월간 리포트 자동 생성</h2>
+          <p>거래내역을 기준으로 수입·지출·예산·투자·절세 행동을 월별로 자동 요약합니다.</p>
+        </div>
+        <div className="row">
+          <select value={month} onChange={e=>setMonth(e.target.value)}>
+            {(months.length?months:[thisMonthISO()]).map(m=><option key={m} value={m}>{m}</option>)}
+          </select>
+          <button className="btn btn-sm btn-ghost" onClick={copyReport}>요약 복사</button>
+          <button className="btn btn-sm btn-primary" onClick={printReport}>출력/PDF</button>
+        </div>
+      </div>
+
+      <div className="kpi-grid">
+        <KpiCard label="월 수입" value={report.income} unit="원" tone="green"/>
+        <KpiCard label="월 지출" value={report.expense} unit="원" tone="red"/>
+        <KpiCard label="순현금흐름" value={report.net} unit="원" tone={report.net>=0?"green":"red"}/>
+        <KpiCard label="저축률" value={report.savingsRate} unit="%" accent/>
+      </div>
+
+      <div className="g3">
+        <div className="card">
+          <h3>월간 핵심 요약</h3>
+          <div className="stat-row"><span className="stat-label">전월 대비 수입</span><span className={`stat-value ${report.incomeChange>=0?"text-green":"text-red"}`}>{fmtPct(report.incomeChange)}</span></div>
+          <div className="stat-row"><span className="stat-label">전월 대비 지출</span><span className={`stat-value ${report.expenseChange>0?"text-red":"text-green"}`}>{fmtPct(report.expenseChange)}</span></div>
+          <div className="stat-row"><span className="stat-label">전월 대비 순현금흐름</span><span className={`stat-value ${report.netChange>=0?"text-green":"text-red"}`}>{fmtPct(report.netChange)}</span></div>
+          <div className="stat-row"><span className="stat-label">거래 건수</span><span className="stat-value">{report.tx.length}건</span></div>
+        </div>
+
+        <div className="card">
+          <h3>자동 진단</h3>
+          <div className="stack" style={{gap:8}}>
+            {report.issues.map((i,idx)=>(
+              <div key={idx} className={`compact-insight ${i.tone}`}>
+                <span>{i.tone==="danger"?"🔥":i.tone==="warn"?"⚠️":"✅"}</span>
+                <div><strong>{i.title}</strong><p>{i.text}</p></div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>다음 달 행동 추천</h3>
+          <div className="stack" style={{gap:8}}>
+            {report.actions.map((a,idx)=>(
+              <div key={idx} className="action-item">
+                <span className="badge badge-accent">{a.tag}</span>
+                <div><strong>{a.title}</strong><p>{a.text}</p></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="g2">
+        <div className="card">
+          <h3>지출 TOP 5</h3>
+          {report.topExpenses.length?report.topExpenses.map(x=>(
+            <div key={x.cat} className="budget-item">
+              <div className="budget-header">
+                <span className="budget-name">{x.cat}</span>
+                <span className="budget-nums">{fmt(x.amount)}원 · {fmtPct(x.rate)}</span>
+              </div>
+              <div className="progress"><div className="progress-fill pf-red" style={{width:`${clamp(x.rate,0,100)}%`}}/></div>
+            </div>
+          )):<div className="empty">지출 데이터가 없습니다.</div>}
+        </div>
+
+        <div className="card">
+          <h3>예산 점검</h3>
+          {report.budgetRows.slice(0,6).map(b=>(
+            <div key={b.cat1} className="budget-item">
+              <div className="budget-header">
+                <span className="budget-name">{b.cat1}</span>
+                <div className="row" style={{gap:8}}>
+                  <span className="budget-nums">{fmt(b.spent)} / {fmt(b.budget)}원</span>
+                  <span className={`badge ${b.status==="초과"?"badge-red":b.status==="주의"?"badge-amber":"badge-green"}`}>{b.status}</span>
+                </div>
+              </div>
+              <div className="progress"><div className={`progress-fill ${b.status==="초과"?"pf-red":b.status==="주의"?"pf-amber":"pf-accent"}`} style={{width:`${clamp(b.rate,0,100)}%`}}/></div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="g2">
+        <div className="card">
+          <h3>고액 거래 TOP 5</h3>
+          {report.highTx.length?report.highTx.map(t=>(
+            <div key={t.id} className="tx-item">
+              <div className="tx-icon" style={{background:t.type==="수입"?"var(--green-bg)":t.type==="지출"?"var(--red-bg)":"var(--surface2)"}}>{t.type==="수입"?"💰":t.type==="지출"?"💳":"🔄"}</div>
+              <div className="tx-meta"><div className="tx-name">{t.content||t.cat2}</div><div className="tx-date">{t.date} · {t.cat1}</div></div>
+              <div className={`tx-amt ${t.type==="수입"?"text-green":t.type==="지출"?"text-red":""}`}>{fmt(t.amount)}원</div>
+            </div>
+          )):<div className="empty">100만원 이상 거래가 없습니다.</div>}
+        </div>
+
+        <div className="card">
+          <h3>보고서 원문</h3>
+          <textarea readOnly value={report.summaryText} style={{width:"100%",minHeight:240,padding:14,borderRadius:12,border:"1px solid var(--border2)",background:"var(--surface2)",color:"var(--text2)",fontSize:12,lineHeight:1.6}}/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ─── Simulation Tab ───────────────────────────────────────────────────────────
 function SimulationTab({ data, futureSim }) {
   const [scenario,setScenario]=useState("base");
@@ -3960,13 +4160,14 @@ const NAV = [
   { id:"analysis", icon:"📊", label:"재무분석" },
   { id:"tax", icon:"💸", label:"세금·절세" },
   { id:"simulation", icon:"🔮", label:"미래시뮬레이션" },
+  { id:"monthlyReport", icon:"🧾", label:"월간 리포트" },
   { section: "관리" },
   { id:"settings", icon:"⚙", label:"설정" },
   { id:"accounts", icon:"🏧", label:"계좌관리" },
   { id:"data", icon:"💾", label:"데이터·백업" },
 ];
 
-const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", risk:"리스크 분석", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
+const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", risk:"리스크 분석", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", monthlyReport:"월간 리포트", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -4219,7 +4420,7 @@ export default function App() {
             {tab==="risk"&&<Step2MddRiskPanel data={data} financialAnalysis={financialAnalysis}/>}
             {tab==="analysis"&&<AnalysisTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboardDetail={dashboardDetail}/>}
             {tab==="tax"&&<TaxTab data={data} update={update} taxAnalysis={taxAnalysis}/>}
-            {tab==="simulation"&&<SimulationTab data={data} futureSim={futureSim}/>}
+            {tab==="simulation"&&<SimulationTab data={data} futureSim={futureSim}/>}\n            {tab==="monthlyReport"&&<MonthlyReportTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboard={dashboard} dashboardDetail={dashboardDetail} taxAnalysis={taxAnalysis}/>}
             {tab==="settings"&&<SettingsTab data={data} update={update}/>}
             {tab==="accounts"&&<AccountsTab data={data} update={update}/>}
             {tab==="data"&&<DataTab data={data} update={update} validations={validations}/>}
