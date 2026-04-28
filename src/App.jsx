@@ -718,6 +718,30 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .tab-chip.active{background:var(--accent-bg);color:var(--accent)}
 .tab-chip:hover:not(.active){background:var(--surface3);color:var(--text)}
 
+
+/* Dashboard Pro */
+.dashboard-hero{display:grid;grid-template-columns:1.1fr 1.4fr;gap:14px}
+.health-card{background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.08));border:1px solid rgba(108,125,255,.22);border-radius:var(--radius-lg);padding:22px;overflow:hidden}
+.health-score{font-size:52px;font-weight:900;letter-spacing:-.06em;line-height:1}
+.health-score span{font-size:18px;color:var(--text3);letter-spacing:-.02em;margin-left:3px}
+.health-grade{display:inline-flex;margin-top:10px;padding:5px 11px;border-radius:999px;font-size:12px;font-weight:800}
+.dashboard-summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.mini-metric{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:17px;display:flex;flex-direction:column;gap:6px}
+.mini-metric span{font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.mini-metric strong{font-size:25px;font-weight:900;letter-spacing:-.04em}
+.mini-metric small{font-size:11px;color:var(--text3)}
+.compact-insight{display:flex;gap:10px;align-items:flex-start;padding:11px;border-radius:12px;border:1px solid var(--border);background:var(--surface2)}
+.compact-insight span{font-size:18px}
+.compact-insight strong,.action-item strong{font-size:12.5px;color:var(--text)}
+.compact-insight p,.action-item p{font-size:11.5px;color:var(--text3);line-height:1.45;margin-top:2px}
+.compact-insight.danger{border-color:rgba(255,92,114,.24);background:var(--red-bg)}
+.compact-insight.warn{border-color:rgba(240,180,41,.22);background:var(--amber-bg)}
+.compact-insight.info{border-color:rgba(108,125,255,.22);background:var(--accent-bg)}
+.compact-insight.green{border-color:rgba(52,213,138,.22);background:var(--green-bg)}
+.action-item{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:flex-start;padding:11px;border-radius:12px;background:var(--surface2);border:1px solid var(--border)}
+@media(max-width:1100px){.dashboard-hero{grid-template-columns:1fr}.dashboard-summary-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.dashboard-summary-grid{grid-template-columns:1fr}.health-score{font-size:42px}}
+
 /* Responsive */
 @media(max-width:900px){
   .sidebar{width:180px}
@@ -935,56 +959,145 @@ function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, fi
   const recentTx=dashboardDetail.recentTx||[];
   const topExp=dashboardDetail.topExpenseCats||[];
 
-  const insights=useMemo(()=>{
-    const list=[];
-    if(dashboard.net<0) list.push({icon:"⚠️",color:"var(--red-bg)",title:"이번달 적자",text:`수입보다 지출이 ${fmt(-dashboard.net)}원 더 많습니다.`});
-    else list.push({icon:"✅",color:"var(--green-bg)",title:"이번달 흑자",text:`${fmt(dashboard.net)}원 남겼습니다.`});
-    const over=budgetAnalysis.filter(b=>b.status==="초과");
-    if(over.length>0) list.push({icon:"💸",color:"var(--amber-bg)",title:`예산 초과 ${over.length}개`,text:over.map(b=>b.cat1).join("·")+" 항목을 확인하세요."});
-    if(dashboardDetail.totalValidationIssues>0) list.push({icon:"🔍",color:"var(--accent-bg)",title:"입력 점검 필요",text:`${dashboardDetail.totalValidationIssues}건 확인이 필요합니다.`});
-    return list;
-  },[dashboard,budgetAnalysis,dashboardDetail]);
+  const advanced=useMemo(()=>{
+    const rows=dashboardChartData.monthlyTrend||[];
+    const curMonth=rows[rows.length-1]||{income:dashboard.income,expense:dashboard.expense,net:dashboard.net};
+    const prevMonth=rows[rows.length-2]||{income:0,expense:0,net:0};
+    const income=n(curMonth.income), expense=n(curMonth.expense), net=n(curMonth.net);
+    const prevNet=n(prevMonth.net), prevExpense=n(prevMonth.expense);
+    const savingsRate=income>0 ? (net/income)*100 : 0;
+    const monthlyInvest=n(data.settings?.monthlyInvestDefault||0);
+    const investRate=income>0 ? (monthlyInvest/income)*100 : 0;
+    const debtRatio=dashboard.totalAssets>0 ? (dashboard.totalLiabs/dashboard.totalAssets)*100 : 0;
+    const emergencyMonths=expense>0 ? n(dashboardDetail.emergencyFund)/expense : 0;
+    const budgetOver=(budgetAnalysis||[]).filter(b=>b.status==="초과").length;
+    const target=n(data.settings?.retirementTargetAmount||dashboardChartData.retirementTarget||0);
+    const projected=n(dashboardDetail.retirementRow?.total||dashboardChartData.retirementProjected||0);
+    const targetRate=target>0 ? projected/target*100 : 0;
+    const expenseChange=prevExpense>0 ? (expense-prevExpense)/prevExpense*100 : 0;
+    const netChange=prevNet!==0 ? (net-prevNet)/Math.abs(prevNet)*100 : 0;
+
+    let score=50;
+    score += clamp(savingsRate, -20, 50)*0.45;
+    score += clamp(investRate, 0, 50)*0.25;
+    score += clamp(emergencyMonths, 0, 12)*2.1;
+    score -= clamp(debtRatio, 0, 80)*0.22;
+    score -= budgetOver*6;
+    score += targetRate>=100 ? 8 : targetRate>=70 ? 4 : 0;
+    score=clamp(Math.round(score),0,100);
+
+    const grade=score>=80?"우수":score>=65?"양호":score>=50?"주의":"위험";
+    const tone=score>=80?"green":score>=65?"accent":score>=50?"amber":"red";
+
+    const topBudget=[...(budgetAnalysis||[])].sort((a,b)=>n(b.rate)-n(a.rate)).slice(0,3);
+    const issueCards=[];
+    if(savingsRate<20) issueCards.push({icon:"💧",title:"저축률 점검",text:`현재 저축률 ${fmtPct(savingsRate)}입니다. 지출 또는 투자 여력을 점검하세요.`,tone:"warn"});
+    if(emergencyMonths<3) issueCards.push({icon:"🛟",title:"비상금 부족",text:`현재 비상금은 약 ${emergencyMonths.toFixed(1)}개월치입니다. 최소 3~6개월치를 권장합니다.`,tone:"danger"});
+    if(budgetOver>0) issueCards.push({icon:"💸",title:"예산 초과",text:`${budgetOver}개 항목이 예산을 초과했습니다.`,tone:"warn"});
+    if(expenseChange>20) issueCards.push({icon:"📈",title:"지출 급증",text:`전월 대비 지출이 ${fmtPct(expenseChange)} 증가했습니다.`,tone:"warn"});
+    if(dashboardDetail.totalValidationIssues>0) issueCards.push({icon:"🔍",title:"입력 점검",text:`거래 입력 이슈 ${dashboardDetail.totalValidationIssues}건을 확인하세요.`,tone:"info"});
+    if(issueCards.length===0) issueCards.push({icon:"✅",title:"특이 이슈 없음",text:"이번 달 주요 재무 이상 신호가 크지 않습니다.",tone:"green"});
+
+    const actions=[];
+    if(budgetOver>0) actions.push({title:"예산 초과 항목부터 조정",desc:topBudget.filter(b=>b.status==="초과").map(b=>b.cat1).join(" · ") || "지출 항목",tag:"지출"});
+    if(emergencyMonths<6) actions.push({title:"비상금 우선 보강",desc:`현재 ${emergencyMonths.toFixed(1)}개월치 → 6개월치까지 보강`,tag:"안전"});
+    if(targetRate<100) actions.push({title:"월 투자금 점검",desc:`목표 달성률 ${fmtPct(targetRate)} 기준, 투자금 증액 여지 검토`,tag:"투자"});
+    if(data.settings?.annualPensionContribution < data.settings?.pensionAnnualTaxCreditLimit) actions.push({title:"연금/IRP 절세 여력 확인",desc:"세액공제 한도 미사용분이 있는지 확인",tag:"절세"});
+    if(actions.length===0) actions.push({title:"현재 전략 유지",desc:"큰 이탈 없이 관리되고 있습니다.",tag:"유지"});
+
+    return {income,expense,net,savingsRate,investRate,debtRatio,emergencyMonths,score,grade,tone,expenseChange,netChange,targetRate,topBudget,issueCards:issueCards.slice(0,4),actions:actions.slice(0,4)};
+  },[data,dashboard,dashboardDetail,dashboardChartData,budgetAnalysis]);
+
+  const healthColor=advanced.tone==="green"?"var(--green)":advanced.tone==="accent"?"var(--accent)":advanced.tone==="amber"?"var(--amber)":"var(--red)";
+  const healthBg=advanced.tone==="green"?"var(--green-bg)":advanced.tone==="accent"?"var(--accent-bg)":advanced.tone==="amber"?"var(--amber-bg)":"var(--red-bg)";
 
   return (
-    <div className="stack">
-      {/* KPI */}
+    <div className="stack dashboard-pro">
+      <div className="dashboard-hero">
+        <div className="health-card">
+          <div className="row-between">
+            <div>
+              <div className="kpi-label">FINANCIAL HEALTH</div>
+              <div className="health-score" style={{color:healthColor}}>{advanced.score}<span>/100</span></div>
+              <div className="health-grade" style={{background:healthBg,color:healthColor}}>{advanced.grade}</div>
+            </div>
+            <GoalGauge value={advanced.score} target={100} title="재무 건강 점수"/>
+          </div>
+        </div>
+        <div className="dashboard-summary-grid">
+          <div className="mini-metric">
+            <span>저축률</span>
+            <strong className={advanced.savingsRate>=20?"text-green":"text-red"}>{fmtPct(advanced.savingsRate)}</strong>
+            <small>이번달 순수입 / 수입</small>
+          </div>
+          <div className="mini-metric">
+            <span>투자율</span>
+            <strong className="text-accent">{fmtPct(advanced.investRate)}</strong>
+            <small>월 투자계획 기준</small>
+          </div>
+          <div className="mini-metric">
+            <span>비상금</span>
+            <strong className={advanced.emergencyMonths>=6?"text-green":advanced.emergencyMonths>=3?"text-accent":"text-red"}>{advanced.emergencyMonths.toFixed(1)}개월</strong>
+            <small>월 지출 기준</small>
+          </div>
+          <div className="mini-metric">
+            <span>목표 달성</span>
+            <strong className="text-accent">{fmtPct(advanced.targetRate)}</strong>
+            <small>은퇴 목표 대비</small>
+          </div>
+        </div>
+      </div>
+
       <div className="kpi-grid">
         <KpiCard label="순자산" value={dashboard.netWorth} unit="원" accent/>
         <KpiCard label="이번달 현금흐름" value={dashboard.net} unit="원" tone={dashboard.net>=0?"green":"red"}/>
-        <KpiCard label="투자 포트폴리오" value={financialAnalysis.total} unit="원"/>
+        <KpiCard label="총 투자자산" value={financialAnalysis.total} unit="원"/>
         <KpiCard label="비상금" value={dashboardDetail.emergencyFund} unit="원"/>
       </div>
-      <div className="kpi-grid">
-        <KpiCard label="총 자산" value={dashboard.totalAssets} unit="원"/>
-        <KpiCard label="총 부채" value={dashboard.totalLiabs} unit="원" tone="red"/>
-        <KpiCard label="6개월 평균 순수입" value={dashboardDetail.avgNet} unit="원"/>
-        <KpiCard label="은퇴 시뮬 예상자산" value={dashboardDetail.retirementRow?.total||0} unit="원" accent/>
-      </div>
-
-      {/* Insights */}
-      {insights.length>0&&(
-        <div className="g3">
-          {insights.map((ins,i)=>(
-            <div key={i} className="insight-card">
-              <div className="insight-icon" style={{background:ins.color}}>{ins.icon}</div>
-              <div className="insight-body"><h4>{ins.title}</h4><p>{ins.text}</p></div>
-            </div>
-          ))}
-        </div>
-      )}
 
       <div className="g3">
-        {/* Monthly chart */}
+        <div className="card">
+          <div className="card-title"><h3>이번달 핵심 요약</h3></div>
+          <div className="stat-row"><span className="stat-label">수입</span><span className="stat-value text-green">{fmt(dashboard.income)}원</span></div>
+          <div className="stat-row"><span className="stat-label">지출</span><span className="stat-value text-red">{fmt(dashboard.expense)}원</span></div>
+          <div className="stat-row"><span className="stat-label">순수입</span><span className={`stat-value ${dashboard.net>=0?"text-green":"text-red"}`}>{fmt(dashboard.net)}원</span></div>
+          <div className="stat-row"><span className="stat-label">전월 대비 지출</span><span className={`stat-value ${advanced.expenseChange>0?"text-red":"text-green"}`}>{fmtPct(advanced.expenseChange)}</span></div>
+        </div>
+
+        <div className="card">
+          <div className="card-title"><h3>문제 탐지</h3></div>
+          <div className="stack" style={{gap:8}}>
+            {advanced.issueCards.map((x,i)=>(
+              <div key={i} className={`compact-insight ${x.tone}`}>
+                <span>{x.icon}</span>
+                <div><strong>{x.title}</strong><p>{x.text}</p></div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-title"><h3>다음 행동 추천</h3></div>
+          <div className="stack" style={{gap:8}}>
+            {advanced.actions.map((a,i)=>(
+              <div key={i} className="action-item">
+                <span className="badge badge-accent">{a.tag}</span>
+                <div><strong>{a.title}</strong><p>{a.desc}</p></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="g3">
         <div className="card">
           <h3>월별 수입·지출 추이</h3>
           <MonthlyTrendChart data={dashboardChartData.monthlyTrend}/>
         </div>
-        {/* Asset donut */}
         <div className="card">
           <h3>자산 구성</h3>
           <AssetDonutChart segments={dashboardChartData.assetSegments}/>
         </div>
-        {/* Goal gauge */}
         <div className="card">
           <h3>은퇴 목표 달성률</h3>
           <GoalGauge value={dashboardChartData.retirementProjected} target={dashboardChartData.retirementTarget} title="은퇴 목표자산 도달률"/>
@@ -992,35 +1105,15 @@ function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, fi
       </div>
 
       <div className="g2">
-        {/* Recent tx */}
         <div className="card">
-          <div className="card-title"><h3>최근 거래</h3></div>
-          {recentTx.length?recentTx.map(t=>(
-            <div key={t.id} className="tx-item">
-              <div className="tx-icon" style={{background:t.type==="수입"?"var(--green-bg)":t.type==="지출"?"var(--red-bg)":"var(--surface2)"}}>
-                {t.type==="수입"?"💰":t.type==="지출"?"💳":"🔄"}
-              </div>
-              <div className="tx-meta">
-                <div className="tx-name">{t.content||t.cat2}</div>
-                <div className="tx-date">{t.date} · {t.cat1}</div>
-              </div>
-              <div className={`tx-amt ${t.type==="수입"?"text-green":t.type==="지출"?"text-red":""}`}>
-                {t.type==="수입"?"+":"-"}{fmt(t.amount)}
-              </div>
-            </div>
-          )):<div className="empty">거래내역이 없습니다.</div>}
-        </div>
-
-        {/* Budget summary */}
-        <div className="card">
-          <div className="card-title"><h3>이번달 예산 현황</h3></div>
-          {budgetAnalysis.map(b=>(
+          <div className="card-title"><h3>예산 초과 TOP 3</h3></div>
+          {advanced.topBudget.map(b=>(
             <div key={b.cat1} className="budget-item">
               <div className="budget-header">
                 <span className="budget-name">{b.cat1}</span>
                 <div className="row" style={{gap:8}}>
                   <span className="budget-nums">{fmt(b.spent)} / {fmt(b.budget)}원</span>
-                  <span className={`badge ${b.status==="초과"?"badge-red":b.status==="주의"?"badge-amber":"badge-green"}`}>{b.status}</span>
+                  <span className={`badge ${b.status==="초과"?"badge-red":b.status==="주의"?"badge-amber":"badge-green"}`}>{fmtPct(b.rate)}</span>
                 </div>
               </div>
               <div className="progress">
@@ -1029,27 +1122,40 @@ function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, fi
             </div>
           ))}
         </div>
+
+        <div className="card">
+          <div className="card-title"><h3>최근 거래</h3></div>
+          {recentTx.length?recentTx.slice(0,6).map(t=>(
+            <div key={t.id} className="tx-item">
+              <div className="tx-icon" style={{background:t.type==="수입"?"var(--green-bg)":t.type==="지출"?"var(--red-bg)":"var(--surface2)"}}>
+                {t.type==="수입"?"💰":t.type==="지출"?"💳":"🔄"}
+              </div>
+              <div className="tx-meta">
+                <div className="tx-name">{t.content||t.cat2}</div>
+                <div className="tx-date">{t.date} · {t.cat1}</div>
+              </div>
+              <div className={`tx-amt ${t.type==="수입"?"text-green":t.type==="지출"?"text-red":""}`}>{t.type==="수입"?"+":"-"}{fmt(t.amount)}</div>
+            </div>
+          )):<div className="empty">거래내역이 없습니다.</div>}
+        </div>
       </div>
 
-      {/* Status cards */}
       <div className="g2">
         <div className="card">
           <h3>현재 상태</h3>
           <div className="stat-row"><span className="stat-label">총 자산</span><span className="stat-value">{fmt(dashboard.totalAssets)}원</span></div>
           <div className="stat-row"><span className="stat-label">총 부채</span><span className="stat-value text-red">{fmt(dashboard.totalLiabs)}원</span></div>
+          <div className="stat-row"><span className="stat-label">부채비율</span><span className="stat-value">{fmtPct(advanced.debtRatio)}</span></div>
           <div className="stat-row"><span className="stat-label">유동자산</span><span className="stat-value">{fmt(dashboardDetail.liquidAssets)}원</span></div>
-          <div className="stat-row"><span className="stat-label">이번달 수입</span><span className="stat-value text-green">{fmt(dashboard.income)}원</span></div>
-          <div className="stat-row"><span className="stat-label">이번달 지출</span><span className="stat-value text-red">{fmt(dashboard.expense)}원</span></div>
           <div className="stat-row"><span className="stat-label">입력 점검 필요</span><span className="stat-value">{dashboardDetail.totalValidationIssues}건</span></div>
         </div>
         <div className="card">
-          <h3>목표 전망 (시뮬레이션)</h3>
+          <h3>목표 전망</h3>
           <div className="stat-row"><span className="stat-label">은퇴 시뮬 최종자산</span><span className="stat-value">{fmt(dashboardDetail.retirementRow?.total||0)}원</span></div>
+          <div className="stat-row"><span className="stat-label">목표금액</span><span className="stat-value">{fmt(data.settings.retirementTargetAmount||0)}원</span></div>
           <div className="stat-row"><span className="stat-label">ISA 절세 예상</span><span className="stat-value">{fmt(dashboardDetail.retirementRow?.isaTaxSaved||0)}원</span></div>
           <div className="stat-row"><span className="stat-label">연금세액공제 누적</span><span className="stat-value">{fmt(dashboardDetail.retirementRow?.pensionCreditAcc||0)}원</span></div>
-          <div className="stat-row"><span className="stat-label">현재 나이</span><span className="stat-value">{data.settings.currentAge}세</span></div>
           <div className="stat-row"><span className="stat-label">은퇴까지 남은 기간</span><span className="stat-value">{Math.max(n(data.settings.retireAge)-n(data.settings.currentAge),0)}년</span></div>
-          <div className="stat-row"><span className="stat-label">라이프이벤트 준비율</span><span className="stat-value">{fmtPct(dashboardChartData.totalEventTarget>0?dashboardChartData.totalEventPrepared/dashboardChartData.totalEventTarget*100:0)}</span></div>
         </div>
       </div>
     </div>
