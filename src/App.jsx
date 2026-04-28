@@ -1,6 +1,14 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import {
+  AreaChart, Area,
+  BarChart, Bar,
+  ComposedChart, Line,
+  PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer,
+} from "recharts";
 
 const STORAGE_KEY = "asset-app-final-complete-v1";
 const LEGACY_STORAGE_KEYS = ["asset-app-sidebar-premium-season-fixed", "asset-app-sidebar-premium-season-stock-server", "asset-app-excel-parity-v1"];
@@ -323,120 +331,74 @@ function areaPath(points, baseY) {
 
 function MonthlyTrendChart({ data }) {
   const rows = (data || []).slice(-12);
-  if (!rows.length) return <div className="empty">월별 추이 데이터가 없습니다.</div>;
-
-  const width = 760;
-  const height = 280;
-  const margin = { top: 18, right: 18, bottom: 34, left: 54 };
-  const innerW = width - margin.left - margin.right;
-  const innerH = height - margin.top - margin.bottom;
-  const maxVal = Math.max(...rows.flatMap((r) => [n(r.income), n(r.expense), Math.abs(n(r.net))]), 1);
-  const minNet = Math.min(...rows.map((r) => n(r.net)), 0);
-  const maxY = Math.max(maxVal, 1);
-  const minY = Math.min(minNet, 0);
-  const range = maxY - minY || 1;
-  const y = (v) => margin.top + ((maxY - v) / range) * innerH;
-  const step = innerW / Math.max(rows.length, 1);
-  const linePoints = rows.map((r, i) => ({
-    x: margin.left + step * i + step / 2,
-    y: y(n(r.net)),
+  if (!rows.length) return <div className="empty">거래내역을 입력하면 차트가 표시됩니다.</div>;
+  const chartData = rows.map(r => ({
+    month: String(r.month).slice(5),
+    수입: r.income,
+    지출: r.expense,
+    순수입: r.net,
   }));
-  const incomeBars = rows.map((r, i) => {
-    const bx = margin.left + step * i + step * 0.12;
-    const bw = step * 0.28;
-    const v = n(r.income);
-    const by = y(v);
-    return { x: bx, y: by, w: bw, h: margin.top + innerH - by };
-  });
-  const expenseBars = rows.map((r, i) => {
-    const bx = margin.left + step * i + step * 0.46;
-    const bw = step * 0.28;
-    const v = n(r.expense);
-    const by = y(v);
-    return { x: bx, y: by, w: bw, h: margin.top + innerH - by };
-  });
-  const gridValues = Array.from({ length: 5 }).map((_, i) => minY + (range * i) / 4);
-
   return (
-    <div>
-      <div className="chart-legend">
-        <span><i className="legend-dot" style={{ background: "#2563eb" }} />수입</span>
-        <span><i className="legend-dot" style={{ background: "#f59e0b" }} />지출</span>
-        <span><i className="legend-dot" style={{ background: "#111827" }} />순수입</span>
-      </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="chart-svg" role="img" aria-label="월별 추이 차트">
-        <defs>
-          <linearGradient id="netAreaGrad" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#1d4ed8" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="#1d4ed8" stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
-        {gridValues.map((gv, idx) => (
-          <g key={idx}>
-            <line x1={margin.left} x2={width - margin.right} y1={y(gv)} y2={y(gv)} stroke="#e5e7eb" strokeDasharray="4 4" />
-            <text x={margin.left - 8} y={y(gv) + 4} textAnchor="end" fontSize="11" fill="#667085">{fmt(gv)}</text>
-          </g>
-        ))}
-        <line x1={margin.left} x2={width - margin.right} y1={y(0)} y2={y(0)} stroke="#cbd5e1" />
-        {incomeBars.map((b, i) => <rect key={`i-${i}`} x={b.x} y={b.y} width={b.w} height={b.h} rx="6" fill="#2563eb" opacity="0.75" />)}
-        {expenseBars.map((b, i) => <rect key={`e-${i}`} x={b.x} y={b.y} width={b.w} height={b.h} rx="6" fill="#f59e0b" opacity="0.75" />)}
-        <path d={areaPath(linePoints, y(0))} fill="url(#netAreaGrad)" />
-        <path d={polylinePath(linePoints)} fill="none" stroke="#111827" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-        {linePoints.map((p, i) => <circle key={`p-${i}`} cx={p.x} cy={p.y} r="4" fill="#111827" />)}
-        {rows.map((r, i) => (
-          <text key={r.month} x={margin.left + step * i + step / 2} y={height - 10} textAnchor="middle" fontSize="11" fill="#667085">
-            {String(r.month).slice(2)}
-          </text>
-        ))}
-      </svg>
-    </div>
+    <ResponsiveContainer width="100%" height={240}>
+      <ComposedChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+        <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#5a6278" }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 10, fill: "#5a6278" }} tickFormatter={v => `${Math.round(v/10000)}만`} axisLine={false} tickLine={false} />
+        <Tooltip content={<ChartTooltip />} />
+        <Legend wrapperStyle={{ fontSize: 11, color: "#9ba3b5", paddingTop: 8 }} />
+        <Bar dataKey="수입" fill="rgba(108,125,255,0.75)" radius={[3,3,0,0]} />
+        <Bar dataKey="지출" fill="rgba(255,92,114,0.75)" radius={[3,3,0,0]} />
+        <Line type="monotone" dataKey="순수입" stroke="#34d58a" strokeWidth={2.5}
+          dot={{ r: 3, fill: "#34d58a", strokeWidth: 0 }} activeDot={{ r: 5 }} />
+      </ComposedChart>
+    </ResponsiveContainer>
   );
 }
 
 function AssetDonutChart({ segments }) {
-  const rows = (segments || []).filter((s) => n(s.value) > 0);
+  const rows = (segments || []).filter(s => n(s.value) > 0);
   if (!rows.length) return <div className="empty">자산 구성 데이터가 없습니다.</div>;
-  const total = rows.reduce((sum, r) => sum + n(r.value), 0);
-  const colors = ["#2563eb", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#64748b"];
-  let angle = 0;
-  const slices = rows.map((r, idx) => {
-    const value = n(r.value);
-    const sweep = (value / total) * 360;
-    const start = angle;
-    const end = angle + sweep;
-    angle = end;
-    return { ...r, color: colors[idx % colors.length], start, end, pct: value / total * 100 };
-  });
+  const total = rows.reduce((s, r) => s + n(r.value), 0);
+  const pieData = rows.map(r => ({ name: r.label, value: n(r.value) }));
+
+  const RADIAN = Math.PI / 180;
+  const renderLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+    if (percent < 0.06) return null;
+    const r = innerRadius + (outerRadius - innerRadius) * 0.55;
+    return (
+      <text x={cx + r * Math.cos(-midAngle * RADIAN)} y={cy + r * Math.sin(-midAngle * RADIAN)}
+        fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={10} fontWeight={600}>
+        {`${(percent * 100).toFixed(0)}%`}
+      </text>
+    );
+  };
 
   return (
-    <div className="donut-wrap">
-      <svg viewBox="0 0 280 220" className="chart-svg" role="img" aria-label="자산 구성 도넛차트">
-        <g transform="translate(0,8)">
-          {slices.map((s) => (
-            <path
-              key={s.label}
-              d={arcPath(110, 102, 72, s.start, s.end)}
-              fill="none"
-              stroke={s.color}
-              strokeWidth="30"
-              strokeLinecap="butt"
-            />
-          ))}
-          <circle cx="110" cy="102" r="48" fill="#fff" />
-          <text x="110" y="96" textAnchor="middle" fontSize="12" fill="#667085">총 자산</text>
-          <text x="110" y="118" textAnchor="middle" fontSize="18" fontWeight="800" fill="#111827">{fmt(total)}</text>
-        </g>
-      </svg>
-      <div>
-        {slices.map((s) => (
-          <div key={s.label} className="row-between small" style={{ marginBottom: 8, gap: 16 }}>
-            <span className="row" style={{ gap: 8 }}>
-              <i className="legend-dot" style={{ background: s.color }} />
-              <span>{s.label}</span>
-            </span>
-            <span className="mono">{fmt(s.value)}원 ({fmtPct(s.pct)})</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <PieChart width={180} height={180}>
+        <Pie data={pieData} cx={85} cy={85}
+          innerRadius={48} outerRadius={82}
+          paddingAngle={2} dataKey="value"
+          labelLine={false} label={renderLabel}>
+          {pieData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+        </Pie>
+        <Tooltip content={<ChartTooltip />} />
+      </PieChart>
+      <div style={{ flex: 1 }}>
+        {rows.map((s, i) => (
+          <div key={s.label} style={{ marginBottom: 8 }}>
+            <div className="row-between small" style={{ gap: 8 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: CHART_COLORS[i % CHART_COLORS.length], flexShrink: 0, display: "inline-block" }} />
+                {s.label}
+              </span>
+              <span className="mono" style={{ fontSize: 11 }}>{fmtPct(n(s.value) / total * 100)}</span>
+            </div>
           </div>
         ))}
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 11, color: "#5a6278" }}>
+          합계 {fmt(total)}원
+        </div>
       </div>
     </div>
   );
@@ -1572,7 +1534,7 @@ function App() {
         {tab === "assets" && <AssetsTab data={data} update={update} />}
         {tab === "portfolio" && <PortfolioTab data={data} update={update} accountOptions={accountOptions} />}
         {tab === "budget" && <BudgetTab data={data} update={update} budgetAnalysis={budgetAnalysis} />}
-        {tab === "analysis" && <AnalysisTab data={data} financialAnalysis={financialAnalysis} />}
+        {tab === "analysis" && <AnalysisTab data={data} financialAnalysis={financialAnalysis} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} />}
         {tab === "tax" && <TaxTab data={data} taxAnalysis={taxAnalysis} />}
         {tab === "planning" && <PlanningTab data={data} update={update} eventAnalysis={eventAnalysis} />}
         {tab === "simulation" && <SimulationTab data={data} futureSim={futureSim} />}
@@ -2391,48 +2353,424 @@ function BudgetTab({ data, update, budgetAnalysis }) {
   );
 }
 
-function AnalysisTab({ data, financialAnalysis }) {
+// ─── Recharts 공용 스타일 헬퍼 ────────────────────────────────────────────────
+const CHART_COLORS = ["#6c7dff", "#34d58a", "#f0b429", "#ff5c72", "#60c5e8", "#a78bfa", "#f97316", "#14b8a6"];
+
+function ChartTooltip({ active, payload, label, unit = "원" }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: "var(--surface2, #1e2129)",
+      border: "1px solid var(--border2, #353840)",
+      borderRadius: 10, padding: "10px 14px", fontSize: 12,
+    }}>
+      <div style={{ color: "var(--text3, #5a6278)", marginBottom: 6 }}>{label}</div>
+      {payload.map((p, i) => (
+        <div key={i} style={{ color: p.color, fontVariantNumeric: "tabular-nums", marginBottom: 2 }}>
+          {p.name}: {typeof p.value === "number" ? fmt(p.value) : p.value}{unit}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ChartTooltipPct({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: "var(--surface2, #1e2129)",
+      border: "1px solid var(--border2, #353840)",
+      borderRadius: 10, padding: "10px 14px", fontSize: 12,
+    }}>
+      <div style={{ color: "var(--text3, #5a6278)", marginBottom: 6 }}>{label}</div>
+      {payload.map((p, i) => (
+        <div key={i} style={{ color: p.color, fontVariantNumeric: "tabular-nums" }}>
+          {p.name}: {Number(p.value).toFixed(1)}%
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── 저축률 추이 차트 (AreaChart) ────────────────────────────────────────────
+function SavingsRateChart({ monthlySeries }) {
+  const data = monthlySeries.slice(-12).map(r => ({
+    month: r.month.slice(5),          // "2025-04" → "04"
+    저축률: r.income > 0 ? Math.round(r.net / r.income * 1000) / 10 : 0,
+    순수입: r.net,
+  }));
+  if (!data.length) return <div className="empty">거래내역을 입력하면 표시됩니다.</div>;
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+        <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#5a6278" }} axisLine={false} tickLine={false} />
+        <YAxis
+          yAxisId="left"
+          tick={{ fontSize: 10, fill: "#5a6278" }}
+          tickFormatter={v => `${v}%`}
+          domain={["auto", "auto"]}
+          axisLine={false} tickLine={false}
+        />
+        <YAxis
+          yAxisId="right"
+          orientation="right"
+          tick={{ fontSize: 10, fill: "#5a6278" }}
+          tickFormatter={v => `${Math.round(v / 10000)}만`}
+          axisLine={false} tickLine={false}
+        />
+        <Tooltip content={<ChartTooltipPct />} />
+        <Legend wrapperStyle={{ fontSize: 11, color: "#9ba3b5", paddingTop: 8 }} />
+        <Area
+          yAxisId="left"
+          type="monotone"
+          dataKey="저축률"
+          stroke="#6c7dff"
+          fill="rgba(108,125,255,0.15)"
+          strokeWidth={2.5}
+          dot={{ r: 3, fill: "#6c7dff", strokeWidth: 0 }}
+          activeDot={{ r: 5 }}
+        />
+        <Bar
+          yAxisId="right"
+          dataKey="순수입"
+          fill="rgba(52,213,138,0.25)"
+          stroke="#34d58a"
+          strokeWidth={1}
+          radius={[3, 3, 0, 0]}
+          name="순수입(원)"
+        />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ─── 카테고리별 지출 파이 차트 ───────────────────────────────────────────────
+function ExpensePieChart({ data, budgetAnalysis }) {
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const catMap = {};
+  data.transactions
+    .filter(t => t.date?.slice(0, 7) === thisMonth && t.type === "지출")
+    .forEach(t => { catMap[t.cat1 || "기타"] = (catMap[t.cat1 || "기타"] || 0) + n(t.amount); });
+  const pieData = Object.entries(catMap)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+  const total = pieData.reduce((s, d) => s + d.value, 0);
+
+  if (!pieData.length) return <div className="empty">이번 달 지출 데이터가 없습니다.</div>;
+
+  const RADIAN = Math.PI / 180;
+  const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+    if (percent < 0.05) return null;
+    const r = innerRadius + (outerRadius - innerRadius) * 0.55;
+    return (
+      <text
+        x={cx + r * Math.cos(-midAngle * RADIAN)}
+        y={cy + r * Math.sin(-midAngle * RADIAN)}
+        fill="#fff" textAnchor="middle" dominantBaseline="central"
+        fontSize={10} fontWeight={600}
+      >
+        {`${(percent * 100).toFixed(0)}%`}
+      </text>
+    );
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+      <PieChart width={200} height={200}>
+        <Pie
+          data={pieData} cx={95} cy={95}
+          innerRadius={52} outerRadius={90}
+          paddingAngle={2} dataKey="value"
+          labelLine={false} label={renderCustomLabel}
+        >
+          {pieData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+        </Pie>
+        <Tooltip content={<ChartTooltip unit="원" />} />
+      </PieChart>
+      {/* 범례 + 금액 */}
+      <div style={{ flex: 1, maxHeight: 200, overflowY: "auto" }}>
+        {pieData.map((d, i) => {
+          const pct = total > 0 ? d.value / total * 100 : 0;
+          const budget = budgetAnalysis.find(b => b.cat1 === d.name);
+          return (
+            <div key={d.name} style={{ marginBottom: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: CHART_COLORS[i % CHART_COLORS.length], flexShrink: 0, display: "inline-block" }} />
+                  {d.name}
+                </span>
+                <span style={{ fontSize: 11, color: "#9ba3b5", fontVariantNumeric: "tabular-nums" }}>
+                  {fmt(d.value)}원 ({pct.toFixed(1)}%)
+                </span>
+              </div>
+              {budget && (
+                <div style={{ height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 99, overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%",
+                    width: `${clamp(budget.rate, 0, 100)}%`,
+                    background: budget.status === "초과" ? "#ff5c72" : budget.status === "주의" ? "#f0b429" : CHART_COLORS[i % CHART_COLORS.length],
+                    borderRadius: 99,
+                  }} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── 월별 수입·지출 복합 바+라인 차트 ───────────────────────────────────────
+function MonthlyComposedChart({ monthlySeries }) {
+  const data = monthlySeries.slice(-12).map(r => ({
+    month: r.month.slice(5),
+    수입: r.income,
+    지출: r.expense,
+    순수입: r.net,
+  }));
+  if (!data.length) return <div className="empty">거래내역을 입력하면 표시됩니다.</div>;
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+        <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#5a6278" }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 10, fill: "#5a6278" }} tickFormatter={v => `${Math.round(v / 10000)}만`} axisLine={false} tickLine={false} />
+        <Tooltip content={<ChartTooltip />} />
+        <Legend wrapperStyle={{ fontSize: 11, color: "#9ba3b5", paddingTop: 8 }} />
+        <Bar dataKey="수입" fill="rgba(108,125,255,0.7)" radius={[3, 3, 0, 0]} />
+        <Bar dataKey="지출" fill="rgba(255,92,114,0.7)" radius={[3, 3, 0, 0]} />
+        <Line
+          type="monotone" dataKey="순수입"
+          stroke="#34d58a" strokeWidth={2.5}
+          dot={{ r: 3, fill: "#34d58a", strokeWidth: 0 }}
+          activeDot={{ r: 5 }}
+        />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ─── 포트폴리오 수익률 바 차트 ───────────────────────────────────────────────
+function PortfolioReturnChart({ rows }) {
+  const data = rows
+    .filter(r => n(r.invested) > 0)
+    .map(r => ({
+      name: r.name.length > 8 ? r.name.slice(0, 8) + "…" : r.name,
+      수익률: Math.round((r.value - r.invested) / r.invested * 1000) / 10,
+      평가금액: r.value,
+    }))
+    .sort((a, b) => b.수익률 - a.수익률);
+  if (!data.length) return <div className="empty">보유 종목이 없습니다.</div>;
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(data.length * 36 + 40, 120)}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 40, bottom: 0, left: 8 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+        <XAxis type="number" tick={{ fontSize: 10, fill: "#5a6278" }} tickFormatter={v => `${v}%`} axisLine={false} tickLine={false} />
+        <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: "#9ba3b5" }} width={90} axisLine={false} tickLine={false} />
+        <Tooltip content={<ChartTooltipPct />} />
+        <Bar dataKey="수익률" radius={[0, 4, 4, 0]}>
+          {data.map((d, i) => (
+            <Cell key={i} fill={d.수익률 >= 0 ? "#34d58a" : "#ff5c72"} opacity={0.85} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ─── AnalysisTab (Recharts 버전) ─────────────────────────────────────────────
+function AnalysisTab({ data, financialAnalysis, monthlySeries, budgetAnalysis }) {
   return (
     <div className="grid">
-      <div className="card">
-        <h3>자산별 위험도 & 최대손실 시뮬레이션</h3>
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>자산</th><th className="right">평가금액</th><th className="right">비중</th><th className="right">연간σ</th><th className="right">-1σ 손실</th><th className="right">-2σ 손실</th><th>상태</th></tr></thead>
-            <tbody>
-              {financialAnalysis.rows.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.name}</td><td className="right mono">{fmt(r.value)}</td><td className="right mono">{fmtPct(r.weight * 100)}</td><td className="right mono">{fmtPct(r.sigma * 100)}</td><td className="right mono">{fmt(r.loss1)}</td><td className="right mono">{fmt(r.loss2)}</td>
-                  <td>{r.state === "정상" ? <span className="chip good">정상</span> : r.state === "주의" ? <span className="chip warn">주의</span> : <span className="chip bad">쏠림 경고</span>}</td>
-                </tr>
-              ))}
-              {!financialAnalysis.rows.length && <tr><td colSpan={7} className="empty">포트폴리오 데이터가 없습니다.</td></tr>}
-            </tbody>
-          </table>
+
+      {/* 1행: 월별 수입·지출 + 저축률 */}
+      <div className="grid grid-2">
+        <div className="card">
+          <h3>월별 수입 · 지출 추이</h3>
+          <MonthlyComposedChart monthlySeries={monthlySeries} />
+        </div>
+        <div className="card">
+          <h3>월별 저축률 추이</h3>
+          <div className="small muted" style={{ marginBottom: 8 }}>
+            저축률 = 순수입 / 수입 × 100. 오른쪽 축은 순수입 절대값(막대).
+          </div>
+          <SavingsRateChart monthlySeries={monthlySeries} />
         </div>
       </div>
 
+      {/* 2행: 이번달 카테고리 지출 파이 + 포트폴리오 수익률 */}
       <div className="grid grid-2">
         <div className="card">
-          <h3>자산군 비중</h3>
-          {Object.entries(financialAnalysis.byClass).map(([k, v]) => {
-            const rate = financialAnalysis.total > 0 ? v / financialAnalysis.total * 100 : 0;
-            return (
-              <div key={k} style={{ marginBottom: 12 }}>
-                <div className="row-between"><strong>{k}</strong><span className="mono">{fmtPct(rate)}</span></div>
-                <div className="progress"><div className="bar" style={{ width: `${clamp(rate, 0, 100)}%` }} /></div>
-              </div>
-            );
-          })}
+          <h3>이번달 카테고리별 지출</h3>
+          <ExpensePieChart data={data} budgetAnalysis={budgetAnalysis} />
         </div>
         <div className="card">
-          <h3>요약</h3>
-          <div className="small">총 평가금액: <strong className="mono">{fmt(financialAnalysis.total)}</strong> 원</div>
-          <div className="small">종목 수: <strong>{data.portfolio.length}</strong></div>
-          <div className="small">최대 비중 종목: <strong>{financialAnalysis.rows.slice().sort((a,b)=>b.value-a.value)[0]?.name || "-"}</strong></div>
-          <div className="small">주의/경고 종목 수: <strong>{financialAnalysis.rows.filter((r) => r.state !== "정상").length}</strong></div>
+          <h3>종목별 수익률</h3>
+          <PortfolioReturnChart rows={financialAnalysis.rows} />
         </div>
       </div>
+
+      {/* 3행: 월별 수지 표 + 리스크 분석 표 */}
+      <div className="grid grid-2">
+        <div className="card">
+          <h3>월별 수지 요약 (최근 12개월)</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>월</th>
+                  <th className="right">수입</th>
+                  <th className="right">지출</th>
+                  <th className="right">순수입</th>
+                  <th className="right">저축률</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlySeries.slice(-12).reverse().map(r => {
+                  const rate = r.income > 0 ? r.net / r.income * 100 : 0;
+                  return (
+                    <tr key={r.month}>
+                      <td>{r.month}</td>
+                      <td className="right mono" style={{ color: "#34d58a" }}>{fmt(r.income)}</td>
+                      <td className="right mono" style={{ color: "#ff5c72" }}>{fmt(r.expense)}</td>
+                      <td className="right mono" style={{ color: r.net >= 0 ? "#34d58a" : "#ff5c72" }}>{fmt(r.net)}</td>
+                      <td className="right mono" style={{ color: rate >= 20 ? "#34d58a" : rate >= 0 ? "#f0b429" : "#ff5c72" }}>
+                        {fmtPct(rate)}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!monthlySeries.length && <tr><td colSpan={5} className="empty">데이터 없음</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>자산별 위험도 & 최대손실 시뮬레이션</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>자산</th>
+                  <th className="right">평가금액</th>
+                  <th className="right">비중</th>
+                  <th className="right">-1σ 손실</th>
+                  <th className="right">-2σ 손실</th>
+                  <th>상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                {financialAnalysis.rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.name}</td>
+                    <td className="right mono">{fmt(r.value)}</td>
+                    <td className="right mono">{fmtPct(r.weight * 100)}</td>
+                    <td className="right mono" style={{ color: "#ff5c72" }}>{fmt(r.loss1)}</td>
+                    <td className="right mono" style={{ color: "#ff5c72" }}>{fmt(r.loss2 ?? r.loss1 * 2)}</td>
+                    <td>
+                      {r.state === "정상"
+                        ? <span className="chip good">정상</span>
+                        : r.state === "주의"
+                          ? <span className="chip warn">주의</span>
+                          : <span className="chip bad">쏠림 경고</span>}
+                    </td>
+                  </tr>
+                ))}
+                {!financialAnalysis.rows.length && <tr><td colSpan={6} className="empty">포트폴리오 데이터가 없습니다.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* 4행: 자산군 비중 바 + 요약 */}
+      <div className="grid grid-2">
+        <div className="card">
+          <h3>투자 자산군 비중</h3>
+          {Object.entries(financialAnalysis.byClass).length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(Object.keys(financialAnalysis.byClass).length * 40 + 40, 120)}>
+              <BarChart
+                data={Object.entries(financialAnalysis.byClass).map(([k, v]) => ({ name: k, 평가금액: v }))}
+                layout="vertical"
+                margin={{ top: 4, right: 16, bottom: 0, left: 8 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: "#5a6278" }} tickFormatter={v => `${Math.round(v / 10000)}만`} axisLine={false} tickLine={false} />
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: "#9ba3b5" }} width={72} axisLine={false} tickLine={false} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="평가금액" radius={[0, 4, 4, 0]}>
+                  {Object.keys(financialAnalysis.byClass).map((_, i) => (
+                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={0.85} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="empty">포트폴리오를 입력하세요.</div>
+          )}
+        </div>
+
+        <div className="card">
+          <h3>포트폴리오 요약</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 4 }}>
+            <div className="row-between">
+              <span className="muted">총 평가금액</span>
+              <strong className="mono">{fmt(financialAnalysis.total)} 원</strong>
+            </div>
+            <div className="row-between">
+              <span className="muted">총 매입원금</span>
+              <strong className="mono">{fmt(financialAnalysis.rows.reduce((s, r) => s + r.invested, 0))} 원</strong>
+            </div>
+            <div className="row-between">
+              <span className="muted">총 평가손익</span>
+              <strong className="mono" style={{ color: financialAnalysis.total - financialAnalysis.rows.reduce((s, r) => s + r.invested, 0) >= 0 ? "#34d58a" : "#ff5c72" }}>
+                {fmt(financialAnalysis.total - financialAnalysis.rows.reduce((s, r) => s + r.invested, 0))} 원
+              </strong>
+            </div>
+            <div className="row-between">
+              <span className="muted">종목 수</span>
+              <strong>{data.portfolio.length}개</strong>
+            </div>
+            <div className="row-between">
+              <span className="muted">최대 비중 종목</span>
+              <strong>{financialAnalysis.rows.slice().sort((a, b) => b.value - a.value)[0]?.name || "-"}</strong>
+            </div>
+            <div className="row-between">
+              <span className="muted">주의·경고 종목</span>
+              <strong style={{ color: financialAnalysis.rows.filter(r => r.state !== "정상").length > 0 ? "#f0b429" : "#34d58a" }}>
+                {financialAnalysis.rows.filter(r => r.state !== "정상").length}개
+              </strong>
+            </div>
+            {monthlySeries.length > 0 && (() => {
+              const last6 = monthlySeries.slice(-6);
+              const avgIncome  = last6.reduce((s, r) => s + r.income, 0) / last6.length;
+              const avgExpense = last6.reduce((s, r) => s + r.expense, 0) / last6.length;
+              const avgRate    = avgIncome > 0 ? (avgIncome - avgExpense) / avgIncome * 100 : 0;
+              return (
+                <>
+                  <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "4px 0" }} />
+                  <div className="row-between">
+                    <span className="muted">6개월 평균 수입</span>
+                    <strong className="mono" style={{ color: "#34d58a" }}>{fmt(avgIncome)} 원</strong>
+                  </div>
+                  <div className="row-between">
+                    <span className="muted">6개월 평균 지출</span>
+                    <strong className="mono" style={{ color: "#ff5c72" }}>{fmt(avgExpense)} 원</strong>
+                  </div>
+                  <div className="row-between">
+                    <span className="muted">6개월 평균 저축률</span>
+                    <strong className="mono" style={{ color: avgRate >= 20 ? "#34d58a" : "#f0b429" }}>{fmtPct(avgRate)}</strong>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }
