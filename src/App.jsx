@@ -2813,26 +2813,45 @@ function PlanningTab({ data, update, eventAnalysis }) {
 function SimulationTab({ data, futureSim }) {
   const [scenario,setScenario]=useState("base");
   const s=data.settings;
-  const baseLast=futureSim[futureSim.length-1];
 
   const advanced=useMemo(()=>{
     const currentAge=n(s.currentAge), retireAge=n(s.retireAge), compareAge=n(s.compareRetireAge||60), lifeAge=n(s.lifeExpectancy||100);
     const inflation=n(s.annualInflation||0.025);
-    const postReturn=n(s.postRetirementReturn||0.07);
-    const monthlyExpense0=n(s.retirementMonthlyExpense||5000000);
+    const postReturnBase=n(s.postRetirementReturn||0.07);
+    const monthlyExpenseBase=n(s.retirementMonthlyExpense||5000000);
     const additionalPensionEnabled=!!s.additionalPensionEnabled;
     const pension0=additionalPensionEnabled?n(s.additionalPensionMonthly||0):0;
     const pensionAnnualInc=additionalPensionEnabled?n(s.additionalPensionAnnualIncrease||0):0;
-    const additionalPensionName=s.additionalPensionName||"추가 연금";
     const travelBucket=n(s.retirementTravelBucket||0);
     const travelYears=Math.max(n(s.retirementTravelYears||5),1);
     const target=n(s.retirementTargetAmount||0);
 
+    const rawTargets=getInvestmentTargets(s).filter(t=>n(t.targetWeight)>0);
+    const fallbackTargets=[
+      {id:"target-nasdaq",name:"나스닥",expectedReturn:n(s.annualReturnNasdaq||0.12),targetWeight:n(s.targetNasdaqWeight)+n(s.targetNasdaqHWeight)},
+      {id:"target-dividend",name:"배당",expectedReturn:n(s.annualReturnDividend||0.08),targetWeight:n(s.targetDividendWeight)}
+    ].filter(t=>n(t.targetWeight)>0);
+    const targetRows=(rawTargets.length?rawTargets:fallbackTargets).map(t=>({
+      id:t.id||t.name||uid(),
+      name:t.name||"전략",
+      expectedReturn:n(t.expectedReturn),
+      targetWeight:n(t.targetWeight)
+    }));
+    const totalWeight=targetRows.reduce((sum,t)=>sum+n(t.targetWeight),0)||1;
+    const normalizedTargets=targetRows.map(t=>({...t,normalizedWeight:n(t.targetWeight)/totalWeight}));
+    const weightedReturn=normalizedTargets.reduce((sum,t)=>sum+n(t.expectedReturn)*n(t.normalizedWeight),0);
+
+    const scenarioReturnAdjust=scenario==="stress"?-0.03:scenario==="optimistic"?0.02:0;
+    const scenarioExpenseMultiplier=scenario==="stress"?1.15:scenario==="optimistic"?0.95:1;
+    const postReturn=Math.max(postReturnBase+scenarioReturnAdjust,0);
+    const monthlyExpense0=monthlyExpenseBase*scenarioExpenseMultiplier;
+    const scenarioLabel=scenario==="stress"?"보수":scenario==="optimistic"?"낙관":"기본";
+
     const buildAccumulation=(targetRetireAge)=>{
       const years=Math.max(targetRetireAge-currentAge,0);
-      let nasdaq=0,dividend=0,isaBalance=0,isaPrincipalInCycle=0,realizedIsaTaxSavedAcc=0,pensionCreditAcc=0,total=0;
-      const wN=n(s.targetNasdaqWeight)+n(s.targetNasdaqHWeight),wD=n(s.targetDividendWeight);
-      const weightedReturn=(n(s.annualReturnNasdaq)*(wN||0))+(n(s.annualReturnDividend)*(wD||0));
+      const buckets={};
+      normalizedTargets.forEach(t=>{buckets[t.name]=0;});
+      let isaBalance=0,isaPrincipalInCycle=0,realizedIsaTaxSavedAcc=0,pensionCreditAcc=0,total=0;
       const isaAnnualLimit=Math.max(n(s.isaAnnualLimit),0),isaCycleYears=Math.max(n(s.isaCycleYears),1);
       const isaTaxFreeLimit=Math.max(n(s.isaTaxFreeLimit),0),isaTaxRate=Math.max(n(s.isaTaxRate),0);
       const normalTaxRate=Math.max(n(s.taxableDividendTaxRate),0);
@@ -2845,29 +2864,48 @@ function SimulationTab({ data, futureSim }) {
         if(year<=n(s.stage1Years))monthlyInvest=n(s.monthlyInvestStage1);
         else if(year<=n(s.stage2Years))monthlyInvest=n(s.monthlyInvestStage2);
         const annualInvest=monthlyInvest*12;
-        nasdaq=(nasdaq+annualInvest*wN)*(1+n(s.annualReturnNasdaq));
-        dividend=(dividend+annualInvest*wD)*(1+n(s.annualReturnDividend));
-        total=nasdaq+dividend;
+        normalizedTargets.forEach(t=>{
+          const r=Math.max(n(t.expectedReturn)+scenarioReturnAdjust, -0.95);
+          buckets[t.name]=(n(buckets[t.name])+annualInvest*n(t.normalizedWeight))*(1+r);
+        });
+        total=Object.values(buckets).reduce((sum,v)=>sum+n(v),0);
         const annualIsaContribution=Math.min(annualInvest,isaAnnualLimit);
         const yearInCycle=((year-1)%isaCycleYears)+1;
         if(yearInCycle===1){isaBalance=0;isaPrincipalInCycle=0;}
         isaPrincipalInCycle+=annualIsaContribution;
-        isaBalance=(isaBalance+annualIsaContribution)*(1+weightedReturn);
+        isaBalance=(isaBalance+annualIsaContribution)*(1+Math.max(weightedReturn+scenarioReturnAdjust,-0.95));
         const isaProfitInCycle=Math.max(isaBalance-isaPrincipalInCycle,0);
         const normalTaxIfTaxable=isaProfitInCycle*normalTaxRate;
         const isaTax=isaProfitInCycle<=isaTaxFreeLimit?0:(isaProfitInCycle-isaTaxFreeLimit)*isaTaxRate;
         const currentCycleTaxSaved=Math.max(normalTaxIfTaxable-isaTax,0);
         if(yearInCycle===isaCycleYears) realizedIsaTaxSavedAcc+=currentCycleTaxSaved;
         pensionCreditAcc+=Math.min(annualPensionContribution,pensionAnnualTaxCreditLimit)*pensionTaxCreditRate;
-        rows.push({year,age:currentAge+year,monthlyInvest,total,nasdaq,dividend,isaTaxSaved:realizedIsaTaxSavedAcc+(yearInCycle===isaCycleYears?0:currentCycleTaxSaved),pensionCreditAcc});
+        rows.push({
+          year,
+          yearLabel:`${new Date().getFullYear()+year-1}`,
+          age:currentAge+year,
+          monthlyInvest,
+          annualInvest,
+          total,
+          buckets:{...buckets},
+          bucketValues:normalizedTargets.map(t=>({name:t.name,value:n(buckets[t.name]),weight:n(t.normalizedWeight),returnRate:n(t.expectedReturn)+scenarioReturnAdjust})),
+          isaBalance,
+          isaTaxSaved:realizedIsaTaxSavedAcc+(yearInCycle===isaCycleYears?0:currentCycleTaxSaved),
+          pensionCreditAcc
+        });
       }
-      return {rows,last:rows[rows.length-1]||{age:targetRetireAge,total:0,nasdaq:0,dividend:0,isaTaxSaved:0,pensionCreditAcc:0}};
+      return {
+        rows,
+        last:rows[rows.length-1]||{
+          age:targetRetireAge,total:0,buckets:{},bucketValues:normalizedTargets.map(t=>({name:t.name,value:0,weight:n(t.normalizedWeight),returnRate:n(t.expectedReturn)+scenarioReturnAdjust})),
+          isaTaxSaved:0,pensionCreditAcc:0
+        }
+      };
     };
 
     const buildWithdrawal=(retireAge, startAsset)=>{
       const rows=[];
       let asset=Math.max(n(startAsset)-travelBucket,0);
-      let travelSpentAcc=travelBucket;
       for(let age=retireAge; age<=lifeAge; age++){
         const y=age-retireAge;
         const annualExpense=monthlyExpense0*12*Math.pow(1+inflation,y);
@@ -2887,11 +2925,7 @@ function SimulationTab({ data, futureSim }) {
     const baseWithdraw=buildWithdrawal(retireAge,baseAcc.last.total);
     const compareWithdraw=buildWithdrawal(compareAge,compareAcc.last.total);
 
-    const scenarioReturnAdjust=scenario==="stress"?-0.03:scenario==="optimistic"?0.02:0;
-    const scenarioExpenseMultiplier=scenario==="stress"?1.15:scenario==="optimistic"?0.95:1;
-    const scenarioLabel=scenario==="stress"?"보수":scenario==="optimistic"?"낙관":"기본";
-
-    return {currentAge,retireAge,compareAge,lifeAge,target,baseAcc,compareAcc,baseWithdraw,compareWithdraw,scenarioReturnAdjust,scenarioExpenseMultiplier,scenarioLabel};
+    return {currentAge,retireAge,compareAge,lifeAge,target,baseAcc,compareAcc,baseWithdraw,compareWithdraw,scenarioReturnAdjust,scenarioExpenseMultiplier,scenarioLabel,targets:normalizedTargets,weightedReturn,postReturn,monthlyExpense0};
   },[s,scenario]);
 
   const base=advanced.baseAcc.last;
@@ -2907,7 +2941,7 @@ function SimulationTab({ data, futureSim }) {
         <div>
           <div className="kpi-label">ADVANCED RETIREMENT SIMULATION</div>
           <h2>은퇴 시뮬레이션 완전 고도화</h2>
-          <p>은퇴 전 적립, 은퇴 후 인출, 추가 연금, 물가상승률, 여행비 지출까지 통합 계산합니다.</p>
+          <p>설정 탭의 투자 수익률 / 목표 비중을 자동으로 가져와 연도별 시뮬레이션에 반영합니다.</p>
         </div>
         <div className="tab-row" style={{marginBottom:0}}>
           <button className={`tab-chip ${scenario==="base"?"active":""}`} onClick={()=>setScenario("base")}>기본</button>
@@ -2920,7 +2954,29 @@ function SimulationTab({ data, futureSim }) {
         <KpiCard label={`${advanced.retireAge}세 예상자산`} value={base.total} unit="원" accent/>
         <KpiCard label="목표 달성률" value={targetRate} unit="%" tone={targetRate>=100?"green":"red"}/>
         <KpiCard label="은퇴 후 생존 가능 나이" value={survivalAge||0} unit="세" tone={w.success?"green":"red"}/>
-        <KpiCard label={`${advanced.compareAge}세 은퇴 예상자산`} value={compare.total} unit="원"/>
+        <KpiCard label="가중 기대수익률" value={advanced.weightedReturn*100} unit="%" />
+      </div>
+
+      <div className="card">
+        <div className="card-title">
+          <h3>시뮬레이션 반영 전략</h3>
+          <span className="badge badge-accent">설정 탭에서 자동 반영</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>전략/자산군</th><th className="td-right">목표비중</th><th className="td-right">연 기대수익률</th><th className="td-right">{advanced.retireAge}세 예상금액</th></tr></thead>
+            <tbody>
+              {base.bucketValues.map(b=>(
+                <tr key={b.name}>
+                  <td className="td-name">{b.name}</td>
+                  <td className="td-right td-mono">{fmtPct(b.weight*100)}</td>
+                  <td className="td-right td-mono">{fmtPct(b.returnRate*100)}</td>
+                  <td className="td-right td-mono text-accent">{fmt(b.value)}원</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="g3">
@@ -2934,7 +2990,7 @@ function SimulationTab({ data, futureSim }) {
         </div>
 
         <div className="card">
-          <h3>55세 vs 60세 비교</h3>
+          <h3>{advanced.retireAge}세 vs {advanced.compareAge}세 비교</h3>
           <div className="stat-row"><span className="stat-label">{advanced.retireAge}세 은퇴자산</span><span className="stat-value">{fmt(base.total)}원</span></div>
           <div className="stat-row"><span className="stat-label">{advanced.compareAge}세 은퇴자산</span><span className="stat-value text-accent">{fmt(compare.total)}원</span></div>
           <div className="stat-row"><span className="stat-label">차이</span><span className="stat-value text-green">{fmt(compare.total-base.total)}원</span></div>
@@ -2960,14 +3016,19 @@ function SimulationTab({ data, futureSim }) {
           <h3>은퇴 전 적립 시뮬레이션</h3>
           <div className="table-wrap" style={{maxHeight:420}}>
             <table>
-              <thead><tr><th>연도</th><th>나이</th><th className="td-right">월투자금</th><th className="td-right">나스닥</th><th className="td-right">배당</th><th className="td-right">총자산</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>연도</th><th>나이</th><th className="td-right">월투자금</th>
+                  {advanced.targets.map(t=><th key={t.name} className="td-right">{t.name}</th>)}
+                  <th className="td-right">총자산</th>
+                </tr>
+              </thead>
               <tbody>
                 {advanced.baseAcc.rows.map(r=>(
                   <tr key={r.year}>
-                    <td>{new Date().getFullYear()+r.year-1}</td><td>{r.age}</td>
+                    <td>{r.yearLabel}</td><td>{r.age}</td>
                     <td className="td-right td-mono">{fmt(r.monthlyInvest)}</td>
-                    <td className="td-right td-mono">{fmt(r.nasdaq)}</td>
-                    <td className="td-right td-mono">{fmt(r.dividend)}</td>
+                    {advanced.targets.map(t=><td key={t.name} className="td-right td-mono">{fmt(r.buckets[t.name]||0)}</td>)}
                     <td className="td-right td-mono text-accent">{fmt(r.total)}</td>
                   </tr>
                 ))}
@@ -2980,7 +3041,7 @@ function SimulationTab({ data, futureSim }) {
           <h3>은퇴 후 인출 시뮬레이션</h3>
           <div className="table-wrap" style={{maxHeight:420}}>
             <table>
-              <thead><tr><th>나이</th><th className="td-right">생활비</th><th className="td-right">연금</th><th className="td-right">여행비</th><th className="td-right">인출액</th><th className="td-right">연말자산</th></tr></thead>
+              <thead><tr><th>나이</th><th className="td-right">생활비</th><th className="td-right">추가연금</th><th className="td-right">여행비</th><th className="td-right">인출액</th><th className="td-right">연말자산</th></tr></thead>
               <tbody>
                 {advanced.baseWithdraw.rows.map(r=>(
                   <tr key={r.age}>
@@ -2999,23 +3060,28 @@ function SimulationTab({ data, futureSim }) {
       </div>
 
       <div className="card">
-        <h3>기존 연도별 시뮬레이션 결과</h3>
-        <div className="table-wrap" style={{maxHeight:360}}>
+        <h3>연도별 시뮬레이션 결과</h3>
+        <div className="table-wrap" style={{maxHeight:420}}>
           <table>
-            <thead><tr><th>연도</th><th>나이</th><th>년차</th><th className="td-right">월투자금</th><th className="td-right">나스닥</th><th className="td-right">배당ETF</th><th className="td-right">ISA절세누적</th><th className="td-right">연금세액공제누적</th><th className="td-right">총자산</th></tr></thead>
+            <thead>
+              <tr>
+                <th>연도</th><th>나이</th><th>년차</th><th className="td-right">월투자금</th>
+                {advanced.targets.map(t=><th key={t.name} className="td-right">{t.name}</th>)}
+                <th className="td-right">ISA절세누적</th><th className="td-right">연금세액공제누적</th><th className="td-right">총자산</th>
+              </tr>
+            </thead>
             <tbody>
-              {futureSim.map(r=>(
+              {advanced.baseAcc.rows.map(r=>(
                 <tr key={r.year}>
                   <td>{r.yearLabel}</td><td>{r.age}</td><td>{r.year}</td>
                   <td className="td-right td-mono">{fmt(r.monthlyInvest)}</td>
-                  <td className="td-right td-mono">{fmt(r.nasdaq)}</td>
-                  <td className="td-right td-mono">{fmt(r.dividend)}</td>
+                  {advanced.targets.map(t=><td key={t.name} className="td-right td-mono">{fmt(r.buckets[t.name]||0)}</td>)}
                   <td className="td-right td-mono text-green">{fmt(r.isaTaxSaved)}</td>
                   <td className="td-right td-mono text-green">{fmt(r.pensionCreditAcc)}</td>
                   <td className="td-right td-mono text-accent">{fmt(r.total)}</td>
                 </tr>
               ))}
-              {!futureSim.length&&<tr><td colSpan={9}><div className="empty">설정값을 확인하세요.</div></td></tr>}
+              {!advanced.baseAcc.rows.length&&<tr><td colSpan={advanced.targets.length+7}><div className="empty">설정값을 확인하세요.</div></td></tr>}
             </tbody>
           </table>
         </div>
