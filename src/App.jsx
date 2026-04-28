@@ -2464,6 +2464,415 @@ function ProfessionalTab({ data, dashboard, dashboardDetail, monthlySeries }) {
   );
 }
 
+// ─── Step 2 MDD / Risk Tab Integrated ─────────────────────────────────────────
+const pct = (v, d = 1) => `${n(v).toFixed(d)}%`;
+
+const DEFAULT_STRESS = [
+  {
+    key: "dotcom",
+    name: "닷컴버블급",
+    nasdaq: -0.78,
+    dividend: -0.35,
+    cash: 0,
+    bond: -0.08,
+    stock: -0.45,
+    etc: -0.25,
+    memo: "나스닥·성장주 집중 포트폴리오의 최악 구간 가정",
+  },
+  {
+    key: "gfc",
+    name: "금융위기급",
+    nasdaq: -0.52,
+    dividend: -0.38,
+    cash: 0,
+    bond: 0.05,
+    stock: -0.50,
+    etc: -0.30,
+    memo: "주식 전반 급락, 현금성 자산 방어 가정",
+  },
+  {
+    key: "covid",
+    name: "코로나급 단기급락",
+    nasdaq: -0.30,
+    dividend: -0.25,
+    cash: 0,
+    bond: 0.02,
+    stock: -0.32,
+    etc: -0.20,
+    memo: "짧고 강한 급락 후 회복 가능성 가정",
+  },
+  {
+    key: "rate",
+    name: "금리충격/성장주 조정",
+    nasdaq: -0.35,
+    dividend: -0.18,
+    cash: 0,
+    bond: -0.10,
+    stock: -0.25,
+    etc: -0.18,
+    memo: "고PER 성장주 조정에 더 큰 충격 가정",
+  },
+];
+
+function classifyAssetClass(row) {
+  const raw = `${row.assetClass || ""} ${row.name || ""}`.toLowerCase();
+
+  if (raw.includes("현금") || raw.includes("cash") || raw.includes("kofr") || raw.includes("파킹")) return "cash";
+  if (raw.includes("채권") || raw.includes("bond")) return "bond";
+  if (raw.includes("배당") || raw.includes("dividend") || raw.includes("dow")) return "dividend";
+  if (raw.includes("나스닥") || raw.includes("nasdaq") || raw.includes("qqq")) return "nasdaq";
+  if (raw.includes("주식") || raw.includes("stock") || raw.includes("반도체") || raw.includes("ai")) return "stock";
+  return "etc";
+}
+
+function getValue(row) {
+  if (Number.isFinite(Number(row.value))) return n(row.value);
+  return n(row.qty) * n(row.currentPrice || row.avgPrice);
+}
+
+function normalizeRows(data, financialAnalysis) {
+  const sourceRows =
+    Array.isArray(financialAnalysis?.rows) && financialAnalysis.rows.length
+      ? financialAnalysis.rows
+      : Array.isArray(data?.portfolio)
+        ? data.portfolio
+        : [];
+
+  const rows = sourceRows
+    .map((r) => {
+      const value = getValue(r);
+      const sigma = n(r.riskSigma || r.sigma || 0.22);
+      return {
+        id: r.id || `${r.name}-${Math.random()}`,
+        name: r.name || "미지정",
+        assetClass: r.assetClass || classifyAssetClass(r),
+        riskKey: classifyAssetClass(r),
+        value,
+        sigma,
+        currentPrice: n(r.currentPrice),
+        avgPrice: n(r.avgPrice),
+        qty: n(r.qty),
+      };
+    })
+    .filter((r) => r.value > 0);
+
+  const total = rows.reduce((s, r) => s + r.value, 0);
+
+  return rows.map((r) => ({
+    ...r,
+    weight: total > 0 ? r.value / total : 0,
+    loss1y: r.value * r.sigma,
+    loss2y: r.value * r.sigma * 2,
+  }));
+}
+
+function portfolioVolatility(rows) {
+  // 단순 상관 가정: 같은 위험자산끼리는 0.65, 현금과 위험자산 0.05, 채권 0.25
+  let variance = 0;
+  rows.forEach((a, i) => {
+    rows.forEach((b, j) => {
+      let corr = 0.65;
+      if (a.riskKey === "cash" || b.riskKey === "cash") corr = 0.05;
+      else if (a.riskKey === "bond" || b.riskKey === "bond") corr = 0.25;
+      else if (a.riskKey === b.riskKey) corr = 0.85;
+      variance += a.weight * b.weight * a.sigma * b.sigma * corr;
+    });
+  });
+  return Math.sqrt(Math.max(variance, 0));
+}
+
+function maxConcentration(rows) {
+  if (!rows.length) return { name: "-", weight: 0 };
+  return rows.reduce((m, r) => (r.weight > m.weight ? r : m), rows[0]);
+}
+
+function stressLoss(rows, scenario) {
+  const total = rows.reduce((s, r) => s + r.value, 0);
+  const loss = rows.reduce((s, r) => {
+    const shock = scenario[r.riskKey] ?? scenario.etc ?? -0.25;
+    return s + r.value * shock;
+  }, 0);
+  return {
+    scenario: scenario.name,
+    memo: scenario.memo,
+    lossAmount: loss,
+    lossPct: total > 0 ? loss / total : 0,
+    afterAmount: total + loss,
+  };
+}
+
+function makeRiskGrade({ vol, worstMddPct, concentration }) {
+  const score =
+    (vol >= 0.25 ? 35 : vol >= 0.18 ? 25 : vol >= 0.12 ? 15 : 8) +
+    (Math.abs(worstMddPct) >= 0.5 ? 35 : Math.abs(worstMddPct) >= 0.35 ? 25 : Math.abs(worstMddPct) >= 0.2 ? 15 : 5) +
+    (concentration >= 0.75 ? 30 : concentration >= 0.55 ? 22 : concentration >= 0.35 ? 14 : 6);
+
+  if (score >= 75) return { label: "매우 높음", color: "red", score };
+  if (score >= 55) return { label: "높음", color: "amber", score };
+  if (score >= 35) return { label: "보통", color: "accent", score };
+  return { label: "낮음", color: "green", score };
+}
+
+function calculateMddRisk({ data, financialAnalysis, scenarios = DEFAULT_STRESS } = {}) {
+  const rows = normalizeRows(data, financialAnalysis);
+  const total = rows.reduce((s, r) => s + r.value, 0);
+  const vol = portfolioVolatility(rows);
+  const concentration = maxConcentration(rows);
+  const stress = scenarios.map((s) => stressLoss(rows, s)).sort((a, b) => a.lossPct - b.lossPct);
+  const worst = stress[0] || { scenario: "-", lossAmount: 0, lossPct: 0, afterAmount: total };
+  const grade = makeRiskGrade({ vol, worstMddPct: worst.lossPct, concentration: concentration.weight });
+
+  const alerts = [];
+  if (concentration.weight >= 0.7) alerts.push(`단일 종목/전략 비중이 ${pct(concentration.weight * 100)}입니다. 집중 위험이 큽니다.`);
+  if (vol >= 0.22) alerts.push(`연 변동성 추정치가 ${pct(vol * 100)}로 높습니다.`);
+  if (Math.abs(worst.lossPct) >= 0.45) alerts.push(`최악 시나리오에서 ${pct(Math.abs(worst.lossPct) * 100)} 수준의 손실 가능성을 가정합니다.`);
+  if (!rows.length) alerts.push("포트폴리오 평가금액이 없어 리스크를 계산할 수 없습니다.");
+
+  return {
+    total,
+    rows,
+    vol,
+    concentration,
+    stress,
+    worst,
+    grade,
+    alerts,
+  };
+}
+
+function Badge({ color, children }) {
+  const cls =
+    color === "red"
+      ? "badge badge-red"
+      : color === "amber"
+        ? "badge badge-amber"
+        : color === "green"
+          ? "badge badge-green"
+          : "badge badge-accent";
+  return <span className={cls}>{children}</span>;
+}
+
+function MetricCard({ label, value, sub, tone }) {
+  const color =
+    tone === "red" ? "var(--red)" :
+    tone === "amber" ? "var(--amber)" :
+    tone === "green" ? "var(--green)" :
+    "var(--accent)";
+  return (
+    <div className="kpi-card">
+      <div className="kpi-label">{label}</div>
+      <div className="kpi-value" style={{ color, fontSize: 24 }}>{value}</div>
+      {sub && <div className="kpi-sub" style={{ color: "var(--text3)" }}>{sub}</div>}
+    </div>
+  );
+}
+
+function ScenarioEditor({ scenarios, setScenarios }) {
+  const update = (idx, key, value) => {
+    setScenarios((prev) => prev.map((s, i) => i === idx ? { ...s, [key]: value } : s));
+  };
+
+  return (
+    <div className="card">
+      <div className="card-title">
+        <h3>스트레스 시나리오 수동 조정</h3>
+        <button className="btn btn-sm btn-ghost" onClick={() => setScenarios(DEFAULT_STRESS)}>
+          기본값 복구
+        </button>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>시나리오</th>
+              <th className="td-right">나스닥</th>
+              <th className="td-right">배당</th>
+              <th className="td-right">주식</th>
+              <th className="td-right">채권</th>
+              <th className="td-right">현금</th>
+              <th>메모</th>
+            </tr>
+          </thead>
+          <tbody>
+            {scenarios.map((s, idx) => (
+              <tr key={s.key}>
+                <td className="td-name">{s.name}</td>
+                {["nasdaq", "dividend", "stock", "bond", "cash"].map((key) => (
+                  <td key={key} className="td-right">
+                    <input
+                      className="risk-input"
+                      value={s[key]}
+                      onChange={(e) => update(idx, key, Number(e.target.value))}
+                      placeholder="-0.35"
+                    />
+                  </td>
+                ))}
+                <td>
+                  <input
+                    className="risk-input"
+                    value={s.memo}
+                    onChange={(e) => update(idx, "memo", e.target.value)}
+                    placeholder="메모"
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="small muted" style={{ marginTop: 10 }}>
+        입력값은 -0.35 = -35% 충격을 의미합니다. 이 화면의 값은 현재 화면 계산용이며, 저장 기능을 붙이려면 data.settings에 별도 저장키를 연결하면 됩니다.
+      </div>
+    </div>
+  );
+}
+
+function Step2MddRiskPanel({ data, financialAnalysis }) {
+  const [showEditor, setShowEditor] = useState(false);
+  const [scenarios, setScenarios] = useState(DEFAULT_STRESS);
+
+  const risk = useMemo(
+    () => calculateMddRisk({ data, financialAnalysis, scenarios }),
+    [data, financialAnalysis, scenarios]
+  );
+
+  const worstTone = Math.abs(risk.worst.lossPct) >= 0.45 ? "red" : Math.abs(risk.worst.lossPct) >= 0.3 ? "amber" : "green";
+  const volTone = risk.vol >= 0.22 ? "red" : risk.vol >= 0.15 ? "amber" : "green";
+  const concTone = risk.concentration.weight >= 0.7 ? "red" : risk.concentration.weight >= 0.5 ? "amber" : "green";
+
+  return (
+    <div className="stack">
+      <div className="row-between">
+        <div>
+          <h2 style={{ fontSize: 22, letterSpacing: "-.03em", marginBottom: 6 }}>🛡️ 2단계 리스크 / MDD 분석</h2>
+          <div className="muted small">포트폴리오가 급락장에서 얼마나 흔들릴 수 있는지 계산합니다.</div>
+        </div>
+        <button className="btn btn-ghost" onClick={() => setShowEditor((v) => !v)}>
+          {showEditor ? "시나리오 접기" : "시나리오 조정"}
+        </button>
+      </div>
+
+      <div className="kpi-grid">
+        <MetricCard label="리스크 등급" value={risk.grade.label} sub={`점수 ${Math.round(risk.grade.score)}점`} tone={risk.grade.color} />
+        <MetricCard label="연 변동성 추정" value={pct(risk.vol * 100)} sub="포트폴리오 σ 기준" tone={volTone} />
+        <MetricCard label="최악 시나리오 MDD" value={`-${pct(Math.abs(risk.worst.lossPct) * 100)}`} sub={risk.worst.scenario} tone={worstTone} />
+        <MetricCard label="최대 집중 비중" value={pct(risk.concentration.weight * 100)} sub={risk.concentration.name} tone={concTone} />
+      </div>
+
+      {risk.alerts.length > 0 && (
+        <div className="card">
+          <h3>자동 경고</h3>
+          <div className="stack">
+            {risk.alerts.map((a, i) => (
+              <div key={i} className={i === 0 ? "alert alert-warn" : "alert alert-info"}>
+                {a}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="g2">
+        <div className="card">
+          <h3>스트레스 테스트 결과</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>시나리오</th>
+                  <th className="td-right">손실률</th>
+                  <th className="td-right">손실금액</th>
+                  <th className="td-right">하락 후 평가액</th>
+                  <th>판정</th>
+                </tr>
+              </thead>
+              <tbody>
+                {risk.stress.map((s) => {
+                  const abs = Math.abs(s.lossPct);
+                  const tone = abs >= 0.45 ? "red" : abs >= 0.3 ? "amber" : "green";
+                  return (
+                    <tr key={s.scenario}>
+                      <td className="td-name">{s.scenario}</td>
+                      <td className="td-right td-mono text-red">-{pct(abs * 100)}</td>
+                      <td className="td-right td-mono text-red">{fmt(Math.abs(s.lossAmount))}원</td>
+                      <td className="td-right td-mono">{fmt(s.afterAmount)}원</td>
+                      <td><Badge color={tone}>{tone === "red" ? "위험" : tone === "amber" ? "주의" : "방어 가능"}</Badge></td>
+                    </tr>
+                  );
+                })}
+                {!risk.stress.length && <tr><td colSpan={5}><div className="empty">포트폴리오 데이터가 없습니다.</div></td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>종목별 손실 민감도</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>종목</th>
+                  <th>분류</th>
+                  <th className="td-right">비중</th>
+                  <th className="td-right">-1σ 손실</th>
+                  <th className="td-right">-2σ 손실</th>
+                </tr>
+              </thead>
+              <tbody>
+                {risk.rows
+                  .slice()
+                  .sort((a, b) => b.weight - a.weight)
+                  .map((r) => (
+                    <tr key={r.id}>
+                      <td className="td-name">{r.name}</td>
+                      <td><span className="badge badge-muted">{r.assetClass || r.riskKey}</span></td>
+                      <td className="td-right td-mono">{pct(r.weight * 100)}</td>
+                      <td className="td-right td-mono text-red">{fmt(r.loss1y)}원</td>
+                      <td className="td-right td-mono text-red">{fmt(r.loss2y)}원</td>
+                    </tr>
+                  ))}
+                {!risk.rows.length && <tr><td colSpan={5}><div className="empty">보유 종목이 없습니다.</div></td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {showEditor && <ScenarioEditor scenarios={scenarios} setScenarios={setScenarios} />}
+
+      <div className="card">
+        <h3>해석 가이드</h3>
+        <div className="g3">
+          <div className="alert alert-info">MDD는 실제 미래 예측이 아니라 “이 정도 하락도 감당 가능한가”를 점검하는 방어 지표입니다.</div>
+          <div className="alert alert-warn">나스닥 비중이 높으면 장기 기대수익은 커질 수 있지만, 은퇴 직전 급락 리스크도 함께 커집니다.</div>
+          <div className="alert alert-ok">목표비중·현금비중·비상금이 함께 관리되면 하락장에서 강제매도 위험을 줄일 수 있습니다.</div>
+        </div>
+      </div>
+
+      <style>{`
+        .risk-input{
+          width:100%;
+          min-width:72px;
+          padding:9px 11px;
+          border:1px solid var(--border2);
+          border-radius:10px;
+          background:var(--surface2);
+          color:var(--text);
+          font-size:12px;
+          outline:none;
+          font-family:inherit;
+        }
+        .risk-input:focus{
+          border-color:var(--accent);
+          box-shadow:0 0 0 3px var(--accent-bg);
+        }
+      `}</style>
+    </div>
+  );
+}
+
+
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 const NAV = [
   { section: "메인" },
@@ -2476,6 +2885,7 @@ const NAV = [
   { id:"planning", icon:"🎯", label:"목표·계획" },
   { section: "분석" },
   { id:"professional", icon:"🧠", label:"전문진단" },
+  { id:"risk", icon:"🛡️", label:"리스크" },
   { id:"analysis", icon:"📊", label:"재무분석" },
   { id:"tax", icon:"💸", label:"세금·절세" },
   { id:"simulation", icon:"🔮", label:"미래시뮬레이션" },
@@ -2485,7 +2895,7 @@ const NAV = [
   { id:"data", icon:"💾", label:"데이터·백업" },
 ];
 
-const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
+const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", risk:"리스크 분석", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -2735,6 +3145,7 @@ export default function App() {
             {tab==="budget"&&<BudgetTab data={data} update={update} budgetAnalysis={budgetAnalysis}/>}
             {tab==="planning"&&<PlanningTab data={data} update={update} eventAnalysis={eventAnalysis}/>}
             {tab==="professional"&&<ProfessionalTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} monthlySeries={monthlySeries}/>}
+            {tab==="risk"&&<Step2MddRiskPanel data={data} financialAnalysis={financialAnalysis}/>}
             {tab==="analysis"&&<AnalysisTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboardDetail={dashboardDetail}/>}
             {tab==="tax"&&<TaxTab data={data} taxAnalysis={taxAnalysis}/>}
             {tab==="simulation"&&<SimulationTab data={data} futureSim={futureSim}/>}
