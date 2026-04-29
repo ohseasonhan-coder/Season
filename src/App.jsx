@@ -1191,6 +1191,36 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 
 
 
+
+/* Apple CFO modal + undo v19 integrated */
+.apple-cfo-modal-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.58);backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%)}
+.apple-cfo-modal{width:min(520px,100%);border-radius:28px;padding:22px;background:rgba(28,31,39,.92);border:1px solid rgba(255,255,255,.12);box-shadow:0 30px 90px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06);animation:appleModalIn .22s cubic-bezier(.2,.8,.2,1)}
+@keyframes appleModalIn{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+.apple-cfo-modal-handle{width:42px;height:4px;border-radius:999px;background:rgba(255,255,255,.18);margin:0 auto 18px}
+.apple-cfo-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:10px}
+.apple-cfo-modal-head span{font-size:11px;font-weight:950;letter-spacing:.1em;color:var(--accent2)}
+.apple-cfo-modal-head h3{margin-top:6px;font-size:22px;line-height:1.25;letter-spacing:-.04em}
+.apple-cfo-close{width:34px;height:34px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.06);color:var(--text2);font-size:22px;line-height:1}
+.apple-cfo-modal-desc{font-size:13px;line-height:1.65;color:var(--text2);margin-bottom:16px}
+.apple-cfo-preview-score{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:14px;border-radius:20px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.075);margin-bottom:12px}
+.apple-cfo-preview-score div{display:flex;flex-direction:column;gap:4px}
+.apple-cfo-preview-score span{font-size:11px;font-weight:900;color:var(--text3)}
+.apple-cfo-preview-score strong{font-size:30px;font-weight:950;color:var(--text);letter-spacing:-.055em}
+.apple-cfo-preview-score strong.after{color:var(--green)}
+.apple-cfo-preview-score em{font-style:normal;color:var(--text3);font-weight:950}
+.apple-cfo-preview-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.apple-cfo-preview-grid div{padding:12px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.065)}
+.apple-cfo-preview-grid small{display:block;margin-bottom:6px;font-size:10.5px;font-weight:900;color:var(--text3)}
+.apple-cfo-preview-grid b{display:block;font-size:12px;line-height:1.45;color:var(--text2);word-break:keep-all}
+.apple-cfo-modal-note{margin-top:12px;padding:11px 12px;border-radius:16px;background:rgba(108,125,255,.09);border:1px solid rgba(108,125,255,.14);color:var(--text2);font-size:12px;line-height:1.55}
+.apple-cfo-modal-note b{color:var(--accent2)}
+.apple-cfo-modal-actions{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin-top:16px}
+.apple-cfo-confirm-btn{border:none;border-radius:14px;padding:12px;background:linear-gradient(135deg,#6c7dff,#8b9aff);color:white;font-size:14px;font-weight:950;box-shadow:0 14px 30px rgba(108,125,255,.26)}
+.apple-cfo-undo-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:10000;display:flex;align-items:center;gap:12px;max-width:calc(100vw - 32px);padding:12px 14px 12px 16px;border-radius:999px;background:rgba(20,22,28,.92);border:1px solid rgba(255,255,255,.10);box-shadow:0 20px 50px rgba(0,0,0,.42);backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%)}
+.apple-cfo-undo-toast span{color:var(--text);font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apple-cfo-undo-toast button{border:none;border-radius:999px;padding:7px 11px;background:var(--accent-bg);color:var(--accent2);font-size:12px;font-weight:950}
+@media(max-width:680px){.apple-cfo-modal{padding:18px;border-radius:24px}.apple-cfo-preview-grid{grid-template-columns:1fr}.apple-cfo-modal-actions{grid-template-columns:1fr}.apple-cfo-undo-toast{left:16px;right:16px;transform:none;justify-content:space-between}}
+
 /* CFO execution confirmation v18 */
 .cfo-executed-panel{
   position:relative;
@@ -3424,9 +3454,10 @@ function buildCFOActionPreview(model, action) {
 }
 
 
-function CFODecisionDashboard({ model, onExecuteAction }) {
+function CFODecisionDashboard({ model, onExecuteAction, onUndoAction, undoState }) {
   if (!model) return null;
   const [executedAction, setExecutedAction] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
   const priorityLabel = { high:"최우선", mid:"중요", low:"관리" };
   const topAction = model.actions?.[0];
   const secondAction = model.actions?.[1];
@@ -3434,7 +3465,7 @@ function CFODecisionDashboard({ model, onExecuteAction }) {
 
   const toneClass = model.tone === "green" ? "ok" : model.tone === "accent" ? "info" : model.tone === "amber" ? "warn" : "danger";
 
-  const handleExecuteAction = (action) => {
+  const handleConfirmExecute = (action) => {
     if (!action) return;
     const preview = buildCFOActionPreview(model, action);
     onExecuteAction?.(action);
@@ -3444,6 +3475,7 @@ function CFODecisionDashboard({ model, onExecuteAction }) {
       preview,
       executedAt: new Date().toLocaleString("ko-KR"),
     });
+    setPendingAction(null);
   };
 
   return (
@@ -3535,7 +3567,7 @@ function CFODecisionDashboard({ model, onExecuteAction }) {
                   </div>
                 </div>
 
-                <button className="cfo-execute-btn" onClick={()=>handleExecuteAction(topAction)}>
+                <button className="cfo-execute-btn" onClick={()=>setPendingAction(topAction)}>
                   지금 실행 반영
                 </button>
               </>
@@ -3549,7 +3581,7 @@ function CFODecisionDashboard({ model, onExecuteAction }) {
           <div className="cfo-action-sub">
             <span>다음 행동</span>
             <strong>{secondAction.title}</strong>
-            <button className="btn btn-ghost btn-sm" onClick={()=>handleExecuteAction(secondAction)}>간단 반영</button>
+            <button className="btn btn-ghost btn-sm" onClick={()=>setPendingAction(secondAction)}>간단 반영</button>
           </div>
         )}
       </div>
@@ -3606,9 +3638,92 @@ function CFODecisionDashboard({ model, onExecuteAction }) {
           );
         })}
       </div>
+
+      {pendingAction && (
+        <CFOActionConfirmModal
+          action={pendingAction}
+          model={model}
+          onClose={()=>setPendingAction(null)}
+          onConfirm={()=>handleConfirmExecute(pendingAction)}
+        />
+      )}
+
+      {undoState?.available && (
+        <CFOUndoToast
+          title={undoState.title}
+          onUndo={onUndoAction}
+        />
+      )}
     </div>
   );
 }
+
+
+function CFOActionConfirmModal({ action, model, onClose, onConfirm }) {
+  const preview = buildCFOActionPreview(model, action);
+  return (
+    <div className="apple-cfo-modal-overlay" role="dialog" aria-modal="true">
+      <div className="apple-cfo-modal">
+        <div className="apple-cfo-modal-handle" />
+        <div className="apple-cfo-modal-head">
+          <div>
+            <span>실행 전 확인</span>
+            <h3>{action.title}</h3>
+          </div>
+          <button className="apple-cfo-close" onClick={onClose}>×</button>
+        </div>
+
+        <p className="apple-cfo-modal-desc">{action.desc}</p>
+
+        <div className="apple-cfo-preview-score">
+          <div>
+            <span>현재 점수</span>
+            <strong>{preview.currentScore}</strong>
+          </div>
+          <em>→</em>
+          <div>
+            <span>실행 후 예상</span>
+            <strong className="after">{preview.nextScore}</strong>
+          </div>
+        </div>
+
+        <div className="apple-cfo-preview-grid">
+          <div>
+            <small>변경 항목</small>
+            <b>{preview.target}</b>
+          </div>
+          <div>
+            <small>적용 전</small>
+            <b>{preview.before}</b>
+          </div>
+          <div>
+            <small>적용 후</small>
+            <b>{preview.after}</b>
+          </div>
+        </div>
+
+        <div className="apple-cfo-modal-note">
+          실행 후에도 하단의 <b>되돌리기</b> 버튼으로 바로 이전 상태로 복구할 수 있습니다.
+        </div>
+
+        <div className="apple-cfo-modal-actions">
+          <button className="btn btn-ghost" onClick={onClose}>취소</button>
+          <button className="apple-cfo-confirm-btn" onClick={onConfirm}>실행 반영</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CFOUndoToast({ title, onUndo }) {
+  return (
+    <div className="apple-cfo-undo-toast">
+      <span>실행됨: {title}</span>
+      <button onClick={onUndo}>되돌리기</button>
+    </div>
+  );
+}
+
 
 function applyCFOActionToData(data, action) {
   if (!action) return data;
@@ -3767,13 +3882,32 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
     [data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, futureSim]
   );
 
+  const [cfoUndoState, setCfoUndoState] = useState(null);
+  const handleCFOExecuteAction = (action) => {
+    if (!action || !update) return;
+    const previousData = JSON.parse(JSON.stringify(data));
+    update(d=>applyCFOActionToData(d, action));
+    setCfoUndoState({
+      available: true,
+      title: action.title,
+      previousData,
+      createdAt: Date.now(),
+    });
+  };
+  const handleCFOUndoAction = () => {
+    if (!cfoUndoState?.previousData || !update) return;
+    update(()=>cfoUndoState.previousData);
+    setCfoUndoState(null);
+  };
+
+
   const healthColor=advanced.tone==="green"?"var(--green)":advanced.tone==="accent"?"var(--accent)":advanced.tone==="amber"?"var(--amber)":"var(--red)";
   const healthBg=advanced.tone==="green"?"var(--green-bg)":advanced.tone==="accent"?"var(--accent-bg)":advanced.tone==="amber"?"var(--amber-bg)":"var(--red-bg)";
 
   return (
     <div className="stack dashboard-pro">
       <DashboardAdvicePanel nlp={dashboardNLP} />
-      <CFODecisionDashboard model={cfoDecisionModel} onExecuteAction={(action)=>update?.(d=>applyCFOActionToData(d, action))} />
+      <CFODecisionDashboard model={cfoDecisionModel} onExecuteAction={handleCFOExecuteAction} onUndoAction={handleCFOUndoAction} undoState={cfoUndoState} />
       <AICoachPanel coach={buildIntegratedCoach({ area:"대시보드", data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim, eventAnalysis, monthlySeries })}/>
 
       <div className="dashboard-hero">
