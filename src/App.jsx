@@ -1014,6 +1014,22 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .tax-update-date{font-size:12px;font-weight:900;color:var(--text);letter-spacing:-.01em;margin:2px 0 5px}
 .tax-update-brief{font-size:12px;color:var(--text2);line-height:1.45;margin:0}
 
+
+
+/* Tax Action Coach */
+.tax-action-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.tax-action-item{border:1px solid var(--border);background:var(--surface2);border-radius:14px;padding:14px;min-height:142px}
+.tax-action-item.green{background:var(--green-bg);border-color:rgba(52,213,138,.25)}
+.tax-action-item.warn{background:var(--amber-bg);border-color:rgba(240,180,41,.25)}
+.tax-action-item.danger{background:var(--red-bg);border-color:rgba(255,92,114,.25)}
+.tax-action-item.info{background:var(--accent-bg);border-color:rgba(108,125,255,.22)}
+.tax-action-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.tax-action-item strong{display:block;font-size:14px;color:var(--text);margin-bottom:6px}
+.tax-action-item p{font-size:12px;color:var(--text2);line-height:1.55}
+.tax-action-amount{margin-top:10px;padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.06);font-size:12px;font-weight:800;color:var(--text)}
+@media(max-width:1100px){.tax-action-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){.tax-action-grid{grid-template-columns:1fr}}
+
 /* Responsive */
 @media(max-width:900px){
   .sidebar{width:180px}
@@ -3582,7 +3598,7 @@ async function fetchTaxUpdateSnapshot() {
   const results = [];
   for (const src of TAX_UPDATE_SOURCES) {
     try {
-      const proxyUrl = `https://r.jina.ai/http://r.jina.ai/http://${src.url}`;
+      const proxyUrl = `https://r.jina.ai/http://${src.url.replace(/^https?:\/\//, "")}`;
       const res = await fetch(proxyUrl, { method:"GET" });
       const text = await res.text();
       const hit = src.keywords.filter(k => text.includes(k));
@@ -3631,6 +3647,74 @@ function summarizeTaxUpdateStatus(settings, localMsg) {
   return { title, tone, icon, brief };
 }
 
+
+function buildTaxActionRecommendations(calendar, settings, monthEvents = []) {
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const actions = [];
+  const isaGap = n(calendar?.isaGap || 0);
+  const pensionGap = n(calendar?.pensionGap || 0);
+  const taxableTax = n(calendar?.taxableTax || 0);
+  const monthlyIsaNeed = isaGap > 0 ? Math.ceil(isaGap / Math.max(1, 12 - currentMonth + 1)) : 0;
+  const monthlyPensionNeed = pensionGap > 0 ? Math.ceil(pensionGap / Math.max(1, 12 - currentMonth + 1)) : 0;
+  const add = (type, title, text, timing, tone = "info", amount = 0) => actions.push({ type, title, text, timing, tone, amount });
+
+  if (monthEvents.some(e => e.title.includes("종합소득세"))) {
+    add("신고", "종합소득세 신고 준비", `일반계좌 배당·매매손익, 기타소득, 필요경비 자료를 한 번에 모아두세요.${taxableTax > 0 ? ` 현재 과세 노출 추정액은 ${fmt(taxableTax)}원입니다.` : ""}`, "5월 신고 전", taxableTax > 0 ? "amber" : "accent", taxableTax);
+  }
+  if (monthEvents.some(e => e.title.includes("재산세"))) {
+    add("납부", "재산세 납부 자금 분리", "납부월에는 카드 결제·투자금과 섞이지 않게 세금 전용 현금으로 분리해두는 것이 안전합니다.", "해당 월 초", "amber", 0);
+  }
+  if (isaGap > 0) {
+    add("납입", "ISA 잔여 한도 자동 배분", `올해 ISA 잔여 한도 ${fmt(isaGap)}원을 연말까지 맞추려면 월 약 ${fmt(monthlyIsaNeed)}원씩 납입하면 됩니다.`, "매월 급여일 직후", "green", monthlyIsaNeed);
+  } else {
+    add("유지", "ISA 한도 점검 완료", "올해 ISA 납입 계획은 충분한 편입니다. 새 납입보다 리밸런싱과 현금흐름 안정성을 우선 확인하세요.", "월 1회", "green", 0);
+  }
+  if (pensionGap > 0) {
+    add("절세", "연금/IRP 세액공제 타이밍", `연금·IRP 잔여 세액공제 한도 ${fmt(pensionGap)}원이 남아 있습니다. 연말에 몰아서 넣기보다 월 약 ${fmt(monthlyPensionNeed)}원씩 나누면 현금흐름 부담이 줄어듭니다.`, "매월 또는 11~12월 집중", "accent", monthlyPensionNeed);
+  }
+  if (calendar?.isaMaturityYear && calendar.isaMaturityYear <= calendar.year + 1) {
+    add("만기", "ISA 만기 실행 순서 확정", "ISA 만기 전에는 ① 연금 이전 금액 ② 새 ISA 재개설 금액 ③ 일반계좌 이동 금액을 먼저 정해야 절세 효과가 흔들리지 않습니다.", "만기 3~6개월 전", "red", 0);
+  }
+  if (monthEvents.length === 0) {
+    add("점검", "이번 달 세금 루틴", "큰 신고·납부 일정이 없는 달입니다. 납입한도, 증빙자료, 배당·이자 내역만 가볍게 점검하세요.", "월말 10분", "info", 0);
+  }
+  return actions.slice(0, 6);
+}
+
+function TaxActionCoach({ actions, settings, onUpdateSettings }) {
+  const status = settings?.autoTaxUpdateEnabled !== false;
+  const cls = (t) => t === "red" ? "danger" : t === "amber" ? "warn" : t === "green" ? "green" : "info";
+  const badge = (t) => t === "red" ? "badge-red" : t === "amber" ? "badge-amber" : t === "green" ? "badge-green" : "badge-accent";
+  return (
+    <div className="tax-action-coach card">
+      <div className="card-title">
+        <div>
+          <h3>세금 알림 · 자동 행동 추천</h3>
+          <p className="small muted" style={{marginTop:4}}>신고 일정, ISA·연금 납입 한도, 만기 일정을 연결해 이번 달 행동을 추천합니다.</p>
+        </div>
+        <button className={`btn btn-sm ${status ? "btn-success" : "btn-ghost"}`} onClick={() => onUpdateSettings?.({ autoTaxUpdateEnabled: !status })}>
+          {status ? "접속 시 자동 확인 ON" : "접속 시 자동 확인 OFF"}
+        </button>
+      </div>
+      <div className="tax-action-grid">
+        {(actions || []).map((a, idx) => (
+          <div className={`tax-action-item ${cls(a.tone)}`} key={`${a.title}-${idx}`}>
+            <div className="tax-action-top">
+              <span className={`badge ${badge(a.tone)}`}>{a.type}</span>
+              <span className="small muted">{a.timing}</span>
+            </div>
+            <strong>{a.title}</strong>
+            <p>{a.text}</p>
+            {n(a.amount) > 0 && <div className="tax-action-amount">권장 기준 금액: {fmt(a.amount)}원</div>}
+          </div>
+        ))}
+      </div>
+      <div className="alert alert-info" style={{marginTop:14}}>자동 업데이트는 접속할 때마다 공식 사이트 조회를 시도하고, 실패하면 마지막 확인일과 직접 확인 버튼을 남깁니다. 세법·납부기한은 실제 신고 전 공식 사이트에서 최종 확인하세요.</div>
+    </div>
+  );
+}
+
 function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
   const initial = `${calendar.year}-${String(new Date().getMonth()+1).padStart(2,"0")}`;
   const [monthValue, setMonthValue] = useState(initial);
@@ -3665,10 +3749,9 @@ function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
     }
   };
   useEffect(() => {
-    if (!settings?.autoTaxUpdateEnabled) return;
-    const last = settings?.taxUpdateLastChecked ? new Date(settings.taxUpdateLastChecked).getTime() : 0;
-    const oneDay = 24 * 60 * 60 * 1000;
-    if (!last || Date.now() - last > oneDay) runUpdate();
+    if (settings?.autoTaxUpdateEnabled === false) return;
+    runUpdate();
+    // 접속 시마다 최신 세법·일정 확인을 시도합니다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
@@ -3692,7 +3775,7 @@ function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
       <div className="g3" style={{marginBottom:14}}>
         <div className="compact-insight amber"><span>🧾</span><div><strong>다음 세금 일정</strong><p>{calendar.next ? `${calendar.next.date} · ${calendar.next.title}` : "등록된 일정 없음"}</p></div></div>
         <div className="compact-insight green"><span>🌱</span><div><strong>절세 잔여 여력</strong><p>ISA {fmt(calendar.isaGap)}원 · 연금 {fmt(calendar.pensionGap)}원</p></div></div>
-        <div className="compact-insight info"><span>🏁</span><div><strong>인터넷 업데이트</strong><p>{settings?.taxUpdateLastChecked ? `${new Date(settings.taxUpdateLastChecked).toLocaleString("ko-KR")} 확인` : "아직 확인 전"}</p></div></div>
+        <div className="compact-insight info"><span>🏁</span><div><strong>접속 시 자동 업데이트</strong><p>{settings?.taxUpdateLastChecked ? `${formatTaxUpdateDateTime(settings.taxUpdateLastChecked)} · ${settings?.taxUpdateStatus === "checked" ? "확인 완료" : settings?.taxUpdateStatus === "failed" ? "확인 실패" : "대기"}` : "접속하면 자동 확인"}</p></div></div>
       </div>
       <div className="tax-cal-grid">
         {["일","월","화","수","목","금","토"].map(w => <div className="tax-cal-weekday" key={w}>{w}</div>)}
@@ -3755,6 +3838,7 @@ function TaxTab({ data, update, taxAnalysis, futureSim }) {
       <NaturalInsightCard icon={taxNLP.icon} title={taxNLP.title} message={taxNLP.message} tone={taxNLP.tone} actions={taxNLP.actions}/>
       <AICoachPanel coach={taxCoach}/>
       <TaxCalendarTimeline calendar={taxCalendar} settings={s} onUpdateSettings={(patch)=>update(d=>({ ...d, settings:{ ...d.settings, ...patch } }))}/>
+      <TaxActionCoach actions={buildTaxActionRecommendations(taxCalendar, s, taxCalendar.events.filter(e => e.month === new Date().getMonth()+1))} settings={s} onUpdateSettings={(patch)=>update(d=>({ ...d, settings:{ ...d.settings, ...patch } }))}/>
       <div className="kpi-grid">
         <KpiCard label="추가 세액공제 가능액" value={opt.pensionExtraCredit} unit="원" accent/>
         <KpiCard label="ISA 예상 절세효과" value={opt.expectedIsaSaving} unit="원"/>
