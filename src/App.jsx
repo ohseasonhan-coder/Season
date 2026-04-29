@@ -1200,6 +1200,84 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
   .cfo-goal-top{flex-direction:column}
 }
 
+
+/* CFO animated score v14 */
+.cfo-score-box-unified{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:flex-start!important;
+  justify-content:center!important;
+  gap:10px!important;
+  min-width:280px;
+}
+.animated-score-wrap{
+  width:100%;
+  margin-bottom:4px;
+}
+.animated-score-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:8px;
+}
+.animated-score-top span{
+  display:inline-flex;
+  align-items:center;
+  min-height:24px;
+  padding:5px 9px;
+  border-radius:999px;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.08);
+  color:var(--text2);
+  font-size:11px;
+  font-weight:900;
+}
+.animated-score-top b{
+  font-size:12px;
+  font-weight:900;
+  color:var(--text3);
+  font-variant-numeric:tabular-nums;
+}
+.animated-score-track{
+  position:relative;
+  width:100%;
+  height:9px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  overflow:hidden;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.25);
+}
+.animated-score-fill{
+  height:100%;
+  border-radius:999px;
+  transition:width .85s cubic-bezier(.2,.8,.2,1);
+  min-width:4px;
+}
+.animated-score-glow{
+  position:absolute;
+  top:50%;
+  width:16px;
+  height:16px;
+  border-radius:999px;
+  transform:translate(-50%,-50%);
+  filter:blur(7px);
+  opacity:.55;
+  transition:left .85s cubic-bezier(.2,.8,.2,1);
+}
+.animated-score-scale{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-top:6px;
+  color:var(--text3);
+  font-size:10.5px;
+  font-weight:800;
+}
+.cfo-score-box-unified .cfo-big-score{
+  margin-top:2px;
+}
+
 @media print{
   .sidebar,.topbar,.auth-bar,.fab,.tab-row,.btn{display:none!important}
   .main{margin-left:0!important;height:auto!important;overflow:visible!important}
@@ -1666,57 +1744,24 @@ function AssetDonutChart({ segments }) {
 }
 
 
-function SmallGauge({ value }) {
-  const rate = clamp(n(value),0,100);
-  const angle = -180 + (rate/100)*180;
-  const end = polarToCartesian(80,80,55,angle);
-  const color = rate>=70?"#6c7dff":rate>=40?"#f0b429":"#ff5c72";
+function AnimatedScoreBar({ value }) {
+  const score = clamp(n(value), 0, 100);
+  const color = score >= 70 ? "#34d58a" : score >= 50 ? "#6c7dff" : score >= 35 ? "#f0b429" : "#ff5c72";
+  const label = score >= 70 ? "안정권" : score >= 50 ? "관리 필요" : score >= 35 ? "주의 구간" : "위험 구간";
   return (
-    <svg viewBox="0 0 160 100" style={{width:"100%",maxWidth:140,marginBottom:10}}>
-      <path d={arcPath(80,80,55,-180,0)} fill="none" stroke="#252830" strokeWidth="10"/>
-      <path d={arcPath(80,80,55,-180,angle)} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round"/>
-      <line x1="80" y1="80" x2={end.x} y2={end.y} stroke={color} strokeWidth="2" opacity=".6"/>
-      <circle cx="80" cy="80" r="3" fill={color}/>
-    </svg>
-  );
-}
-
-function GoalGauge({ value, target, title }) {
-  const current = clamp(n(value), 0, 100);
-  const goal = clamp(n(target || 70), 1, 100);
-  const progress = clamp((current / goal) * 100, 0, 100);
-  const gap = Math.max(goal - current, 0);
-  const color = current >= goal ? "var(--green)" : current >= 50 ? "var(--accent2)" : current >= 35 ? "var(--amber)" : "var(--red)";
-  const bg = current >= goal ? "var(--green-bg)" : current >= 50 ? "var(--accent-bg)" : current >= 35 ? "var(--amber-bg)" : "var(--red-bg)";
-  return (
-    <div className="cfo-goal-card">
-      <div className="cfo-goal-top">
-        <div>
-          <div className="kpi-label">{title || "목표 대비 CFO 점수"}</div>
-          <div className="cfo-goal-main">
-            <span className="cfo-goal-current" style={{color}}>{Math.round(current)}</span>
-            <span className="cfo-goal-slash">/</span>
-            <span className="cfo-goal-target">{Math.round(goal)}점</span>
-          </div>
-        </div>
-        <div className="cfo-goal-chip" style={{background:bg,color}}>
-          {current >= goal ? "목표 달성" : `${gap}점 남음`}
-        </div>
+    <div className="animated-score-wrap">
+      <div className="animated-score-top">
+        <span>{label}</span>
+        <b>{Math.round(score)}%</b>
       </div>
-
-      <div className="cfo-goal-track">
-        <div className="cfo-goal-fill" style={{width:`${progress}%`, background:color}} />
+      <div className="animated-score-track">
+        <div className="animated-score-fill" style={{width:`${score}%`, background:color}} />
+        <div className="animated-score-glow" style={{left:`${score}%`, background:color}} />
       </div>
-
-      <div className="cfo-goal-meta">
-        <span>달성률 <b>{fmtPct(progress,0)}</b></span>
-        <span>목표 70점</span>
-      </div>
-
-      <div className="cfo-goal-mini-note">
-        {current >= goal
-          ? "현재 목표 구간입니다. 유지와 자동화 점검이 우선입니다."
-          : "비상금·현금흐름·투자비중 중 낮은 항목부터 개선하세요."}
+      <div className="animated-score-scale">
+        <span>0</span>
+        <span>50</span>
+        <span>100</span>
       </div>
     </div>
   );
@@ -2648,8 +2693,8 @@ function CFODecisionDashboard({ model }) {
           </div>
         </div>
         
-<div className="cfo-score-box">
-  <SmallGauge value={model.totalScore} />
+<div className="cfo-score-box cfo-score-box-unified">
+  <AnimatedScoreBar value={model.totalScore} />
   <div className="kpi-label">CFO 종합 점수</div>
   <div className="cfo-big-score" style={{color:model.toneColor}}>
     {model.totalScore}<span>/100</span>
@@ -2658,9 +2703,6 @@ function CFODecisionDashboard({ model }) {
     {model.status}
   </div>
 </div>
-</div>
-
-          
         </div>
       </div>
 
