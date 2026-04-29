@@ -1150,6 +1150,181 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 
 .cfo-why-box{margin-top:16px;padding:13px 14px;border-radius:16px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);max-width:760px}.cfo-why-box strong{display:block;font-size:13px;color:var(--text);margin-bottom:5px}.cfo-why-box p{font-size:12px;color:var(--text2);line-height:1.55}.cfo-score-reason{margin-top:9px;padding-top:9px;border-top:1px solid rgba(255,255,255,.07);font-size:11px;color:var(--text2);line-height:1.45}.cfo-expected{display:inline-flex;margin-top:6px;font-style:normal;font-size:10.5px;font-weight:900;color:var(--green);background:var(--green-bg);border:1px solid rgba(52,213,138,.23);border-radius:999px;padding:3px 7px}.cfo-simulation-card{margin-top:14px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:18px}.cfo-sim-grid{display:grid;grid-template-columns:1.25fr repeat(4,1fr);gap:10px}.cfo-sim-main,.cfo-sim-point{border:1px solid var(--border);background:var(--surface2);border-radius:16px;padding:14px}.cfo-sim-main strong{font-size:22px;font-weight:950;letter-spacing:-.04em;color:var(--text)}.cfo-sim-main p,.cfo-sim-point p{font-size:11.5px;color:var(--text3);line-height:1.45;margin-top:5px}.cfo-sim-point small{font-size:11px;color:var(--text3);font-weight:800}.cfo-sim-point strong{display:block;font-size:24px;font-weight:950;letter-spacing:-.045em;color:var(--accent);margin-top:6px}@media(max-width:1100px){.cfo-sim-grid{grid-template-columns:repeat(2,1fr)}.cfo-sim-main{grid-column:1/-1}}@media(max-width:650px){.cfo-sim-grid{grid-template-columns:1fr}}
 
+/* CFO readable detail / guard */
+.cfo-detail-panel{
+  display:grid;
+  grid-template-columns:1.18fr .82fr;
+  gap:14px;
+  margin-top:14px;
+  position:relative;
+  z-index:1;
+}
+.cfo-detail-card{
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:20px;
+  padding:18px;
+  min-width:0;
+}
+.cfo-detail-card .card-title{
+  margin-bottom:14px;
+}
+.cfo-detail-list{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.cfo-detail-row{
+  display:grid;
+  grid-template-columns:34px 1fr;
+  gap:11px;
+  align-items:flex-start;
+  padding:13px;
+  border-radius:16px;
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(255,255,255,.07);
+  min-height:108px;
+}
+.cfo-detail-icon{
+  width:34px;
+  height:34px;
+  border-radius:12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(108,125,255,.12);
+  border:1px solid rgba(108,125,255,.18);
+  font-size:15px;
+}
+.cfo-detail-copy{min-width:0}
+.cfo-detail-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-bottom:7px;
+}
+.cfo-detail-top strong{
+  font-size:13px;
+  font-weight:900;
+  color:var(--text);
+  letter-spacing:-.01em;
+}
+.cfo-detail-top span{
+  display:inline-flex;
+  max-width:55%;
+  justify-content:flex-end;
+  text-align:right;
+  font-size:12px;
+  font-weight:900;
+  color:var(--accent2);
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.cfo-detail-copy p{
+  font-size:12px;
+  color:var(--text2);
+  line-height:1.58;
+  word-break:keep-all;
+}
+.cfo-guard-desc{
+  font-size:12px;
+  line-height:1.6;
+  color:var(--text2);
+  margin-bottom:12px;
+}
+.cfo-guard-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:9px;
+}
+.cfo-guard-card{
+  padding:12px;
+  border-radius:15px;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.045);
+}
+.cfo-guard-card span{
+  display:block;
+  font-size:11px;
+  font-weight:800;
+  color:var(--text3);
+  margin-bottom:5px;
+}
+.cfo-guard-card strong{
+  display:block;
+  font-size:18px;
+  font-weight:950;
+  letter-spacing:-.035em;
+  color:var(--text);
+  line-height:1.1;
+}
+.cfo-guard-card small{
+  display:block;
+  margin-top:5px;
+  font-size:11px;
+  line-height:1.35;
+  color:var(--text3);
+}
+.cfo-guard-card.ok{
+  background:rgba(52,213,138,.075);
+  border-color:rgba(52,213,138,.20);
+}
+.cfo-guard-card.ok strong{color:var(--green)}
+.cfo-guard-card.danger{
+  background:rgba(255,92,114,.085);
+  border-color:rgba(255,92,114,.22);
+}
+.cfo-guard-card.danger strong{color:var(--red)}
+.cfo-plan-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+  margin-top:14px;
+  position:relative;
+  z-index:1;
+}
+.cfo-plan-card{
+  padding:14px;
+  border-radius:18px;
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(255,255,255,.08);
+}
+.cfo-plan-card small{
+  display:block;
+  font-size:11px;
+  font-weight:900;
+  color:var(--text3);
+  margin-bottom:7px;
+}
+.cfo-plan-card strong{
+  display:block;
+  font-size:24px;
+  font-weight:950;
+  color:var(--accent2);
+  letter-spacing:-.04em;
+  margin-bottom:8px;
+}
+.cfo-plan-card p{
+  font-size:12px;
+  color:var(--text2);
+  line-height:1.55;
+}
+.cfo-plan-card p b{
+  color:var(--text);
+  font-weight:900;
+}
+@media(max-width:1100px){
+  .cfo-detail-panel{grid-template-columns:1fr}
+  .cfo-plan-grid{grid-template-columns:1fr}
+}
+@media(max-width:780px){
+  .cfo-detail-list{grid-template-columns:1fr}
+  .cfo-detail-top{align-items:flex-start;flex-direction:column}
+  .cfo-detail-top span{max-width:100%;text-align:left}
+}
+
+
 /* Dashboard Pro */
 .dashboard-hero{display:grid;grid-template-columns:1.1fr 1.4fr;gap:14px}
 .health-card{background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.08));border:1px solid rgba(108,125,255,.22);border-radius:var(--radius-lg);padding:22px;overflow:hidden}
@@ -2379,19 +2554,37 @@ function CFODecisionDashboard({ model }) {
           <div className="cfo-detail-list">
             {(model.detailedDiagnosis||[]).map((d,i)=>(
               <div key={i} className="cfo-detail-row">
-                <div><strong>{d.label}</strong><br/><span>{d.value}</span></div>
-                <span>{d.text}</span>
+                <div className="cfo-detail-icon">{["💸","🛡️","📈","🎯"][i] || "•"}</div>
+                <div className="cfo-detail-copy">
+                  <div className="cfo-detail-top">
+                    <strong>{d.label}</strong>
+                    <span>{d.value}</span>
+                  </div>
+                  <p>{d.text}</p>
+                </div>
               </div>
             ))}
           </div>
         </div>
         <div className="cfo-detail-card">
           <div className="card-title"><h3>입력 오류 방어 상태</h3><span className="badge badge-muted">Guard</span></div>
-          <p>계산이 틀어질 수 있는 값은 저장 전·검증센터·대시보드에서 함께 감지하도록 강화했습니다.</p>
-          <div className="cfo-guard-chip-row">
-            <span className={`cfo-guard-chip ${model.guardSummary?.targetWeightSum>1?"danger":"ok"}`}>투자목표 합계 {fmtPct((model.guardSummary?.targetWeightSum||0)*100)}</span>
-            <span className={`cfo-guard-chip ${model.guardSummary?.legacyWeightSum>1?"danger":"ok"}`}>기본비중 합계 {fmtPct((model.guardSummary?.legacyWeightSum||0)*100)}</span>
-            <span className={`cfo-guard-chip ${model.guardSummary?.usdHoldingsNeedFx?"danger":"ok"}`}>USD 환율 {model.guardSummary?.usdHoldingsNeedFx?"필요":"정상"}</span>
+          <p className="cfo-guard-desc">계산 오류가 생길 수 있는 주요 입력값을 대시보드에서 함께 감시합니다.</p>
+          <div className="cfo-guard-grid">
+            <div className={`cfo-guard-card ${model.guardSummary?.targetWeightSum>1?"danger":"ok"}`}>
+              <span>투자목표 합계</span>
+              <strong>{fmtPct((model.guardSummary?.targetWeightSum||0)*100)}</strong>
+              <small>{model.guardSummary?.targetWeightSum>1 ? "100% 초과 조정 필요" : "정상 범위"}</small>
+            </div>
+            <div className={`cfo-guard-card ${model.guardSummary?.legacyWeightSum>1?"danger":"ok"}`}>
+              <span>기본비중 합계</span>
+              <strong>{fmtPct((model.guardSummary?.legacyWeightSum||0)*100)}</strong>
+              <small>{model.guardSummary?.legacyWeightSum>1 ? "100% 초과 조정 필요" : "정상 범위"}</small>
+            </div>
+            <div className={`cfo-guard-card ${model.guardSummary?.usdHoldingsNeedFx?"danger":"ok"}`}>
+              <span>USD 환율</span>
+              <strong>{model.guardSummary?.usdHoldingsNeedFx?"확인 필요":"정상"}</strong>
+              <small>{model.guardSummary?.usdHoldingsNeedFx ? "해외자산 평가 차단" : "원화 평가 가능"}</small>
+            </div>
           </div>
         </div>
       </div>
