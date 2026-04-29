@@ -60,6 +60,11 @@ const DEFAULT_SETTINGS = {
   fxAsOf:"",
   marketDataLastUpdated:"",
   autoUpdateMarketDataOnStart:false,
+  autoTaxUpdateEnabled:true,
+  taxUpdateLastChecked:"",
+  taxUpdateSummary:"",
+  taxUpdateStatus:"not_checked",
+  taxUpdateSource:"",
   autoTriggerEnabled:true,
   autoRebalanceTriggerEnabled:true,
   autoBuyTriggerEnabled:true,
@@ -171,6 +176,11 @@ function migrateData(d) {
   x.settings.fxAsOf = x.settings.fxAsOf || "";
   x.settings.marketDataLastUpdated = x.settings.marketDataLastUpdated || "";
   x.settings.autoUpdateMarketDataOnStart = x.settings.autoUpdateMarketDataOnStart === true;
+  x.settings.autoTaxUpdateEnabled = x.settings.autoTaxUpdateEnabled !== false;
+  x.settings.taxUpdateLastChecked = x.settings.taxUpdateLastChecked || "";
+  x.settings.taxUpdateSummary = x.settings.taxUpdateSummary || "";
+  x.settings.taxUpdateStatus = x.settings.taxUpdateStatus || "not_checked";
+  x.settings.taxUpdateSource = x.settings.taxUpdateSource || "";
   return x;
 }
 function loadData() {
@@ -964,6 +974,34 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 /* Net Worth Goal Timeline */
 .networth-timeline-card{border-color:rgba(108,125,255,.22);background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.055))}
 .networth-timeline-card .table-wrap{max-height:360px}
+
+
+/* Tax monthly calendar */
+.tax-calendar-month-card{background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.06));border:1px solid rgba(108,125,255,.18);border-radius:var(--radius-lg);padding:22px}
+.tax-cal-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.tax-cal-title{display:flex;align-items:center;gap:10px}
+.tax-cal-title h3{font-size:16px;margin:0;font-weight:900;letter-spacing:-.02em}
+.tax-cal-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tax-cal-nav-btn{width:36px;height:36px;border-radius:12px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:18px;font-weight:900;display:flex;align-items:center;justify-content:center;transition:.15s ease}
+.tax-cal-nav-btn:hover{background:rgba(108,125,255,.14);border-color:rgba(108,125,255,.28);color:var(--accent2);transform:translateY(-1px)}
+.tax-cal-input{height:36px;border:1px solid var(--border2);border-radius:12px;background:var(--surface2);color:var(--text);padding:0 10px;font-size:13px;font-weight:800;outline:none}
+.tax-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.tax-cal-weekday{font-size:11px;font-weight:900;color:var(--text3);text-align:center;padding:6px 0;letter-spacing:.04em}
+.tax-cal-day{min-height:112px;border:1px solid var(--border);border-radius:14px;background:var(--surface2);padding:9px;display:flex;flex-direction:column;gap:7px;transition:.15s ease;overflow:hidden}
+.tax-cal-day:hover{border-color:rgba(108,125,255,.28);transform:translateY(-1px)}
+.tax-cal-day.outside{opacity:.35;background:rgba(255,255,255,.025)}
+.tax-cal-day.today{box-shadow:inset 0 0 0 1px rgba(108,125,255,.45);border-color:rgba(108,125,255,.45)}
+.tax-cal-date{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:900;color:var(--text)}
+.tax-cal-events{display:flex;flex-direction:column;gap:5px}
+.tax-cal-event{border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:6px;background:rgba(255,255,255,.04)}
+.tax-cal-event strong{display:block;font-size:11.5px;color:var(--text);line-height:1.25;margin-top:4px}
+.tax-cal-event p{font-size:10.5px;color:var(--text3);line-height:1.35;margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tax-update-box{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-top:14px;padding:14px;border-radius:14px;border:1px solid rgba(108,125,255,.20);background:rgba(108,125,255,.08)}
+.tax-update-box strong{font-size:13px;color:var(--text)}
+.tax-update-box p{font-size:12px;color:var(--text2);line-height:1.5;margin-top:4px}
+@media(max-width:900px){.tax-cal-grid{gap:6px}.tax-cal-day{min-height:92px;padding:7px}.tax-cal-event p{display:none}}
+@media(max-width:700px){.tax-cal-grid{grid-template-columns:repeat(2,1fr)}.tax-cal-weekday{display:none}.tax-cal-day.outside{display:none}}
+
 /* Responsive */
 @media(max-width:900px){
   .sidebar{width:180px}
@@ -3447,6 +3485,10 @@ function calcTaxOptimization(data, taxAnalysis) {
 
 
 // ─── 세금 캘린더 / 연간 타임라인 ──────────────────────────────────────────────
+function taxDeadlineDate(year, month, preferredDay) {
+  const last = new Date(year, month, 0).getDate();
+  return Math.min(preferredDay, last);
+}
 function buildTaxCalendar(data, taxAnalysis, futureSim) {
   const s = data.settings || {};
   const now = new Date();
@@ -3464,24 +3506,36 @@ function buildTaxCalendar(data, taxAnalysis, futureSim) {
   const finalFuture = Array.isArray(futureSim) && futureSim.length ? futureSim[futureSim.length - 1] : null;
   const target = n(s.retirementTargetAmount);
   const projected = n(finalFuture?.total);
+  const mk = (yyyy, month, day, type, title, amount, desc, tone) => ({
+    year: yyyy,
+    month,
+    day: taxDeadlineDate(yyyy, month, day),
+    date: `${yyyy}-${String(month).padStart(2,"0")}-${String(taxDeadlineDate(yyyy, month, day)).padStart(2,"0")}`,
+    type,
+    title,
+    amount,
+    desc,
+    tone,
+    completed:false,
+  });
   const events = [
-    { month:5, type:"신고", title:"종합소득세", amount:taxableTax, desc: taxableTax > 0 ? `일반계좌 추정 과세 노출 ${fmt(taxableTax)}원 점검` : "근로 외 소득·금융소득·사업소득 여부 확인", tone:"amber" },
-    { month:7, type:"납부", title:"재산세 1기", amount:0, desc:"주택·건물분 재산세 납부 여부 확인", tone:"info" },
-    { month:9, type:"납부", title:"재산세 2기", amount:0, desc:"토지·주택분 재산세 납부 여부 확인", tone:"info" },
-    { month:12, type:"절세", title:"연금/IRP 한도 마감", amount:pensionGap, desc:pensionGap > 0 ? `세액공제 잔여 한도 ${fmt(pensionGap)}원` : "연금 세액공제 한도 사용 완료", tone:pensionGap > 0 ? "green" : "info" },
-    { month:12, type:"절세", title:"ISA 연간 한도 점검", amount:isaGap, desc:isaGap > 0 ? `ISA 남은 납입 여력 ${fmt(isaGap)}원` : "ISA 연간 납입 한도 사용 완료", tone:isaGap > 0 ? "green" : "info" },
+    mk(year, 5, 31, "신고", "종합소득세", taxableTax, taxableTax > 0 ? `일반계좌 추정 과세 노출 ${fmt(taxableTax)}원 점검` : "근로 외 소득·금융소득·사업소득 여부 확인", "amber"),
+    mk(year, 7, 31, "납부", "재산세 1기", 0, "주택 1기분·건축물분 등 고지서 확인", "info"),
+    mk(year, 9, 30, "납부", "재산세 2기", 0, "주택 2기분·토지분 등 고지서 확인", "info"),
+    mk(year, 12, 20, "절세", "연금/IRP 한도 마감", pensionGap, pensionGap > 0 ? `세액공제 잔여 한도 ${fmt(pensionGap)}원` : "연금 세액공제 한도 사용 완료", pensionGap > 0 ? "green" : "info"),
+    mk(year, 12, 31, "절세", "ISA 연간 한도 점검", isaGap, isaGap > 0 ? `ISA 남은 납입 여력 ${fmt(isaGap)}원` : "ISA 연간 납입 한도 사용 완료", isaGap > 0 ? "green" : "info"),
   ];
   if (isaMaturityYear === year) {
-    events.push({ month:isaMaturityMonth, type:"만기", title:"ISA 만기", amount:0, desc:"만기자금 중 연금 이전·새 ISA 재개설·일반계좌 분리를 결정", tone:"red" });
+    events.push(mk(year, isaMaturityMonth, 1, "만기", "ISA 만기", 0, "연금 이전·새 ISA 재개설·일반계좌 분리 결정", "red"));
   } else {
-    events.push({ month:12, type:"예정", title:`ISA 만기 예정 ${isaMaturityYear}.${String(isaMaturityMonth).padStart(2,"0")}`, amount:0, desc:"올해는 만기 전 준비 단계입니다. 이전 비율과 재개설 계획을 미리 정리하세요.", tone:"accent" });
+    events.push(mk(year, 12, 10, "예정", `ISA 만기 예정 ${isaMaturityYear}.${String(isaMaturityMonth).padStart(2,"0")}`, 0, "올해는 만기 전 준비 단계입니다. 이전 비율과 재개설 계획을 정리하세요.", "accent"));
   }
   if (target > 0 && projected > 0) {
-    events.push({ month:12, type:"시뮬", title:"은퇴 시뮬 점검", amount:projected-target, desc: projected >= target ? `목표 대비 예상 초과 ${fmt(projected-target)}원` : `목표 대비 예상 부족 ${fmt(target-projected)}원`, tone:projected >= target ? "green" : "amber" });
+    events.push(mk(year, 12, 15, "시뮬", "은퇴 시뮬 점검", projected - target, projected >= target ? `목표 대비 예상 초과 ${fmt(projected-target)}원` : `목표 대비 예상 부족 ${fmt(target-projected)}원`, projected >= target ? "green" : "amber"));
   }
-  const months = Array.from({ length:12 }, (_,i) => ({ month:i+1, label:`${i+1}월`, events:events.filter(e => e.month === i+1) }));
-  const upcoming = events.filter(e => e.month >= currentMonth).sort((a,b)=>a.month-b.month).slice(0,4);
-  const next = upcoming[0] || events.sort((a,b)=>a.month-b.month)[0];
+  const months = Array.from({ length:12 }, (_,i) => ({ month:i+1, label:`${i+1}월`, events:events.filter(e => e.month === i+1).sort((a,b)=>a.day-b.day) }));
+  const upcoming = events.filter(e => e.month > currentMonth || (e.month === currentMonth && e.day >= now.getDate())).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,4);
+  const next = upcoming[0] || [...events].sort((a,b)=>a.date.localeCompare(b.date))[0];
   const actions = [];
   if (taxableTax > 0) actions.push(`5월 종합소득세 전 일반계좌 손익과 배당 내역을 정리하세요.`);
   if (isaGap > 0) actions.push(`12월 전 ISA 잔여 한도 ${fmt(isaGap)}원을 월별로 나눠 납입 계획을 세우세요.`);
@@ -3490,41 +3544,150 @@ function buildTaxCalendar(data, taxAnalysis, futureSim) {
   return { year, months, events, upcoming, next, actions: actions.slice(0,4), isaMaturityYear, isaMaturityMonth, taxableTax, isaGap, pensionGap };
 }
 
-function TaxCalendarTimeline({ calendar }) {
+function buildCalendarCells(year, month, events) {
+  const first = new Date(year, month - 1, 1);
+  const firstDay = first.getDay();
+  const start = new Date(year, month - 1, 1 - firstDay);
+  const today = todayISO();
+  return Array.from({ length:42 }, (_,idx) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + idx);
+    const yyyy = d.getFullYear();
+    const mm = d.getMonth() + 1;
+    const dd = d.getDate();
+    const iso = `${yyyy}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`;
+    return { iso, year:yyyy, month:mm, day:dd, outside:mm !== month, today:iso === today, events:(events || []).filter(e => e.date === iso) };
+  });
+}
+
+const TAX_UPDATE_SOURCES = [
+  { name:"국세청", url:"https://www.nts.go.kr", keywords:["종합소득세","소득세","세법","ISA","연금"] },
+  { name:"홈택스", url:"https://www.hometax.go.kr", keywords:["종합소득세","신고","납부","연말정산"] },
+  { name:"위택스", url:"https://www.wetax.go.kr", keywords:["재산세","지방세","납부"] },
+];
+async function fetchTaxUpdateSnapshot() {
+  const checkedAt = new Date().toISOString();
+  const results = [];
+  for (const src of TAX_UPDATE_SOURCES) {
+    try {
+      const proxyUrl = `https://r.jina.ai/http://r.jina.ai/http://${src.url}`;
+      const res = await fetch(proxyUrl, { method:"GET" });
+      const text = await res.text();
+      const hit = src.keywords.filter(k => text.includes(k));
+      results.push({ source:src.name, url:src.url, ok:res.ok, hit, sample:text.slice(0,500) });
+    } catch (err) {
+      results.push({ source:src.name, url:src.url, ok:false, hit:[], error:String(err?.message || err) });
+    }
+  }
+  const okCount = results.filter(r => r.ok).length;
+  const hitTexts = results.flatMap(r => r.hit.map(k => `${r.source}:${k}`));
+  return {
+    checkedAt,
+    status: okCount > 0 ? "checked" : "failed",
+    source: results.filter(r=>r.ok).map(r=>r.source).join(", ") || "공식 사이트 직접 확인 필요",
+    summary: okCount > 0
+      ? `공식 사이트 ${okCount}곳을 조회했습니다. 감지 키워드: ${hitTexts.length ? hitTexts.join(" · ") : "주요 키워드 변화 없음"}`
+      : "브라우저 보안/CORS 또는 네트워크 문제로 자동 조회에 실패했습니다. 공식 사이트 버튼으로 직접 확인하세요.",
+    results,
+  };
+}
+
+function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
+  const initial = `${calendar.year}-${String(new Date().getMonth()+1).padStart(2,"0")}`;
+  const [monthValue, setMonthValue] = useState(initial);
+  const [loading, setLoading] = useState(false);
+  const [localMsg, setLocalMsg] = useState("");
+  const [y,m] = monthValue.split("-").map(Number);
+  const cells = useMemo(() => buildCalendarCells(y || calendar.year, m || 1, calendar.events), [y, m, calendar]);
+  const monthEvents = useMemo(() => (calendar.events || []).filter(e => e.year === y && e.month === m).sort((a,b)=>a.day-b.day), [calendar, y, m]);
   const toneClass = (t) => t === "red" ? "badge-red" : t === "amber" ? "badge-amber" : t === "green" ? "badge-green" : t === "accent" ? "badge-accent" : "badge-muted";
+  const moveMonth = (delta) => {
+    const base = new Date(y || calendar.year, (m || 1) - 1 + delta, 1);
+    setMonthValue(`${base.getFullYear()}-${String(base.getMonth()+1).padStart(2,"0")}`);
+  };
+  const runUpdate = async () => {
+    setLoading(true);
+    setLocalMsg("최신 세법·신고 일정 정보를 확인하는 중입니다.");
+    try {
+      const snapshot = await fetchTaxUpdateSnapshot();
+      onUpdateSettings?.({
+        taxUpdateLastChecked:snapshot.checkedAt,
+        taxUpdateStatus:snapshot.status,
+        taxUpdateSummary:snapshot.summary,
+        taxUpdateSource:snapshot.source,
+      });
+      setLocalMsg(snapshot.summary);
+    } catch (err) {
+      const msg = `자동 확인 실패: ${String(err?.message || err)}. 공식 사이트에서 직접 확인해 주세요.`;
+      onUpdateSettings?.({ taxUpdateLastChecked:new Date().toISOString(), taxUpdateStatus:"failed", taxUpdateSummary:msg, taxUpdateSource:"공식 사이트 직접 확인 필요" });
+      setLocalMsg(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (!settings?.autoTaxUpdateEnabled) return;
+    const last = settings?.taxUpdateLastChecked ? new Date(settings.taxUpdateLastChecked).getTime() : 0;
+    const oneDay = 24 * 60 * 60 * 1000;
+    if (!last || Date.now() - last > oneDay) runUpdate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
-    <div className="card">
-      <div className="card-title">
-        <div>
-          <h3>세금 캘린더 · 연간 타임라인</h3>
-          <p className="small muted" style={{marginTop:4}}>taxAnalysis와 futureSim을 연결해 신고·납부·절세·ISA 만기 일정을 한눈에 보여줍니다.</p>
+    <div className="tax-calendar-month-card">
+      <div className="tax-cal-header">
+        <div className="tax-cal-title">
+          <span className="badge badge-accent">월간 보기</span>
+          <div>
+            <h3>세금 캘린더 · 월 단위 타임라인</h3>
+            <p className="small muted" style={{marginTop:4}}>taxAnalysis와 futureSim 데이터를 월별 신고·납부·절세 일정으로 전환합니다.</p>
+          </div>
         </div>
-        <span className="badge badge-accent">{calendar.year}년</span>
+        <div className="tax-cal-nav">
+          <button className="tax-cal-nav-btn" onClick={()=>moveMonth(-1)} title="이전 달">‹</button>
+          <input className="tax-cal-input" type="month" value={monthValue} onChange={e=>setMonthValue(e.target.value)} />
+          <button className="tax-cal-nav-btn" onClick={()=>moveMonth(1)} title="다음 달">›</button>
+          <button className="btn btn-ghost btn-sm" onClick={()=>setMonthValue(initial)}>이번 달</button>
+          <button className="btn btn-primary btn-sm" onClick={runUpdate} disabled={loading}>{loading ? "확인 중..." : "최신 세법 업데이트 확인"}</button>
+        </div>
       </div>
       <div className="g3" style={{marginBottom:14}}>
-        <div className="compact-insight amber"><span>🧾</span><div><strong>다음 세금 일정</strong><p>{calendar.next ? `${calendar.next.month}월 · ${calendar.next.title}` : "등록된 일정 없음"}</p></div></div>
+        <div className="compact-insight amber"><span>🧾</span><div><strong>다음 세금 일정</strong><p>{calendar.next ? `${calendar.next.date} · ${calendar.next.title}` : "등록된 일정 없음"}</p></div></div>
         <div className="compact-insight green"><span>🌱</span><div><strong>절세 잔여 여력</strong><p>ISA {fmt(calendar.isaGap)}원 · 연금 {fmt(calendar.pensionGap)}원</p></div></div>
-        <div className="compact-insight info"><span>🏁</span><div><strong>ISA 만기</strong><p>{calendar.isaMaturityYear}.{String(calendar.isaMaturityMonth).padStart(2,"0")} 예정</p></div></div>
+        <div className="compact-insight info"><span>🏁</span><div><strong>인터넷 업데이트</strong><p>{settings?.taxUpdateLastChecked ? `${new Date(settings.taxUpdateLastChecked).toLocaleString("ko-KR")} 확인` : "아직 확인 전"}</p></div></div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gap:8,alignItems:"stretch"}}>
-        {calendar.months.map(m => (
-          <div key={m.month} style={{minHeight:118,border:"1px solid var(--border)",borderRadius:12,background:"var(--surface2)",padding:8}}>
-            <div className="row-between" style={{marginBottom:7}}><strong style={{fontSize:12}}>{m.label}</strong>{m.events.length>0&&<span className="badge badge-muted">{m.events.length}</span>}</div>
-            <div className="stack" style={{gap:6}}>
-              {m.events.length ? m.events.map((e,idx)=>(
-                <div key={`${e.title}-${idx}`} style={{border:"1px solid var(--border2)",borderRadius:10,padding:7,background:"rgba(255,255,255,.035)"}}>
+      <div className="tax-cal-grid">
+        {["일","월","화","수","목","금","토"].map(w => <div className="tax-cal-weekday" key={w}>{w}</div>)}
+        {cells.map(c => (
+          <div key={c.iso} className={`tax-cal-day ${c.outside ? "outside" : ""} ${c.today ? "today" : ""}`}>
+            <div className="tax-cal-date"><span>{c.day}</span>{c.events.length>0 && <span className="badge badge-muted">{c.events.length}</span>}</div>
+            <div className="tax-cal-events">
+              {c.events.map((e,idx) => (
+                <div className="tax-cal-event" key={`${e.title}-${idx}`}>
                   <span className={`badge ${toneClass(e.tone)}`}>{e.type}</span>
-                  <div style={{fontSize:11.5,fontWeight:800,marginTop:5,color:"var(--text)"}}>{e.title}</div>
-                  <div style={{fontSize:10.5,color:"var(--text3)",lineHeight:1.35,marginTop:3}}>{e.desc}</div>
+                  <strong>{e.title}</strong>
+                  <p>{e.desc}</p>
                 </div>
-              )) : <div style={{fontSize:11,color:"var(--text3)",paddingTop:20,textAlign:"center"}}>주요 일정 없음</div>}
+              ))}
             </div>
           </div>
         ))}
       </div>
-      {calendar.actions.length > 0 && <div className="ai-suggest-card">
-        <div><div className="ai-suggest-title">AI 세금 코칭</div><div className="ai-suggest-desc">{calendar.actions[0]}</div><div className="ai-chip-row">{calendar.actions.slice(1).map(a=><span key={a} className="ai-chip">{a}</span>)}</div></div>
-      </div>}
+      <div className="tax-update-box">
+        <div>
+          <strong>업데이트 상태</strong>
+          <p>{localMsg || settings?.taxUpdateSummary || "앱 실행 시 하루 1회 자동 확인하고, 버튼을 누르면 즉시 다시 확인합니다. 브라우저 보안 정책으로 실패할 경우 공식 사이트 직접 확인이 필요합니다."}</p>
+          <div className="ai-chip-row" style={{marginTop:8}}>
+            <span className="ai-chip">소스: {settings?.taxUpdateSource || "국세청 · 홈택스 · 위택스"}</span>
+            <span className="ai-chip">이번 달 일정 {monthEvents.length}건</span>
+            {calendar.actions.slice(0,2).map(a => <span className="ai-chip" key={a}>{a}</span>)}
+          </div>
+        </div>
+        <div className="row" style={{flexShrink:0}}>
+          <button className="btn btn-ghost btn-sm" onClick={()=>window.open("https://www.nts.go.kr", "_blank")}>국세청</button>
+          <button className="btn btn-ghost btn-sm" onClick={()=>window.open("https://www.hometax.go.kr", "_blank")}>홈택스</button>
+          <button className="btn btn-ghost btn-sm" onClick={()=>window.open("https://www.wetax.go.kr", "_blank")}>위택스</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -3545,7 +3708,7 @@ function TaxTab({ data, update, taxAnalysis, futureSim }) {
       {/* ── 자연어 요약 카드 ── */}
       <NaturalInsightCard icon={taxNLP.icon} title={taxNLP.title} message={taxNLP.message} tone={taxNLP.tone} actions={taxNLP.actions}/>
       <AICoachPanel coach={taxCoach}/>
-      <TaxCalendarTimeline calendar={taxCalendar}/>
+      <TaxCalendarTimeline calendar={taxCalendar} settings={s} onUpdateSettings={(patch)=>update(d=>({ ...d, settings:{ ...d.settings, ...patch } }))}/>
       <div className="kpi-grid">
         <KpiCard label="추가 세액공제 가능액" value={opt.pensionExtraCredit} unit="원" accent/>
         <KpiCard label="ISA 예상 절세효과" value={opt.expectedIsaSaving} unit="원"/>
