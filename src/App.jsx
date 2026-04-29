@@ -808,6 +808,37 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .allocation-row span{font-size:13px;font-weight:900;color:var(--accent);font-variant-numeric:tabular-nums;white-space:nowrap}
 @media(max-width:900px){.decision-hero{flex-direction:column;align-items:flex-start}.decision-score{font-size:40px}}
 
+
+/* Monthly Friendly Summary Spotlight */
+.report-summary-spotlight{
+  position:relative;
+  overflow:hidden;
+  padding:26px;
+  border-radius:24px;
+  background:linear-gradient(135deg,rgba(108,125,255,.15),rgba(255,255,255,.045));
+  border-color:rgba(108,125,255,.26);
+  box-shadow:0 18px 44px rgba(0,0,0,.22);
+}
+.report-summary-spotlight.good{background:linear-gradient(135deg,rgba(52,213,138,.14),rgba(108,125,255,.07));border-color:rgba(52,213,138,.26)}
+.report-summary-spotlight.warn{background:linear-gradient(135deg,rgba(240,180,41,.14),rgba(108,125,255,.06));border-color:rgba(240,180,41,.26)}
+.report-summary-spotlight.danger{background:linear-gradient(135deg,rgba(255,92,114,.14),rgba(108,125,255,.06));border-color:rgba(255,92,114,.26)}
+.report-summary-spotlight:after{
+  content:"";
+  position:absolute;
+  width:260px;height:260px;right:-80px;top:-120px;
+  background:radial-gradient(circle,rgba(255,255,255,.14),transparent 64%);
+  pointer-events:none;
+}
+.summary-kicker{font-size:12px;font-weight:900;color:var(--accent2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+.report-summary-spotlight.good .summary-kicker{color:var(--green)}
+.report-summary-spotlight.warn .summary-kicker{color:var(--amber)}
+.report-summary-spotlight.danger .summary-kicker{color:var(--red)}
+.summary-headline{font-size:28px;font-weight:950;letter-spacing:-.045em;line-height:1.2;margin-bottom:12px;color:var(--text)}
+.summary-friendly-text{font-size:15px;line-height:1.8;color:var(--text2);white-space:pre-line;max-width:920px}
+.summary-chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.summary-chip-lg{display:inline-flex;align-items:center;gap:6px;padding:8px 11px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.09);font-size:12px;font-weight:800;color:var(--text)}
+@media(max-width:700px){.summary-headline{font-size:22px}.summary-friendly-text{font-size:13.5px}.report-summary-spotlight{padding:20px}}
+
 /* Monthly Report */
 .report-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.08));border-color:rgba(108,125,255,.20)}
 .report-hero h2{font-size:24px;font-weight:900;letter-spacing:-.04em;margin:4px 0}
@@ -1701,6 +1732,18 @@ function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, fi
             <strong className="text-accent">{fmtPct(advanced.targetRate)}</strong>
             <small>은퇴 목표 대비</small>
           </div>
+        </div>
+      </div>
+
+      <div className={`card report-summary-spotlight ${report.net<0?"danger":report.savingsRate<20?"warn":"good"}`}>
+        <div className="summary-kicker">Friendly Monthly Summary</div>
+        <div className="summary-headline">{report.headline}</div>
+        <div className="summary-friendly-text">{report.summaryText}</div>
+        <div className="summary-chip-row">
+          <span className="summary-chip-lg">💰 순현금흐름 {fmt(report.net)}원</span>
+          <span className="summary-chip-lg">📈 저축률 {fmtPct(report.savingsRate)}</span>
+          <span className="summary-chip-lg">🧾 지출 변화 {fmtPct(report.expenseChange)}</span>
+          <span className="summary-chip-lg">✅ 추천 행동 {report.actions.length}개</span>
         </div>
       </div>
 
@@ -4121,16 +4164,36 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
     if(dashboardDetail?.emergencyFund<n(expense)*3) actions.push({tag:"안전",title:"비상금 보강",text:"월 지출 3~6개월치 비상금 확보를 우선 검토하세요."});
     if(actions.length===0) actions.push({tag:"유지",title:"현재 전략 유지",text:"다음 달도 같은 기준으로 기록과 점검을 이어가세요."});
 
-    const summaryText=[
-      `${month} 월간 리포트`,
-      `수입은 ${fmt(income)}원, 지출은 ${fmt(expense)}원, 순현금흐름은 ${fmt(net)}원입니다.`,
-      `저축률은 ${fmtPct(savingsRate)}이며, 전월 대비 지출 변화율은 ${fmtPct(expenseChange)}입니다.`,
-      topExpenses[0]?`가장 큰 지출 항목은 ${topExpenses[0].cat} (${fmt(topExpenses[0].amount)}원)입니다.`:"지출 항목이 없습니다.",
-      issues.map(i=>`- ${i.title}: ${i.text}`).join(""),
-      actions.map(a=>`- ${a.title}: ${a.text}`).join("")
-    ].join("");
+    const headline = net < 0
+      ? `이번 달은 ${fmt(Math.abs(net))}원 적자라 지출 점검이 필요해요.`
+      : savingsRate >= 40
+        ? `이번 달은 저축률 ${fmtPct(savingsRate)}로 아주 잘 관리되고 있어요.`
+        : savingsRate >= 20
+          ? `이번 달은 흑자 흐름이에요. 조금만 더 다듬으면 더 좋아져요.`
+          : `이번 달은 흑자지만 저축률을 조금 더 끌어올리면 좋아요.`;
 
-    return {tx,income,expense,transfer,net,savingsRate,incomeChange,expenseChange,netChange,topExpenses,incomeBreakdown,highTx,topDays,budgetRows,overBudget,warningBudget,issues,actions,summaryText};
+    const topExpenseSentence = topExpenses[0]
+      ? `가장 많이 쓴 항목은 ${topExpenses[0].cat}이고, 금액은 ${fmt(topExpenses[0].amount)}원이에요.`
+      : "아직 지출 항목이 충분히 입력되지 않았어요.";
+
+    const summaryText=[
+      `${month} 월간 리포트예요 😊`,
+      `이번 달 수입은 ${fmt(income)}원, 지출은 ${fmt(expense)}원이에요. 그래서 최종 순현금흐름은 ${fmt(net)}원입니다.`,
+      `저축률은 ${fmtPct(savingsRate)}이고, 전월 대비 지출 변화율은 ${fmtPct(expenseChange)}예요. ${topExpenseSentence}`,
+      `현재 판단: ${headline}`,
+      issues.length ? `확인할 점
+${issues.map(i=>`• ${i.title}: ${i.text}`).join("
+")}` : "확인할 점
+• 특별한 이상 신호는 크지 않아요.",
+      actions.length ? `다음 달 추천 행동
+${actions.map(a=>`• ${a.title}: ${a.text}`).join("
+")}` : "다음 달 추천 행동
+• 지금처럼 꾸준히 기록하고 점검하면 돼요."
+    ].join("
+
+");
+
+    return {tx,income,expense,transfer,net,savingsRate,incomeChange,expenseChange,netChange,topExpenses,incomeBreakdown,highTx,topDays,budgetRows,overBudget,warningBudget,issues,actions,summaryText,headline,topExpenseSentence};
   },[data.transactions,month,monthlySeries,budgetAnalysis,taxAnalysis,dashboardDetail]);
 
   const copyReport=async()=>{
