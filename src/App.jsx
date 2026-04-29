@@ -1665,6 +1665,22 @@ function AssetDonutChart({ segments }) {
   );
 }
 
+
+function SmallGauge({ value }) {
+  const rate = clamp(n(value),0,100);
+  const angle = -180 + (rate/100)*180;
+  const end = polarToCartesian(80,80,55,angle);
+  const color = rate>=70?"#6c7dff":rate>=40?"#f0b429":"#ff5c72";
+  return (
+    <svg viewBox="0 0 160 100" style={{width:"100%",maxWidth:140,marginBottom:10}}>
+      <path d={arcPath(80,80,55,-180,0)} fill="none" stroke="#252830" strokeWidth="10"/>
+      <path d={arcPath(80,80,55,-180,angle)} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round"/>
+      <line x1="80" y1="80" x2={end.x} y2={end.y} stroke={color} strokeWidth="2" opacity=".6"/>
+      <circle cx="80" cy="80" r="3" fill={color}/>
+    </svg>
+  );
+}
+
 function GoalGauge({ value, target, title }) {
   const current = clamp(n(value), 0, 100);
   const goal = clamp(n(target || 70), 1, 100);
@@ -2631,13 +2647,20 @@ function CFODecisionDashboard({ model }) {
             <p>{model.scoreLosses.length ? `가장 큰 감점 요인은 ${model.scoreLosses.map((x)=>`${x.label} -${x.lost}점`).join(", ")}입니다.` : "현재 입력된 데이터 기준으로 큰 감점 요인이 없습니다."}</p>
           </div>
         </div>
-        <div className="cfo-score-box">
-          <div>
-            <div className="kpi-label">CFO 종합 점수</div>
-            <div className="cfo-big-score" style={{color:model.toneColor}}>{model.totalScore}<span>/100</span></div>
-            <div className="cfo-status-pill" style={{background:model.toneBg,color:model.toneColor}}>{model.status}</div>
-          </div>
-          <GoalGauge value={model.totalScore} target={70} title="목표 대비 CFO 점수" />
+        
+<div className="cfo-score-box">
+  <SmallGauge value={model.totalScore} />
+  <div className="kpi-label">CFO 종합 점수</div>
+  <div className="cfo-big-score" style={{color:model.toneColor}}>
+    {model.totalScore}<span>/100</span>
+  </div>
+  <div className="cfo-status-pill" style={{background:model.toneBg,color:model.toneColor}}>
+    {model.status}
+  </div>
+</div>
+</div>
+
+          
         </div>
       </div>
 
