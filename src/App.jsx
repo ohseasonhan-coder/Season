@@ -839,6 +839,22 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .summary-chip-lg{display:inline-flex;align-items:center;gap:6px;padding:8px 11px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.09);font-size:12px;font-weight:800;color:var(--text)}
 @media(max-width:700px){.summary-headline{font-size:22px}.summary-friendly-text{font-size:13.5px}.report-summary-spotlight{padding:20px}}
 
+.ai-coach-hero{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;align-items:stretch}
+.ai-coach-panel{position:relative;overflow:hidden;padding:24px;border-radius:24px;background:linear-gradient(135deg,rgba(108,125,255,.16),rgba(52,213,138,.07));border:1px solid rgba(108,125,255,.24)}
+.ai-coach-panel.warn{background:linear-gradient(135deg,rgba(240,180,41,.16),rgba(108,125,255,.06));border-color:rgba(240,180,41,.28)}
+.ai-coach-panel.danger{background:linear-gradient(135deg,rgba(255,92,114,.16),rgba(108,125,255,.06));border-color:rgba(255,92,114,.28)}
+.ai-coach-panel.good{background:linear-gradient(135deg,rgba(52,213,138,.15),rgba(108,125,255,.06));border-color:rgba(52,213,138,.28)}
+.ai-coach-kicker{font-size:12px;font-weight:950;color:var(--accent2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+.ai-coach-title{font-size:27px;font-weight:950;letter-spacing:-.045em;line-height:1.22;color:var(--text);margin-bottom:12px}
+.ai-coach-message{font-size:15px;line-height:1.75;color:var(--text2);white-space:pre-line;max-width:920px}
+.ai-coach-score-card{background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:22px;display:flex;flex-direction:column;justify-content:center;gap:12px}
+.ai-coach-score{font-size:48px;font-weight:950;letter-spacing:-.06em;line-height:1}.ai-coach-score span{font-size:18px;color:var(--text3);margin-left:3px}
+.ai-coach-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.ai-coach-card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:16px;min-height:128px}
+.ai-coach-card.warn{background:var(--amber-bg);border-color:rgba(240,180,41,.24)}.ai-coach-card.danger{background:var(--red-bg);border-color:rgba(255,92,114,.24)}.ai-coach-card.good{background:var(--green-bg);border-color:rgba(52,213,138,.24)}.ai-coach-card.info{background:var(--accent-bg);border-color:rgba(108,125,255,.24)}
+.ai-coach-card-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}.ai-coach-card-head strong{font-size:13px;color:var(--text)}.ai-coach-card p{font-size:12px;color:var(--text2);line-height:1.55}
+.ai-coach-next{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:flex-start;padding:12px;border-radius:14px;background:var(--surface2);border:1px solid var(--border)}.ai-coach-next-no{width:26px;height:26px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);font-size:12px;font-weight:900;color:var(--text)}.ai-coach-next strong{font-size:13px;color:var(--text)}.ai-coach-next p{font-size:12px;color:var(--text3);line-height:1.45;margin-top:3px}
+@media(max-width:1000px){.ai-coach-hero{grid-template-columns:1fr}.ai-coach-grid{grid-template-columns:1fr}.ai-coach-title{font-size:22px}.ai-coach-score{font-size:40px}}
+
 /* Monthly Report */
 .report-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.08));border-color:rgba(108,125,255,.20)}
 .report-hero h2{font-size:24px;font-weight:900;letter-spacing:-.04em;margin:4px 0}
@@ -1732,18 +1748,6 @@ function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, fi
             <strong className="text-accent">{fmtPct(advanced.targetRate)}</strong>
             <small>은퇴 목표 대비</small>
           </div>
-        </div>
-      </div>
-
-      <div className={`card report-summary-spotlight ${report.net<0?"danger":report.savingsRate<20?"warn":"good"}`}>
-        <div className="summary-kicker">Friendly Monthly Summary</div>
-        <div className="summary-headline">{report.headline}</div>
-        <div className="summary-friendly-text">{report.summaryText}</div>
-        <div className="summary-chip-row">
-          <span className="summary-chip-lg">💰 순현금흐름 {fmt(report.net)}원</span>
-          <span className="summary-chip-lg">📈 저축률 {fmtPct(report.savingsRate)}</span>
-          <span className="summary-chip-lg">🧾 지출 변화 {fmtPct(report.expenseChange)}</span>
-          <span className="summary-chip-lg">✅ 추천 행동 {report.actions.length}개</span>
         </div>
       </div>
 
@@ -4117,9 +4121,9 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
 
   const report=useMemo(()=>{
     const tx=(data.transactions||[]).filter(t=>monthOf(t.date)===month);
-    const income=tx.filter(t=>t.type==="수입").reduce((s,t)=>s+n(t.amount),0);
-    const expense=tx.filter(t=>t.type==="지출").reduce((s,t)=>s+n(t.amount),0);
-    const transfer=tx.filter(t=>t.type==="자산이동").reduce((s,t)=>s+n(t.amount),0);
+    const income=tx.filter(t=>t.type==="수입").reduce((sum,t)=>sum+n(t.amount),0);
+    const expense=tx.filter(t=>t.type==="지출").reduce((sum,t)=>sum+n(t.amount),0);
+    const transfer=tx.filter(t=>t.type==="자산이동").reduce((sum,t)=>sum+n(t.amount),0);
     const net=income-expense;
     const savingsRate=income>0?net/income*100:0;
 
@@ -4150,22 +4154,43 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
     const overBudget=budgetRows.filter(b=>b.status==="초과");
     const warningBudget=budgetRows.filter(b=>b.status==="주의");
 
+    const emergencyMonths=expense>0?n(dashboardDetail?.emergencyFund)/expense:0;
+    const pensionRemaining=n(taxAnalysis?.pensionRemaining);
+    const investTotal=n(financialAnalysis?.total);
+    const netWorth=n(dashboard?.netWorth);
+    const investWeight=netWorth>0?investTotal/netWorth*100:0;
+    const monthlyInvestTarget=n(data.settings?.monthlyInvestDefault||data.settings?.monthlyInvestStage1||data.settings?.triggerMonthlyInvestAmount||0);
+
     const issues=[];
     if(net<0) issues.push({tone:"danger",title:"월간 적자",text:`이번 달은 ${fmt(Math.abs(net))}원 적자입니다.`});
     if(expenseChange>20) issues.push({tone:"warn",title:"지출 급증",text:`전월 대비 지출이 ${fmtPct(expenseChange)} 증가했습니다.`});
     if(overBudget.length>0) issues.push({tone:"warn",title:"예산 초과",text:`${overBudget.map(b=>b.cat1).slice(0,3).join(" · ")} 항목이 예산을 초과했습니다.`});
     if(savingsRate<20) issues.push({tone:"warn",title:"저축률 낮음",text:`이번 달 저축률은 ${fmtPct(savingsRate)}입니다.`});
+    if(emergencyMonths>0 && emergencyMonths<3) issues.push({tone:"danger",title:"비상금 부족",text:`현재 비상금은 월 지출 기준 약 ${emergencyMonths.toFixed(1)}개월치입니다.`});
+    if(pensionRemaining>0) issues.push({tone:"info",title:"절세 여력",text:`연금 세액공제 한도 잔여분 ${fmt(pensionRemaining)}원이 남아 있습니다.`});
     if(issues.length===0) issues.push({tone:"green",title:"월간 상태 양호",text:"큰 이상 신호 없이 관리되고 있습니다."});
 
     const actions=[];
-    if(overBudget.length>0) actions.push({tag:"지출",title:"예산 초과 항목 조정",text:`다음 달 ${overBudget[0].cat1} 예산 또는 소비 패턴을 조정하세요.`});
-    if(net>0) actions.push({tag:"투자",title:"잉여 현금 배분",text:`이번 달 잉여 현금 ${fmt(net)}원 중 일부를 투자/비상금으로 배분하세요.`});
-    if(taxAnalysis?.pensionRemaining>0) actions.push({tag:"절세",title:"연금 세액공제 여력 확인",text:`연금 세액공제 한도 잔여분 ${fmt(taxAnalysis.pensionRemaining)}원을 확인하세요.`});
-    if(dashboardDetail?.emergencyFund<n(expense)*3) actions.push({tag:"안전",title:"비상금 보강",text:"월 지출 3~6개월치 비상금 확보를 우선 검토하세요."});
+    if(overBudget.length>0) actions.push({tag:"지출",title:"예산 초과 항목 조정",text:`다음 달은 ${overBudget[0].cat1} 항목을 먼저 점검하세요.`});
+    if(net<0) actions.push({tag:"방어",title:"고정비·큰 지출 우선 확인",text:"적자가 난 달은 투자 확대보다 현금흐름 복구가 우선입니다."});
+    if(net>0 && emergencyMonths<6) actions.push({tag:"안전",title:"잉여 현금 일부를 비상금으로",text:`흑자 ${fmt(net)}원 중 일부를 비상금 6개월치 목표에 배분하세요.`});
+    if(net>0 && emergencyMonths>=3) actions.push({tag:"투자",title:"잉여 현금 투자 배분",text:`이번 달 잉여 현금 ${fmt(net)}원 중 일부를 목표 포트폴리오에 배분해도 좋습니다.`});
+    if(pensionRemaining>0) actions.push({tag:"절세",title:"연금 세액공제 여력 확인",text:`잔여 한도 ${fmt(pensionRemaining)}원을 연말 전에 나눠 채우는 방식을 검토하세요.`});
     if(actions.length===0) actions.push({tag:"유지",title:"현재 전략 유지",text:"다음 달도 같은 기준으로 기록과 점검을 이어가세요."});
 
+    let aiScore=50;
+    if(net>0) aiScore+=16; else aiScore-=18;
+    if(savingsRate>=40) aiScore+=18; else if(savingsRate>=20) aiScore+=10; else if(savingsRate<0) aiScore-=18; else aiScore-=8;
+    if(expenseChange<=0) aiScore+=8; else if(expenseChange>20) aiScore-=10;
+    if(overBudget.length===0) aiScore+=8; else aiScore-=Math.min(14,overBudget.length*5);
+    if(emergencyMonths>=6) aiScore+=10; else if(emergencyMonths>=3) aiScore+=4; else aiScore-=10;
+    if(pensionRemaining>0) aiScore-=2;
+    aiScore=clamp(Math.round(aiScore),0,100);
+    const aiTone=aiScore>=75?"good":aiScore>=55?"warn":"danger";
+    const aiGrade=aiScore>=85?"매우 좋음":aiScore>=70?"양호":aiScore>=55?"주의":aiScore>=40?"개선 필요":"위험";
+
     const headline = net < 0
-      ? `이번 달은 ${fmt(Math.abs(net))}원 적자라 지출 점검이 필요해요.`
+      ? `이번 달은 ${fmt(Math.abs(net))}원 적자라 지출 점검이 먼저예요.`
       : savingsRate >= 40
         ? `이번 달은 저축률 ${fmtPct(savingsRate)}로 아주 잘 관리되고 있어요.`
         : savingsRate >= 20
@@ -4176,17 +4201,45 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
       ? `가장 많이 쓴 항목은 ${topExpenses[0].cat}이고, 금액은 ${fmt(topExpenses[0].amount)}원이에요.`
       : "아직 지출 항목이 충분히 입력되지 않았어요.";
 
+    const aiMessage=[
+      `이번 달 재무 컨디션은 ${aiGrade}로 볼 수 있어요.`,
+      net>=0 ? `수입에서 지출을 제외하고 ${fmt(net)}원이 남았기 때문에 기본 흐름은 괜찮습니다.` : `수입보다 지출이 ${fmt(Math.abs(net))}원 더 컸기 때문에 다음 달은 방어 모드가 필요합니다.`,
+      savingsRate>=30 ? `저축률도 ${fmtPct(savingsRate)}라 장기 목표를 향한 속도는 좋은 편이에요.` : `다만 저축률이 ${fmtPct(savingsRate)}라 목표 자산 형성 속도는 조금 느려질 수 있어요.`,
+      topExpenseSentence,
+      overBudget.length>0 ? `특히 ${overBudget.map(b=>b.cat1).slice(0,2).join(" · ")} 예산을 먼저 다듬으면 다음 달 결과가 바로 좋아질 가능성이 큽니다.` : `예산 초과 항목은 크지 않아 현재 소비 구조는 비교적 안정적이에요.`,
+      emergencyMonths<3 ? `비상금은 아직 부족한 편이라 투자 확대보다 안전자금 보강을 우선하는 편이 좋습니다.` : emergencyMonths<6 ? `비상금은 최소 방어선은 갖췄지만 6개월치까지 채우면 더 안정적이에요.` : `비상금 방어력은 안정적이어서 남는 현금은 투자·절세로 연결하기 좋습니다.`
+    ].join(" ");
+
+    const coachingCards=[
+      {tone:net>=0?"good":"danger",icon:"💸",title:"현금흐름 판단",text:net>=0?`이번 달 ${fmt(net)}원 흑자입니다. 남는 돈의 목적지를 정하면 좋아요.`:`${fmt(Math.abs(net))}원 적자입니다. 다음 달은 큰 지출과 고정비를 먼저 줄이세요.`},
+      {tone:savingsRate>=30?"good":savingsRate>=20?"info":"warn",icon:"📈",title:"저축률 코칭",text:savingsRate>=30?"목표 자산 형성에 유리한 저축률입니다.":`현재 저축률은 ${fmtPct(savingsRate)}입니다. 1차 목표는 20%, 다음 목표는 30%로 잡아보세요.`},
+      {tone:emergencyMonths>=6?"good":emergencyMonths>=3?"info":"danger",icon:"🛡️",title:"안전자금 판단",text:expense>0?`현재 비상금은 월 지출 기준 약 ${emergencyMonths.toFixed(1)}개월치입니다.`:"월 지출 데이터가 있어야 비상금 개월 수를 계산할 수 있어요."},
+      {tone:overBudget.length?"warn":"good",icon:"🧾",title:"예산 습관",text:overBudget.length?`${overBudget.map(b=>b.cat1).slice(0,3).join(" · ")} 항목이 예산을 넘었습니다.`:"예산 초과 항목이 크지 않아 소비 통제는 양호합니다."},
+      {tone:pensionRemaining>0?"info":"good",icon:"🏦",title:"절세 포인트",text:pensionRemaining>0?`연금 세액공제 여력 ${fmt(pensionRemaining)}원이 남아 있습니다.`:"현재 입력 기준으로 큰 절세 누락 신호는 없습니다."},
+      {tone:investWeight>=50?"good":"info",icon:"🎯",title:"투자 연결",text:monthlyInvestTarget>0?`월 투자 기준금액은 ${fmt(monthlyInvestTarget)}원입니다. 흑자 달에는 자동 배분 규칙을 적용해보세요.`:"월 투자 기준금액을 설정하면 코칭 정확도가 올라갑니다."},
+    ];
+
+    const nextSteps=[];
+    if(net<0) nextSteps.push({title:"적자 원인 1개만 먼저 찾기",text:"고액 거래와 지출 TOP 5에서 다음 달 줄일 항목을 하나만 고르세요."});
+    if(overBudget.length>0) nextSteps.push({title:`${overBudget[0].cat1} 예산 재설계`,text:"예산을 올릴지, 소비 횟수를 줄일지 둘 중 하나를 정하세요."});
+    if(net>0 && emergencyMonths<6) nextSteps.push({title:"흑자 금액 자동 분배",text:"잉여 현금을 비상금 50%, 투자 50%처럼 규칙화하세요."});
+    if(net>0 && emergencyMonths>=6) nextSteps.push({title:"목표 포트폴리오로 자동 매수",text:"남는 현금을 목표 비중에 맞춰 배분하세요."});
+    if(pensionRemaining>0) nextSteps.push({title:"절세 한도 월할 계산",text:"남은 세액공제 한도를 남은 개월 수로 나눠 월 납입액을 정하세요."});
+    if(nextSteps.length===0) nextSteps.push({title:"현재 루틴 유지",text:"거래 입력, 예산 점검, 월말 리포트 확인 루틴을 유지하세요."});
+
     const summaryText=[
       `${month} 월간 리포트예요 😊`,
+      `AI 코칭 점수는 ${aiScore}점(${aiGrade})입니다. ${headline}`,
       `이번 달 수입은 ${fmt(income)}원, 지출은 ${fmt(expense)}원이에요. 그래서 최종 순현금흐름은 ${fmt(net)}원입니다.`,
       `저축률은 ${fmtPct(savingsRate)}이고, 전월 대비 지출 변화율은 ${fmtPct(expenseChange)}예요. ${topExpenseSentence}`,
-      `현재 판단: ${headline}`,
+      `AI 해석: ${aiMessage}`,
       issues.length ? `확인할 점\n${issues.map(i => `• ${i.title}: ${i.text}`).join("\n")}` : "확인할 점\n• 특별한 이상 신호는 크지 않아요.",
-      actions.length ? `다음 달 추천 행동\n${actions.map(a => `• ${a.title}: ${a.text}`).join("\n")}` : "다음 달 추천 행동\n• 지금처럼 꾸준히 기록하고 점검하면 돼요."
-    ].join("\n\n");
+      actions.length ? `다음 달 추천 행동\n${actions.map(a => `• ${a.title}: ${a.text}`).join("\n")}` : "다음 달 추천 행동\n• 지금처럼 꾸준히 기록하고 점검하면 돼요.",
+      nextSteps.length ? `실행 순서\n${nextSteps.slice(0,3).map((a,idx)=>`${idx+1}. ${a.title} - ${a.text}`).join("\n")}` : ""
+    ].filter(Boolean).join("\n\n");
 
-    return {tx,income,expense,transfer,net,savingsRate,incomeChange,expenseChange,netChange,topExpenses,incomeBreakdown,highTx,topDays,budgetRows,overBudget,warningBudget,issues,actions,summaryText,headline,topExpenseSentence};
-  },[data.transactions,month,monthlySeries,budgetAnalysis,taxAnalysis,dashboardDetail]);
+    return {tx,income,expense,transfer,net,savingsRate,incomeChange,expenseChange,netChange,topExpenses,incomeBreakdown,highTx,topDays,budgetRows,overBudget,warningBudget,issues,actions,summaryText,headline,topExpenseSentence,aiScore,aiTone,aiGrade,aiMessage,coachingCards,nextSteps,emergencyMonths};
+  },[data,month,monthlySeries,budgetAnalysis,taxAnalysis,dashboardDetail,financialAnalysis,dashboard]);
 
   const copyReport=async()=>{
     try{await navigator.clipboard.writeText(report.summaryText);alert("월간 리포트 요약을 복사했습니다.");}
@@ -4212,6 +4265,47 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
         </div>
       </div>
 
+      <div className="ai-coach-hero">
+        <div className={`ai-coach-panel ${report.aiTone}`}>
+          <div className="ai-coach-kicker">AI Monthly Coach</div>
+          <div className="ai-coach-title">{report.headline}</div>
+          <div className="ai-coach-message">{report.aiMessage}</div>
+          <div className="summary-chip-row">
+            <span className="summary-chip-lg">💰 순현금흐름 {fmt(report.net)}원</span>
+            <span className="summary-chip-lg">📈 저축률 {fmtPct(report.savingsRate)}</span>
+            <span className="summary-chip-lg">🛡️ 비상금 {report.emergencyMonths.toFixed(1)}개월</span>
+            <span className="summary-chip-lg">✅ 추천 행동 {report.actions.length}개</span>
+          </div>
+        </div>
+        <div className="ai-coach-score-card">
+          <div className="kpi-label">AI COACHING SCORE</div>
+          <div className={`ai-coach-score ${report.aiTone==="good"?"text-green":report.aiTone==="danger"?"text-red":"text-accent"}`}>{report.aiScore}<span>/100</span></div>
+          <span className={`badge ${report.aiTone==="good"?"badge-green":report.aiTone==="danger"?"badge-red":"badge-amber"}`}>{report.aiGrade}</span>
+          <p className="small muted">현금흐름, 저축률, 예산 초과, 비상금, 절세 여력을 함께 반영한 월간 코칭 점수입니다.</p>
+        </div>
+      </div>
+
+      <div className="ai-coach-grid">
+        {report.coachingCards.map((c,idx)=>(
+          <div key={idx} className={`ai-coach-card ${c.tone}`}>
+            <div className="ai-coach-card-head"><span>{c.icon}</span><strong>{c.title}</strong></div>
+            <p>{c.text}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="card">
+        <div className="card-title"><h3>다음 달 실행 순서</h3><span className="badge badge-accent">자동 코칭</span></div>
+        <div className="g3">
+          {report.nextSteps.slice(0,3).map((step,idx)=>(
+            <div key={idx} className="ai-coach-next">
+              <div className="ai-coach-next-no">{idx+1}</div>
+              <div><strong>{step.title}</strong><p>{step.text}</p></div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="kpi-grid">
         <KpiCard label="월 수입" value={report.income} unit="원" tone="green"/>
         <KpiCard label="월 지출" value={report.expense} unit="원" tone="red"/>
@@ -4233,7 +4327,7 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
           <div className="stack" style={{gap:8}}>
             {report.issues.map((i,idx)=>(
               <div key={idx} className={`compact-insight ${i.tone}`}>
-                <span>{i.tone==="danger"?"🔥":i.tone==="warn"?"⚠️":"✅"}</span>
+                <span>{i.tone==="danger"?"🔥":i.tone==="warn"?"⚠️":i.tone==="info"?"💡":"✅"}</span>
                 <div><strong>{i.title}</strong><p>{i.text}</p></div>
               </div>
             ))}
@@ -4298,13 +4392,12 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
 
         <div className="card">
           <h3>보고서 원문</h3>
-          <textarea readOnly value={report.summaryText} style={{width:"100%",minHeight:240,padding:14,borderRadius:12,border:"1px solid var(--border2)",background:"var(--surface2)",color:"var(--text2)",fontSize:12,lineHeight:1.6}}/>
+          <textarea readOnly value={report.summaryText} style={{width:"100%",minHeight:300,padding:14,borderRadius:12,border:"1px solid var(--border2)",background:"var(--surface2)",color:"var(--text2)",fontSize:12,lineHeight:1.6}}/>
         </div>
       </div>
     </div>
   );
 }
-
 
 // ─── Simulation Tab ───────────────────────────────────────────────────────────
 function SimulationTab({ data, futureSim }) {
