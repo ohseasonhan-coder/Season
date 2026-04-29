@@ -130,7 +130,7 @@ function normalizeCategories(c) {
   return merged;
 }
 function emptyData() {
-  return { version:10, categories:DEFAULT_CATEGORIES, transactions:[], accounts:DEFAULT_ACCOUNTS, assets:DEFAULT_ASSETS, portfolio:DEFAULT_PORTFOLIO, budgets:DEFAULT_BUDGETS, events:DEFAULT_EVENTS, settings:DEFAULT_SETTINGS, assetSnapshots:[], lastSavedAt:null };
+  return { version:10, categories:DEFAULT_CATEGORIES, transactions:[], accounts:DEFAULT_ACCOUNTS, assets:DEFAULT_ASSETS, portfolio:DEFAULT_PORTFOLIO, budgets:DEFAULT_BUDGETS, events:DEFAULT_EVENTS, settings:DEFAULT_SETTINGS, lastSavedAt:null };
 }
 function migrateData(d) {
   const x = { ...emptyData(), ...d };
@@ -171,15 +171,6 @@ function migrateData(d) {
   x.settings.fxAsOf = x.settings.fxAsOf || "";
   x.settings.marketDataLastUpdated = x.settings.marketDataLastUpdated || "";
   x.settings.autoUpdateMarketDataOnStart = x.settings.autoUpdateMarketDataOnStart === true;
-  // 자산 스냅샷 마이그레이션
-  x.assetSnapshots = Array.isArray(d.assetSnapshots)
-    ? d.assetSnapshots.map(s=>({
-        id:s.id||uid(), month:s.month||"", savedAt:s.savedAt||"",
-        totalAssets:n(s.totalAssets), totalLiabs:n(s.totalLiabs),
-        portValue:n(s.portValue), netWorth:n(s.netWorth),
-        memo:s.memo||"", detail:Array.isArray(s.detail)?s.detail:[],
-      }))
-    : [];
   return x;
 }
 function loadData() {
@@ -871,40 +862,6 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
   .donut-wrap{grid-template-columns:1fr}
   .page{padding:20px}
 }
-
-/* ── 라이트 모드 ────────────────────────────────────────────────────────────── */
-:root[data-theme='light']{
-  --bg:#f5f6f8;--surface:#ffffff;--surface2:#f0f2f5;--surface3:#e8eaee;
-  --border:#d8dce4;--border2:#c8ccd6;
-  --text:#141720;--text2:#4a5168;--text3:#8892a8;
-  --accent:#5566ee;--accent2:#6677ff;--accent-bg:rgba(85,102,238,.10);
-  --green:#1a9e62;--green-bg:rgba(26,158,98,.10);
-  --red:#d93f55;--red-bg:rgba(217,63,85,.10);
-  --amber:#c9880e;--amber-bg:rgba(201,136,14,.10);
-  --shadow:0 2px 12px rgba(0,0,0,.10);--shadow-lg:0 8px 32px rgba(0,0,0,.14);
-}
-:root[data-theme='light'] body{background:var(--bg)}
-:root[data-theme='light'] .sidebar{background:rgba(255,255,255,.88);box-shadow:inset -1px 0 0 rgba(0,0,0,.06),12px 0 40px rgba(0,0,0,.07)}
-:root[data-theme='light'] .sidebar.collapsed{background:rgba(255,255,255,.94)}
-:root[data-theme='light'] .sidebar-toggle{border-color:rgba(0,0,0,.10);background:rgba(0,0,0,.04);color:rgba(20,23,32,.65)}
-:root[data-theme='light'] .sidebar-toggle:hover{background:rgba(0,0,0,.08);color:#141720;border-color:rgba(0,0,0,.16)}
-:root[data-theme='light'] .sidebar.collapsed .nav-item::after{background:rgba(240,242,245,.97);color:#141720;border-color:rgba(0,0,0,.12);box-shadow:0 8px 24px rgba(0,0,0,.12)}
-:root[data-theme='light'] .topbar{background:rgba(255,255,255,.92);backdrop-filter:blur(12px)}
-:root[data-theme='light'] .recharts-default-tooltip{background:#fff!important;border-color:#d8dce4!important;color:#141720!important}
-:root[data-theme='light'] .recharts-tooltip-label{color:#4a5168!important}
-:root[data-theme='light'] .recharts-legend-item-text{color:#4a5168!important}
-:root[data-theme='light'] table thead tr{background:var(--surface2)}
-:root[data-theme='light'] th{background:var(--surface2)}
-:root[data-theme='light'] tr:hover td{background:rgba(0,0,0,.025)}
-:root[data-theme='light'] *::-webkit-scrollbar-thumb{background:var(--border2)}
-:root[data-theme='light'] .kpi-accent{background:linear-gradient(135deg,var(--surface) 60%,rgba(85,102,238,.06))}
-:root[data-theme='light'] .kpi-card::after{background:linear-gradient(135deg,rgba(0,0,0,.015) 0%,transparent 60%)}
-:root[data-theme='light'] .auth-bar{background:rgba(255,255,255,.92)}
-
-/* ── 테마 토글 버튼 ─────────────────────────────────────────────────────────── */
-.theme-toggle{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:16px;transition:.18s ease;flex-shrink:0}
-.theme-toggle:hover{background:var(--surface3);color:var(--text);transform:translateY(-1px)}
-.theme-toggle:active{transform:translateY(0)}
 `;
 
 // ─── SVG Charts ───────────────────────────────────────────────────────────────
@@ -1019,6 +976,352 @@ function GoalGauge({ value, target, title }) {
       </div>
     </div>
   );
+}
+
+// ─── 공통: 자연어 인사이트 카드 컴포넌트 ────────────────────────────────────
+/**
+ * NaturalInsightCard
+ * 각 탭 최상단에 배치되는 자연어 요약 카드.
+ * tone: "green" | "accent" | "amber" | "red" | "info"
+ * actions: [{ label, tag }] — 권장 행동 목록 (선택)
+ */
+function NaturalInsightCard({ icon, title, message, tone = "accent", actions = [], compact = false }) {
+  const bg = {
+    green: "rgba(52,213,138,.10)",
+    accent: "rgba(108,125,255,.10)",
+    amber: "rgba(240,180,41,.10)",
+    red: "rgba(255,92,114,.10)",
+    info: "rgba(108,125,255,.08)",
+  }[tone] || "rgba(108,125,255,.10)";
+  const border = {
+    green: "rgba(52,213,138,.28)",
+    accent: "rgba(108,125,255,.28)",
+    amber: "rgba(240,180,41,.28)",
+    red: "rgba(255,92,114,.28)",
+    info: "rgba(108,125,255,.20)",
+  }[tone] || "rgba(108,125,255,.28)";
+  const color = {
+    green: "var(--green)", accent: "var(--accent)",
+    amber: "var(--amber)", red: "var(--red)", info: "var(--accent2)",
+  }[tone] || "var(--accent)";
+
+  return (
+    <div style={{
+      background: bg, border: `1px solid ${border}`,
+      borderRadius: "var(--radius-lg)",
+      padding: compact ? "14px 16px" : "18px 22px",
+      display: "flex", alignItems: "flex-start", gap: 14,
+      marginBottom: 4,
+    }}>
+      {icon && (
+        <div style={{
+          fontSize: compact ? 20 : 26, flexShrink: 0,
+          lineHeight: 1, marginTop: 1,
+        }}>{icon}</div>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {title && (
+          <div style={{
+            fontSize: 11, fontWeight: 700, letterSpacing: ".06em",
+            textTransform: "uppercase", color, marginBottom: 5, opacity: .8,
+          }}>{title}</div>
+        )}
+        <div style={{
+          fontSize: compact ? 13 : 15, fontWeight: 600,
+          lineHeight: 1.55, color: "var(--text)", letterSpacing: "-.01em",
+        }}>{message}</div>
+        {actions.length > 0 && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+            {actions.map((a, i) => (
+              <span key={i} style={{
+                display: "inline-flex", alignItems: "center", gap: 5,
+                fontSize: 11, fontWeight: 600, color,
+                padding: "4px 11px", borderRadius: 99,
+                border: `1px solid ${border}`,
+                background: "rgba(255,255,255,.04)",
+              }}>
+                → {a.label}
+                {a.tag && (
+                  <span style={{
+                    fontSize: 10, padding: "1px 6px", borderRadius: 99,
+                    background: color, color: "var(--surface)", opacity: .9,
+                  }}>{a.tag}</span>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── 은퇴 시뮬레이션 자연어 요약 생성 ───────────────────────────────────────
+function buildSimulationNLP({ advanced, base, w, targetRate, scenario }) {
+  const retireAge = advanced.retireAge;
+  const compareAge = advanced.compareAge;
+  const survivalOk = w.success;
+  const firstZero = w.firstZeroAge;
+  const scenLabel = scenario === "stress" ? "보수적" : scenario === "optimistic" ? "낙관적" : "기본";
+
+  let tone = "green";
+  let icon = "😊";
+  let message = "";
+  const actions = [];
+
+  if (targetRate >= 100 && survivalOk) {
+    tone = "green"; icon = "🎉";
+    message = `${scenLabel} 시나리오에서 ${retireAge}세 은퇴 목표를 ${fmtPct(targetRate)} 달성할 것으로 예상돼요. 은퇴 후 ${advanced.lifeAge}세까지 자산을 유지할 수 있을 것으로 보입니다.`;
+  } else if (targetRate >= 100 && !survivalOk) {
+    tone = "amber"; icon = "⚠️";
+    message = `${retireAge}세 목표금액은 달성 가능하지만, ${firstZero}세 전후에 자산이 고갈될 수 있어요. 은퇴 후 생활비를 줄이거나 추가 연금 설정을 검토해보세요.`;
+    actions.push({ label: "추가 연금 설정 검토", tag: "은퇴" });
+  } else if (targetRate >= 70 && survivalOk) {
+    tone = "accent"; icon = "🙂";
+    message = `목표의 ${fmtPct(targetRate)}까지 도달할 전망이에요. 조금 더 저축하거나 은퇴 시기를 1~2년 늦추면 목표를 완전히 달성할 수 있어요.`;
+    actions.push({ label: `${compareAge}세 은퇴 시 ${fmt(advanced.compareAcc.last.total - base.total)}원 추가`, tag: "비교" });
+  } else if (!survivalOk) {
+    tone = "red"; icon = "⚡";
+    message = `현재 가정에서 ${firstZero}세 전후에 은퇴 자산이 고갈될 위험이 있어요. 월 투자금을 늘리거나, 은퇴 후 생활비를 줄이거나, 은퇴 시기를 조정해보세요.`;
+    actions.push({ label: "월 투자금 증액 검토", tag: "투자" });
+    actions.push({ label: "은퇴 후 생활비 재설정", tag: "설정" });
+  } else {
+    tone = "amber"; icon = "📊";
+    message = `${scenLabel} 시나리오 기준 목표 달성률은 ${fmtPct(targetRate)}예요. 월 투자금 증액이나 기대수익률 조정으로 더 가까워질 수 있어요.`;
+    actions.push({ label: "투자 전략 설정 확인", tag: "설정" });
+  }
+
+  // 낙관 vs 보수 힌트
+  if (scenario === "base") {
+    message += ` (보수적 시나리오도 함께 확인해보세요.)`;
+  }
+
+  return { tone, icon, title: `은퇴 시뮬레이션 — ${scenLabel} 시나리오`, message, actions };
+}
+
+// ─── 가계부(예산) 자연어 요약 ────────────────────────────────────────────────
+function buildBudgetNLP(budgetAnalysis) {
+  if (!budgetAnalysis || budgetAnalysis.length === 0) {
+    return { tone: "info", icon: "📋", title: "이번 달 예산", message: "예산을 먼저 설정하면 소비 패턴을 한눈에 볼 수 있어요.", actions: [] };
+  }
+  const over = budgetAnalysis.filter(b => b.status === "초과");
+  const warn = budgetAnalysis.filter(b => b.status === "주의");
+  const ok = budgetAnalysis.filter(b => b.status === "정상");
+  const totalBudget = budgetAnalysis.reduce((s, b) => s + n(b.budget), 0);
+  const totalSpent = budgetAnalysis.reduce((s, b) => s + n(b.spent), 0);
+  const totalRate = totalBudget > 0 ? totalSpent / totalBudget * 100 : 0;
+
+  let tone, icon, message;
+  const actions = [];
+
+  if (over.length === 0 && warn.length === 0) {
+    tone = "green"; icon = "✅";
+    message = `모든 카테고리가 예산 내에서 잘 관리되고 있어요. 전체 예산 대비 ${fmtPct(totalRate)} 사용했습니다. 이 페이스를 유지하면 이번 달 마무리도 좋을 것 같아요.`;
+  } else if (over.length === 0 && warn.length > 0) {
+    tone = "amber"; icon = "👀";
+    const warnNames = warn.map(b => b.cat1).join(", ");
+    message = `전체적으로 괜찮지만 ${warnNames}${warn.length > 1 ? " 등" : ""}이 예산의 80%를 넘었어요. 이번 달 남은 기간 조금만 신경 쓰면 초과 없이 마무리할 수 있어요.`;
+    actions.push({ label: `${warn[0].cat1} 지출 점검`, tag: "지출" });
+  } else if (over.length <= 2) {
+    tone = "amber"; icon = "💸";
+    const overNames = over.map(b => b.cat1).join(", ");
+    const overAmounts = over.reduce((s, b) => s + Math.max(b.spent - b.budget, 0), 0);
+    message = `${overNames}에서 예산을 ${fmt(overAmounts)}원 초과했어요. 다음 달 같은 카테고리 예산을 현실에 맞게 조정하거나, 지출 패턴을 살펴보는 게 도움이 될 거예요.`;
+    actions.push({ label: "예산 재조정 검토", tag: "예산" });
+  } else {
+    tone = "red"; icon = "⚠️";
+    message = `이번 달 ${over.length}개 카테고리가 예산을 초과했어요. 전체 지출이 예산의 ${fmtPct(totalRate)}까지 올라왔어요. 지출 패턴 전체를 한번 점검해볼 시점이에요.`;
+    actions.push({ label: "지출 전체 검토", tag: "지출" });
+    actions.push({ label: "예산 현실화", tag: "예산" });
+  }
+
+  return { tone, icon, title: "이번 달 예산 건강도", message, actions };
+}
+
+// ─── 세금/절세 자연어 요약 ───────────────────────────────────────────────────
+function buildTaxNLP(opt, taxAnalysis) {
+  if (!opt) return { tone: "info", icon: "💡", title: "절세 현황", message: "납입 정보를 입력하면 절세 기회를 분석해드릴게요.", actions: [] };
+
+  const totalBenefit = n(opt.totalImmediateBenefit);
+  const pensionGap = n(opt.pensionGap);
+  const isaGap = n(opt.isaGap);
+  const taxNow = n(opt.taxableTaxNow);
+
+  let tone, icon, message;
+  const actions = [];
+
+  if (totalBenefit === 0 && pensionGap === 0 && isaGap === 0) {
+    tone = "green"; icon = "🏆";
+    message = "절세 한도를 거의 다 활용하고 있어요. ISA와 연금 한도를 최대한 채웠다면 현재 세금 전략은 매우 효율적이에요.";
+  } else if (totalBenefit > 500000) {
+    tone = "accent"; icon = "💰";
+    message = `지금 바로 활용할 수 있는 절세 기회가 약 ${fmt(totalBenefit)}원 있어요.`;
+    if (pensionGap > 0) {
+      message += ` 연금/IRP에 ${fmt(pensionGap)}원을 더 납입하면 세액공제를 추가로 받을 수 있어요.`;
+      actions.push({ label: `연금 ${fmt(pensionGap)}원 추가 납입`, tag: "절세" });
+    }
+    if (isaGap > 0) {
+      message += ` ISA에도 ${fmt(isaGap)}원 여력이 남아있어요.`;
+      actions.push({ label: `ISA ${fmt(isaGap)}원 활용`, tag: "절세" });
+    }
+  } else if (totalBenefit > 0) {
+    tone = "amber"; icon = "💡";
+    message = `소규모 절세 기회가 ${fmt(totalBenefit)}원 남아있어요.`;
+    if (pensionGap > 0) { message += ` 연금 한도를 조금 더 채워보세요.`; actions.push({ label: "연금 한도 점검", tag: "절세" }); }
+    if (isaGap > 0) { message += ` ISA 납입 여력도 있어요.`; }
+  } else {
+    tone = "green"; icon = "✅";
+    message = "현재 가용한 절세 전략을 잘 활용하고 있어요.";
+  }
+
+  if (taxNow > 100000) {
+    message += ` 과세계좌에서 ${fmt(taxNow)}원의 세금 노출이 있어요. 가능하면 절세 계좌로 이동을 검토해보세요.`;
+    if (!actions.find(a => a.tag === "절세")) actions.push({ label: "절세계좌 이동 검토", tag: "절세" });
+  }
+
+  return { tone, icon, title: "절세 기회 진단", message, actions };
+}
+
+// ─── 포트폴리오 자연어 요약 ─────────────────────────────────────────────────
+function buildPortfolioNLP(financialAnalysis, data) {
+  const { rows, total, byClass } = financialAnalysis;
+  if (!rows || rows.length === 0) {
+    return { tone: "info", icon: "📈", title: "포트폴리오 현황", message: "종목을 입력하면 수익률과 리스크를 분석해드릴게요.", actions: [] };
+  }
+
+  const totalInvested = rows.reduce((s, r) => s + n(r.invested), 0);
+  const totalProfit = total - totalInvested;
+  const totalRate = totalInvested > 0 ? totalProfit / totalInvested * 100 : 0;
+  const overConcentrated = rows.filter(r => r.state === "쏠림 경고");
+  const warnRows = rows.filter(r => r.state === "주의");
+  const profitRows = rows.filter(r => n(r.value) > n(r.invested)).sort((a, b) => (n(b.value) - n(b.invested)) - (n(a.value) - n(a.invested)));
+  const lossRows = rows.filter(r => n(r.value) < n(r.invested)).sort((a, b) => (n(a.value) - n(a.invested)) - (n(b.value) - n(b.invested)));
+  const takeProfit = n(data.settings?.takeProfitPct || 20);
+
+  let tone, icon, message;
+  const actions = [];
+
+  if (totalRate >= 15 && overConcentrated.length === 0) {
+    tone = "green"; icon = "🚀";
+    message = `전체 수익률 +${fmtPct(totalRate)}로 좋은 성과를 내고 있어요. 평가금액 ${fmt(total)}원, 수익 ${fmt(totalProfit)}원이에요.`;
+    if (profitRows.length > 0) message += ` ${profitRows[0].name}이 가장 많이 올랐어요.`;
+  } else if (totalRate >= 0 && overConcentrated.length === 0) {
+    tone = "accent"; icon = "📈";
+    message = `전체 수익률은 +${fmtPct(totalRate)}예요. 평가금액 ${fmt(total)}원으로 안정적으로 운용 중이에요.`;
+  } else if (totalRate >= 0 && overConcentrated.length > 0) {
+    tone = "amber"; icon = "⚖️";
+    message = `수익률은 +${fmtPct(totalRate)}지만 ${overConcentrated.map(r => r.name).join(", ")} 비중이 높아요. 리밸런싱을 검토해보세요.`;
+    actions.push({ label: "리밸런싱 계산기 확인", tag: "리밸런싱" });
+  } else if (totalRate < 0) {
+    tone = "red"; icon = "📉";
+    message = `현재 전체 수익률 ${fmtPct(totalRate)}, 평가손실 ${fmt(Math.abs(totalProfit))}원이에요.`;
+    if (lossRows.length > 0) { message += ` ${lossRows[0].name}의 손실이 가장 커요.`; }
+    message += " 장기 투자 관점에서 흔들리지 않는 게 중요해요.";
+    if (overConcentrated.length > 0) actions.push({ label: "집중 리스크 점검", tag: "리스크" });
+  } else {
+    tone = "info"; icon = "💼";
+    message = `평가금액 ${fmt(total)}원, 수익률 ${fmtPct(totalRate)}예요.`;
+  }
+
+  // 익절 기준 달성 종목 언급
+  const takeProfitHits = rows.filter(r => {
+    const rate = n(r.invested) > 0 ? (n(r.value) - n(r.invested)) / n(r.invested) * 100 : 0;
+    return rate >= takeProfit;
+  });
+  if (takeProfitHits.length > 0) {
+    message += ` ${takeProfitHits[0].name}이 익절 기준(+${fmtPct(takeProfit)})을 넘었어요.`;
+    actions.push({ label: `${takeProfitHits[0].name} 익절 검토`, tag: "익절" });
+  }
+
+  return { tone, icon, title: "포트폴리오 진단", message, actions };
+}
+
+// ─── 목표·계획 자연어 요약 ──────────────────────────────────────────────────
+function buildPlanningNLP(eventAnalysis, dashboard) {
+  if (!eventAnalysis || eventAnalysis.length === 0) {
+    return { tone: "info", icon: "🎯", title: "목표 현황", message: "라이프 이벤트를 등록하면 월 필요 적립액을 알려드릴게요.", actions: [] };
+  }
+
+  const totalNeeded = eventAnalysis.reduce((s, e) => s + n(e.amountNeeded), 0);
+  const totalPrepared = eventAnalysis.reduce((s, e) => s + n(e.currentPrepared), 0);
+  const totalRate = totalNeeded > 0 ? totalPrepared / totalNeeded * 100 : 0;
+  const totalMonthlyNeed = eventAnalysis.reduce((s, e) => s + n(e.monthlyNeed), 0);
+  const urgent = eventAnalysis.filter(e => n(e.yearsFromNow) <= 1 && n(e.shortage) > 0);
+  const onTrack = eventAnalysis.filter(e => n(e.progress) >= 80);
+  const net = n(dashboard?.net || 0);
+
+  let tone, icon, message;
+  const actions = [];
+
+  if (totalRate >= 80) {
+    tone = "green"; icon = "🎯";
+    message = `등록된 ${eventAnalysis.length}개 목표의 평균 준비율이 ${fmtPct(totalRate)}예요. 대부분의 목표가 잘 진행 중이에요.`;
+  } else if (urgent.length > 0) {
+    tone = "red"; icon = "⏰";
+    const urgentNames = urgent.map(e => e.name).join(", ");
+    message = `${urgentNames}은 1년 이내 목표인데 아직 준비가 부족해요. 월 ${fmt(urgent.reduce((s, e) => s + n(e.monthlyNeed), 0))}원을 우선 배정해보세요.`;
+    actions.push({ label: "긴급 목표 우선 적립", tag: "목표" });
+  } else if (totalMonthlyNeed > net && net > 0) {
+    tone = "amber"; icon = "⚖️";
+    message = `목표 달성을 위해 월 ${fmt(totalMonthlyNeed)}원이 필요한데, 현재 월 여유 현금(${fmt(net)}원)보다 많아요. 우선순위를 정해서 중요한 목표부터 집중해보세요.`;
+    actions.push({ label: "목표 우선순위 재정렬", tag: "목표" });
+  } else {
+    tone = "accent"; icon = "🌱";
+    message = `전체 준비율 ${fmtPct(totalRate)}, 월 필요 적립액은 ${fmt(totalMonthlyNeed)}원이에요.`;
+    if (onTrack.length > 0) message += ` ${onTrack[0].name} 등 ${onTrack.length}개 목표는 순조로워요.`;
+    actions.push({ label: "목표별 월 적립 확인", tag: "목표" });
+  }
+
+  return { tone, icon, title: "목표 달성 진단", message, actions };
+}
+
+// ─── 재무분석 자연어 요약 ────────────────────────────────────────────────────
+function buildAnalysisNLP(monthlySeries, dashboardDetail) {
+  if (!monthlySeries || monthlySeries.length < 2) {
+    return { tone: "info", icon: "📊", title: "재무 패턴 분석", message: "2개월 이상의 거래 내역이 쌓이면 수입·지출 패턴을 분석해드릴게요.", actions: [] };
+  }
+
+  const last6 = monthlySeries.slice(-6);
+  const avgIncome = last6.reduce((s, r) => s + n(r.income), 0) / last6.length;
+  const avgExpense = last6.reduce((s, r) => s + n(r.expense), 0) / last6.length;
+  const avgNet = last6.reduce((s, r) => s + n(r.net), 0) / last6.length;
+  const avgSavingsRate = avgIncome > 0 ? avgNet / avgIncome * 100 : 0;
+
+  const recent = monthlySeries[monthlySeries.length - 1];
+  const prev = monthlySeries[monthlySeries.length - 2];
+  const expChangePct = n(prev.expense) > 0 ? (n(recent.expense) - n(prev.expense)) / n(prev.expense) * 100 : 0;
+
+  const consistentSurplus = last6.every(r => n(r.net) > 0);
+  const hasDeficit = last6.some(r => n(r.net) < 0);
+  const deficitMonths = last6.filter(r => n(r.net) < 0).length;
+
+  let tone, icon, message;
+  const actions = [];
+
+  if (consistentSurplus && avgSavingsRate >= 25) {
+    tone = "green"; icon = "📈";
+    message = `최근 ${last6.length}개월 모두 흑자예요. 평균 저축률 ${fmtPct(avgSavingsRate)}, 월평균 ${fmt(avgNet)}원을 저축하고 있어요. 꾸준히 잘 관리되고 있어요.`;
+  } else if (consistentSurplus) {
+    tone = "accent"; icon = "🙂";
+    message = `최근 ${last6.length}개월 연속 흑자예요. 평균 저축률은 ${fmtPct(avgSavingsRate)}이에요. 저축률을 조금 더 높이면 목표에 더 빠르게 다가갈 수 있어요.`;
+    if (avgSavingsRate < 20) actions.push({ label: "저축률 20% 목표 설정", tag: "저축" });
+  } else if (hasDeficit) {
+    tone = deficitMonths >= 3 ? "red" : "amber";
+    icon = "⚠️";
+    message = `최근 ${last6.length}개월 중 ${deficitMonths}개월이 적자예요. 평균 월 ${fmt(Math.abs(avgNet))}원의 현금이 줄고 있어요. 지출 패턴을 점검해볼 시점이에요.`;
+    actions.push({ label: "지출 카테고리 분석", tag: "지출" });
+  } else {
+    tone = "info"; icon = "📊";
+    message = `6개월 평균 수입 ${fmt(avgIncome)}원, 지출 ${fmt(avgExpense)}원, 저축률 ${fmtPct(avgSavingsRate)}예요.`;
+  }
+
+  if (Math.abs(expChangePct) > 15) {
+    message += expChangePct > 0
+      ? ` 지난달보다 지출이 ${fmtPct(expChangePct)} 늘었어요.`
+      : ` 지난달보다 지출이 ${fmtPct(Math.abs(expChangePct))} 줄었어요. 잘 하셨어요!`;
+  }
+
+  return { tone, icon, title: "6개월 재무 패턴", message, actions };
 }
 
 // ─── Auth Panel ───────────────────────────────────────────────────────────────
@@ -1596,56 +1899,6 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
   const remove=(id)=>update(d=>({...d,transactions:d.transactions.filter(t=>t.id!==id)}));
   const edit=(t)=>{setForm({...t});setShowForm(true);};
 
-  // ── 일괄 선택·수정·삭제 ───────────────────────────────────────────────────
-  const [selectedIds,setSelectedIds]=useState(new Set());
-  const [bulkCat1,setBulkCat1]=useState("");
-  const [bulkCat2,setBulkCat2]=useState("");
-  const [bulkType,setBulkType]=useState("");
-
-  const allFilteredSelected=filtered.length>0&&filtered.every(t=>selectedIds.has(t.id));
-  const someSelected=filtered.some(t=>selectedIds.has(t.id));
-
-  const toggleSelect=(id)=>setSelectedIds(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next;});
-  const toggleAll=()=>{
-    if(allFilteredSelected){setSelectedIds(prev=>{const next=new Set(prev);filtered.forEach(t=>next.delete(t.id));return next;});}
-    else{setSelectedIds(prev=>{const next=new Set(prev);filtered.forEach(t=>next.add(t.id));return next;});}
-  };
-  const clearSelection=()=>setSelectedIds(new Set());
-
-  const bulkDelete=()=>{
-    if(!selectedIds.size) return;
-    if(!confirm(`선택한 ${selectedIds.size}건을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
-    const ids=new Set(selectedIds);
-    update(d=>({...d,transactions:d.transactions.filter(t=>!ids.has(t.id))}));
-    clearSelection();
-  };
-  const bulkChangeCat1=()=>{
-    if(!bulkCat1) return alert("변경할 대분류를 선택하세요.");
-    if(!selectedIds.size) return;
-    const ids=new Set(selectedIds);
-    update(d=>({...d,transactions:d.transactions.map(t=>ids.has(t.id)?{...t,cat1:bulkCat1,cat2:""}:t)}));
-    setBulkCat1(""); setBulkCat2(""); clearSelection();
-  };
-  const bulkChangeCat2=()=>{
-    if(!bulkCat1||!bulkCat2) return alert("대분류와 소분류를 모두 선택하세요.");
-    if(!selectedIds.size) return;
-    const ids=new Set(selectedIds);
-    update(d=>({...d,transactions:d.transactions.map(t=>ids.has(t.id)?{...t,cat1:bulkCat1,cat2:bulkCat2}:t)}));
-    setBulkCat1(""); setBulkCat2(""); clearSelection();
-  };
-  const bulkChangeType=()=>{
-    if(!bulkType) return alert("변경할 구분을 선택하세요.");
-    if(!selectedIds.size) return;
-    const ids=new Set(selectedIds);
-    update(d=>({...d,transactions:d.transactions.map(t=>ids.has(t.id)?{...t,type:bulkType}:t)}));
-    setBulkType(""); clearSelection();
-  };
-  const bulkCat2Opts=useMemo(()=>{
-    for(const tk of Object.keys(data.categories)){if(data.categories[tk][bulkCat1]) return data.categories[tk][bulkCat1];}
-    return [];
-  },[bulkCat1,data.categories]);
-  const showBulkPanel=selectedIds.size>0;
-
   // 검색 하이라이트
   const Hl=({text=""})=>{
     if(!search.trim()||!text) return <>{text}</>;
@@ -1794,20 +2047,12 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
       <div className="card">
         <div className="card-title">
           <h3>거래 목록 <span style={{fontSize:12,fontWeight:400,color:"var(--text3)",marginLeft:6}}>전체 {data.transactions.length}건 중 {filtered.length}건</span></h3>
-          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-            {selectedIds.size>0&&(
-              <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:99,background:"var(--accent-bg)",color:"var(--accent)",fontSize:11,fontWeight:700,gap:5}}>
-                ☑ {selectedIds.size}건 선택됨
-                <button onClick={clearSelection} style={{background:"none",border:"none",cursor:"pointer",color:"var(--accent)",fontSize:12,lineHeight:1,padding:"0 0 0 2px"}}>✕</button>
-              </span>
-            )}
-            {activeFilterCount>0&&(
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{display:"inline-flex",alignItems:"center",padding:"3px 9px",borderRadius:99,background:"var(--accent-bg)",color:"var(--accent)",fontSize:11,fontWeight:600}}>필터 {activeFilterCount}개 적용</span>
-                <button onClick={resetFilters} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:99,border:"none",cursor:"pointer",background:"var(--surface3)",color:"var(--text2)",fontSize:11,fontWeight:600}}>✕ 초기화</button>
-              </div>
-            )}
-          </div>
+          {activeFilterCount>0&&(
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{display:"inline-flex",alignItems:"center",padding:"3px 9px",borderRadius:99,background:"var(--accent-bg)",color:"var(--accent)",fontSize:11,fontWeight:600}}>필터 {activeFilterCount}개 적용</span>
+              <button onClick={resetFilters} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:99,border:"none",cursor:"pointer",background:"var(--surface3)",color:"var(--text2)",fontSize:11,fontWeight:600}}>✕ 초기화</button>
+            </div>
+          )}
         </div>
 
         {/* 검색 + 월 */}
@@ -1834,51 +2079,6 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
           }
         </div>
 
-        {/* ── 일괄 조작 패널 ── */}
-        {showBulkPanel&&(
-          <div style={{padding:"14px 16px",marginBottom:14,background:"var(--accent-bg)",border:"1px solid rgba(108,125,255,.3)",borderRadius:12,display:"flex",flexDirection:"column",gap:12}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-              <span style={{fontSize:13,fontWeight:700,color:"var(--accent)"}}>☑ {selectedIds.size}건 선택 — 일괄 작업</span>
-              <button onClick={clearSelection} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:12}}>선택 해제</button>
-            </div>
-            {/* 행 1: 삭제 + 구분 변경 */}
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-              <button onClick={bulkDelete} style={{padding:"8px 14px",borderRadius:10,border:"1px solid rgba(255,92,114,.4)",background:"var(--red-bg)",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
-                🗑 {selectedIds.size}건 삭제
-              </button>
-              <div style={{width:1,height:24,background:"rgba(255,255,255,.12)",flexShrink:0}}/>
-              <select value={bulkType} onChange={e=>setBulkType(e.target.value)} style={{...inpS,width:"auto",minWidth:120,fontSize:12,padding:"7px 11px"}}>
-                <option value="">구분 변경...</option><option>수입</option><option>지출</option><option>자산이동</option>
-              </select>
-              <button onClick={bulkChangeType} style={{padding:"8px 14px",borderRadius:10,border:"1px solid var(--border2)",background:"var(--surface)",color:"var(--text2)",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
-                구분 일괄 변경
-              </button>
-            </div>
-            {/* 행 2: 카테고리 일괄 변경 */}
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"var(--text3)",flexShrink:0}}>카테고리 변경:</span>
-              <select value={bulkCat1} onChange={e=>{setBulkCat1(e.target.value);setBulkCat2("");}} style={{...inpS,width:"auto",minWidth:130,fontSize:12,padding:"7px 11px"}}>
-                <option value="">대분류 선택...</option>
-                {[...new Set(Object.values(data.categories).flatMap(g=>Object.keys(g)))].sort().map(x=><option key={x}>{x}</option>)}
-              </select>
-              <button onClick={bulkChangeCat1} disabled={!bulkCat1} style={{padding:"8px 14px",borderRadius:10,border:"1px solid var(--border2)",background:"var(--surface)",color:"var(--text2)",fontSize:12,fontWeight:600,cursor:bulkCat1?"pointer":"not-allowed",fontFamily:"inherit",whiteSpace:"nowrap",opacity:bulkCat1?1:.5}}>
-                대분류만 변경
-              </button>
-              {bulkCat1&&bulkCat2Opts.length>0&&(
-                <>
-                  <select value={bulkCat2} onChange={e=>setBulkCat2(e.target.value)} style={{...inpS,width:"auto",minWidth:130,fontSize:12,padding:"7px 11px"}}>
-                    <option value="">소분류 선택...</option>{bulkCat2Opts.map(x=><option key={x}>{x}</option>)}
-                  </select>
-                  <button onClick={bulkChangeCat2} disabled={!bulkCat2} style={{padding:"8px 14px",borderRadius:10,border:"1px solid var(--border2)",background:"var(--surface)",color:"var(--text2)",fontSize:12,fontWeight:600,cursor:bulkCat2?"pointer":"not-allowed",fontFamily:"inherit",whiteSpace:"nowrap",opacity:bulkCat2?1:.5}}>
-                    대+소분류 변경
-                  </button>
-                </>
-              )}
-            </div>
-            <div style={{fontSize:11,color:"rgba(108,125,255,.7)"}}>💡 필터로 범위를 좁힌 뒤 헤더 체크박스로 전체 선택하면 빠르게 일괄 처리할 수 있습니다.</div>
-          </div>
-        )}
-
         {/* 소계 바 */}
         {filtered.length>0&&(
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",background:"var(--surface2)",borderRadius:10,marginBottom:14,flexWrap:"wrap",gap:8}}>
@@ -1897,44 +2097,28 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
 
         <div className="table-wrap">
           <table>
-            <thead>
-              <tr>
-                <th style={{width:36,textAlign:"center",paddingLeft:10}}>
-                  <input type="checkbox" checked={allFilteredSelected} ref={el=>{if(el)el.indeterminate=someSelected&&!allFilteredSelected;}} onChange={toggleAll}
-                    style={{width:15,height:15,cursor:"pointer",accentColor:"var(--accent)"}} title={allFilteredSelected?"전체 해제":"전체 선택"}/>
-                </th>
-                <th>날짜</th><th>구분</th><th>대분류</th><th>소분류</th>
-                <th className="td-right">금액</th>
-                <th>입금계좌</th><th>출금계좌</th><th>내용</th><th>작업</th>
-              </tr>
-            </thead>
+            <thead><tr><th>날짜</th><th>구분</th><th>대분류</th><th>소분류</th><th className="td-right">금액</th><th>입금계좌</th><th>출금계좌</th><th>내용</th><th>작업</th></tr></thead>
             <tbody>
-              {filtered.map(t=>{
-                const isSel=selectedIds.has(t.id);
-                return(
-                  <tr key={t.id} style={{background:isSel?"rgba(108,125,255,.07)":"",transition:"background .12s"}}>
-                    <td style={{textAlign:"center",paddingLeft:10}}>
-                      <input type="checkbox" checked={isSel} onChange={()=>toggleSelect(t.id)} style={{width:15,height:15,cursor:"pointer",accentColor:"var(--accent)"}}/>
-                    </td>
-                    <td>{t.date}</td>
-                    <td><span className={`badge ${t.type==="수입"?"badge-green":t.type==="지출"?"badge-red":"badge-muted"}`}>{t.type}</span></td>
-                    <td className="td-name">{t.cat1}</td><td>{t.cat2}</td>
-                    <td className="td-right td-mono" style={{color:t.type==="수입"?"var(--green)":t.type==="지출"?"var(--red)":"inherit"}}>{fmt(t.amount)}</td>
-                    <td>{t.inAccount}</td><td>{t.outAccount}</td>
-                    <td style={{maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                      <Hl text={t.content}/>
-                      {t.memo&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2}}><Hl text={t.memo}/></div>}
-                    </td>
-                    <td>
-                      <div className="row">
-                        <button className="btn btn-sm btn-ghost" onClick={()=>edit(t)}>수정</button>
-                        <button className="btn btn-sm btn-danger" onClick={()=>remove(t.id)}>삭제</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {!filtered.length&&<tr><td colSpan={10}><div className="empty">{data.transactions.length===0?"거래내역이 없습니다.":"검색 결과가 없습니다. 필터를 조정해보세요."}</div></td></tr>}
+              {filtered.map(t=>(
+                <tr key={t.id}>
+                  <td>{t.date}</td>
+                  <td><span className={`badge ${t.type==="수입"?"badge-green":t.type==="지출"?"badge-red":"badge-muted"}`}>{t.type}</span></td>
+                  <td className="td-name">{t.cat1}</td><td>{t.cat2}</td>
+                  <td className="td-right td-mono" style={{color:t.type==="수입"?"var(--green)":t.type==="지출"?"var(--red)":"inherit"}}>{fmt(t.amount)}</td>
+                  <td>{t.inAccount}</td><td>{t.outAccount}</td>
+                  <td style={{maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    <Hl text={t.content}/>
+                    {t.memo&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2}}><Hl text={t.memo}/></div>}
+                  </td>
+                  <td>
+                    <div className="row">
+                      <button className="btn btn-sm btn-ghost" onClick={()=>edit(t)}>수정</button>
+                      <button className="btn btn-sm btn-danger" onClick={()=>remove(t.id)}>삭제</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!filtered.length&&<tr><td colSpan={9}><div className="empty">{data.transactions.length===0?"거래내역이 없습니다.":"검색 결과가 없습니다. 필터를 조정해보세요."}</div></td></tr>}
             </tbody>
           </table>
         </div>
@@ -1945,12 +2129,9 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
 }
 
 // ─── Assets Tab ───────────────────────────────────────────────────────────────
-function AssetsTab({ data, update, financialAnalysis }) {
+function AssetsTab({ data, update }) {
   const empty={id:"",kind:"자산",category:"은행예금",name:"",current:"",previous:"",includeInEmergency:false,note:""};
   const [form,setForm]=useState(empty);
-  const [snapshotMemo,setSnapshotMemo]=useState("");
-  const [showSnapshotForm,setShowSnapshotForm]=useState(false);
-
   const save=()=>{
     if(!form.name) return alert("이름을 입력하세요.");
     update(d=>{
@@ -1960,176 +2141,9 @@ function AssetsTab({ data, update, financialAnalysis }) {
     });
     setForm(empty);
   };
-
-  const totalAssets=data.assets.filter(a=>a.kind==="자산").reduce((s,a)=>s+n(a.current),0);
-  const totalLiabs=data.assets.filter(a=>a.kind==="부채").reduce((s,a)=>s+n(a.current),0);
-  const portValue=n(financialAnalysis?.total||0);
-  const net=totalAssets-totalLiabs+portValue;
-
-  const thisMonth=thisMonthISO();
-  const snapshots=data.assetSnapshots||[];
-  const thisMonthSnap=snapshots.find(s=>s.month===thisMonth);
-
-  const prevSnap=snapshots.length>=2?snapshots[snapshots.length-2]:null;
-  const latestSnap=snapshots.length>=1?snapshots[snapshots.length-1]:null;
-  const netWorthChange=prevSnap&&latestSnap?latestSnap.netWorth-prevSnap.netWorth:null;
-  const netWorthChangeRate=prevSnap&&latestSnap&&prevSnap.netWorth!==0?(latestSnap.netWorth-prevSnap.netWorth)/Math.abs(prevSnap.netWorth)*100:null;
-
-  const saveSnapshot=()=>{
-    const detail=data.assets.map(a=>({name:a.name,kind:a.kind,category:a.category||"",current:n(a.current)}));
-    const snap={id:uid(),month:thisMonth,savedAt:new Date().toISOString(),totalAssets,totalLiabs,portValue,netWorth:net,memo:snapshotMemo.trim(),detail};
-    update(d=>{
-      const prev=(d.assetSnapshots||[]).filter(s=>s.month!==thisMonth);
-      return {...d,assetSnapshots:[...prev,snap].sort((a,b)=>a.month.localeCompare(b.month))};
-    });
-    setSnapshotMemo(""); setShowSnapshotForm(false);
-  };
-  const deleteSnapshot=(id)=>{
-    if(!window.confirm("이 스냅샷을 삭제할까요?")) return;
-    update(d=>({...d,assetSnapshots:(d.assetSnapshots||[]).filter(s=>s.id!==id)}));
-  };
-
-  const chartData=snapshots.map(s=>({month:s.month.slice(5)+"월",순자산:s.netWorth,총자산:s.totalAssets+s.portValue,총부채:s.totalLiabs}));
-
+  const net=data.assets.filter(a=>a.kind==="자산").reduce((s,a)=>s+n(a.current),0)-data.assets.filter(a=>a.kind==="부채").reduce((s,a)=>s+n(a.current),0);
   return (
     <div className="stack">
-      {/* 순자산 현황 + 스냅샷 저장 */}
-      <div className="card">
-        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:14}}>
-          <div>
-            <div style={{fontSize:11,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>현재 순자산</div>
-            <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap"}}>
-              <span style={{fontSize:32,fontWeight:900,letterSpacing:"-.04em",color:"var(--accent)",fontVariantNumeric:"tabular-nums"}}>{fmt(net)}</span>
-              <span style={{fontSize:14,color:"var(--text3)"}}>원</span>
-              {netWorthChange!==null&&(
-                <span style={{fontSize:13,fontWeight:600,color:netWorthChange>=0?"var(--green)":"var(--red)",marginLeft:4}}>
-                  {netWorthChange>=0?"▲":"▼"} {fmt(Math.abs(netWorthChange))}원
-                  {netWorthChangeRate!==null&&` (${netWorthChangeRate>=0?"+":""}${netWorthChangeRate.toFixed(1)}%)`}
-                  <span style={{fontSize:11,fontWeight:400,color:"var(--text3)",marginLeft:4}}>전월 대비</span>
-                </span>
-              )}
-            </div>
-            <div style={{display:"flex",gap:20,marginTop:8,fontSize:12,color:"var(--text3)"}}>
-              <span>자산 <strong style={{color:"var(--text)",fontVariantNumeric:"tabular-nums"}}>{fmt(totalAssets)}원</strong></span>
-              <span>부채 <strong style={{color:"var(--red)",fontVariantNumeric:"tabular-nums"}}>{fmt(totalLiabs)}원</strong></span>
-              <span>포트폴리오 <strong style={{color:"var(--accent)",fontVariantNumeric:"tabular-nums"}}>{fmt(portValue)}원</strong></span>
-            </div>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:8,alignItems:"flex-end"}}>
-            {thisMonthSnap
-              ?<div style={{fontSize:12,color:"var(--green)",display:"flex",alignItems:"center",gap:8}}>
-                  <span>✅ {thisMonth} 저장됨</span>
-                  <button className="btn btn-sm btn-ghost" onClick={()=>setShowSnapshotForm(v=>!v)}>덮어쓰기</button>
-                </div>
-              :<button className="btn btn-primary" onClick={()=>setShowSnapshotForm(v=>!v)}>📸 이번 달 스냅샷 저장</button>
-            }
-            {showSnapshotForm&&(
-              <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                <input style={{padding:"8px 12px",border:"1px solid var(--border2)",borderRadius:10,background:"var(--surface2)",color:"var(--text)",fontSize:12,outline:"none",minWidth:180}} placeholder="메모 (선택)" value={snapshotMemo} onChange={e=>setSnapshotMemo(e.target.value)}/>
-                <button className="btn btn-primary btn-sm" onClick={saveSnapshot}>저장</button>
-                <button className="btn btn-ghost btn-sm" onClick={()=>{setShowSnapshotForm(false);setSnapshotMemo("");}}>취소</button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 순자산 성장 차트 */}
-      {chartData.length>=2?(
-        <div className="card">
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-            <h3 style={{margin:0}}>📈 순자산 성장 추이</h3>
-            <span style={{fontSize:11,color:"var(--text3)"}}>{chartData.length}개월 기록</span>
-          </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <ComposedChart data={chartData} margin={{top:8,right:8,bottom:0,left:-12}}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)"/>
-              <XAxis dataKey="month" tick={{fontSize:11,fill:"#5a6278"}} axisLine={false} tickLine={false}/>
-              <YAxis tick={{fontSize:10,fill:"#5a6278"}} tickFormatter={v=>`${Math.round(v/100000000)}억`} axisLine={false} tickLine={false}/>
-              <Tooltip content={<ChartTooltip/>}/>
-              <Legend wrapperStyle={{fontSize:11,color:"#9ba3b5",paddingTop:8}}/>
-              <Area type="monotone" dataKey="총자산" fill="rgba(108,125,255,.10)" stroke="#6c7dff" strokeWidth={1.5} strokeDasharray="4 3" name="총자산" dot={false}/>
-              <Area type="monotone" dataKey="순자산" fill="rgba(52,213,138,.14)" stroke="#34d58a" strokeWidth={2.5} name="순자산" dot={{r:4,fill:"#34d58a",strokeWidth:0}} activeDot={{r:6}}/>
-            </ComposedChart>
-          </ResponsiveContainer>
-          {/* 통계 카드 */}
-          {(()=>{
-            const first=snapshots[0],last=snapshots[snapshots.length-1];
-            const totalChange=last.netWorth-first.netWorth;
-            const totalMonths=snapshots.length-1;
-            const avgMonthly=totalMonths>0?totalChange/totalMonths:0;
-            return(
-              <div style={{marginTop:12,display:"flex",gap:10,flexWrap:"wrap"}}>
-                {[
-                  ["전체 기간 변화",`${first.month} → ${last.month}`,totalChange,`${totalMonths}개월`],
-                  ["월평균 증가","연환산 "+fmt(avgMonthly*12)+"원",avgMonthly,"/월"],
-                  ["누적 증가율",first.netWorth!==0?`최고 ${fmt(Math.max(...snapshots.map(s=>s.netWorth)))}원`:"",first.netWorth!==0?totalChange/Math.abs(first.netWorth)*100:null,"%"],
-                ].map(([title,sub,val,unit])=>(
-                  <div key={title} style={{flex:1,minWidth:140,padding:"10px 14px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
-                    <div style={{fontSize:10,color:"var(--text3)",marginBottom:4,textTransform:"uppercase",letterSpacing:".05em"}}>{title}</div>
-                    <div style={{fontSize:15,fontWeight:700,color:val===null?"var(--text3)":val>=0?"var(--green)":"var(--red)",fontVariantNumeric:"tabular-nums"}}>
-                      {val===null?"—":unit==="%"?`${val>=0?"+":""}${val.toFixed(1)}${unit}`:`${val>=0?"+":""}${fmt(val)}원${unit}`}
-                    </div>
-                    {sub&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>{sub}</div>}
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-        </div>
-      ):chartData.length===1?(
-        <div className="card" style={{textAlign:"center",padding:"24px"}}>
-          <div style={{fontSize:32,marginBottom:8}}>📸</div>
-          <div style={{fontSize:14,fontWeight:600,color:"var(--text)",marginBottom:6}}>스냅샷 1개 저장됨</div>
-          <div style={{fontSize:13,color:"var(--text3)"}}>다음 달에도 저장하면 순자산 성장 차트가 나타납니다.</div>
-        </div>
-      ):(
-        <div className="card" style={{textAlign:"center",padding:"32px"}}>
-          <div style={{fontSize:40,marginBottom:10}}>📊</div>
-          <div style={{fontSize:14,fontWeight:600,color:"var(--text)",marginBottom:8}}>순자산 성장 차트</div>
-          <div style={{fontSize:13,color:"var(--text3)",lineHeight:1.6}}>
-            위의 <strong style={{color:"var(--accent)"}}>📸 이번 달 스냅샷 저장</strong> 버튼을 누르면<br/>매월 순자산 변화를 시각화할 수 있습니다.
-          </div>
-        </div>
-      )}
-
-      {/* 스냅샷 내역 표 */}
-      {snapshots.length>0&&(
-        <div className="card">
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-            <h3 style={{margin:0}}>스냅샷 내역 ({snapshots.length}개월)</h3>
-            <span style={{fontSize:11,color:"var(--text3)"}}>매월 1회 저장 권장</span>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead><tr><th>월</th><th className="td-right">총자산</th><th className="td-right">총부채</th><th className="td-right">포트폴리오</th><th className="td-right">순자산</th><th className="td-right">전월 대비</th><th>메모</th><th>저장일</th><th>작업</th></tr></thead>
-              <tbody>
-                {[...snapshots].reverse().map((s,ri)=>{
-                  const prev=snapshots[snapshots.length-1-ri-1];
-                  const diff=prev?s.netWorth-prev.netWorth:null;
-                  return(
-                    <tr key={s.id}>
-                      <td style={{fontWeight:600,color:"var(--text)"}}>{s.month}</td>
-                      <td className="td-right td-mono">{fmt(s.totalAssets)}</td>
-                      <td className="td-right td-mono" style={{color:"var(--red)"}}>{fmt(s.totalLiabs)}</td>
-                      <td className="td-right td-mono" style={{color:"var(--accent)"}}>{fmt(s.portValue)}</td>
-                      <td className="td-right td-mono" style={{fontWeight:700,color:"var(--text)"}}>{fmt(s.netWorth)}</td>
-                      <td className="td-right td-mono">
-                        {diff!==null?<span style={{color:diff>=0?"var(--green)":"var(--red)",fontWeight:600}}>{diff>=0?"+":""}{fmt(diff)}</span>:<span style={{color:"var(--text3)"}}>—</span>}
-                      </td>
-                      <td style={{color:"var(--text3)",fontSize:12}}>{s.memo||"—"}</td>
-                      <td style={{color:"var(--text3)",fontSize:11}}>{s.savedAt?new Date(s.savedAt).toLocaleDateString("ko-KR"):"—"}</td>
-                      <td><button className="btn btn-sm btn-danger" onClick={()=>deleteSnapshot(s.id)}>삭제</button></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* 자산·부채 입력 폼 */}
       <div className="card">
         <h3>자산·부채 입력</h3>
         <div className="form-grid">
@@ -2151,8 +2165,6 @@ function AssetsTab({ data, update, financialAnalysis }) {
           <span style={{fontSize:13,color:"var(--text3)"}}>순자산: <strong style={{color:"var(--text)"}}>{fmt(net)}원</strong></span>
         </div>
       </div>
-
-      {/* 자산·부채 목록 */}
       <div className="card">
         <h3>자산·부채 목록</h3>
         <div className="table-wrap">
@@ -2549,8 +2561,13 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
     await bulkUpdate();
   };
 
+  // 자연어 요약
+  const portNLP = useMemo(() => buildPortfolioNLP(financialAnalysis, data), [financialAnalysis, data]);
+
   return (
     <div className="stack">
+      {/* ── 자연어 요약 카드 ── */}
+      <NaturalInsightCard icon={portNLP.icon} title={portNLP.title} message={portNLP.message} tone={portNLP.tone} actions={portNLP.actions}/>
       <div className="card">
         <div className="card-title">
           <h3>🌐 시장 데이터 자동 업데이트</h3>
@@ -2709,8 +2726,14 @@ function BudgetTab({ data, update, budgetAnalysis }) {
     });
     setForm(empty);
   };
+
+  // 자연어 요약
+  const budgetNLP = useMemo(() => buildBudgetNLP(budgetAnalysis), [budgetAnalysis]);
+
   return (
     <div className="stack">
+      {/* ── 자연어 요약 카드 ── */}
+      <NaturalInsightCard icon={budgetNLP.icon} title={budgetNLP.title} message={budgetNLP.message} tone={budgetNLP.tone} actions={budgetNLP.actions}/>
       <div className="card">
         <h3>예산 설정</h3>
         <div className="form-grid-3">
@@ -2798,8 +2821,13 @@ function AnalysisTab({ data, monthlySeries, budgetAnalysis, financialAnalysis, d
   // 종목별 수익률 수평 바
   const returnData=[...financialAnalysis.rows].filter(r=>n(r.invested)>0).map(r=>({name:r.name.length>8?r.name.slice(0,8)+"…":r.name,수익률:Math.round((r.value-r.invested)/r.invested*1000)/10})).sort((a,b)=>b.수익률-a.수익률);
 
+  // 자연어 요약
+  const analysisNLP = useMemo(() => buildAnalysisNLP(monthlySeries, dashboardDetail), [monthlySeries, dashboardDetail]);
+
   return (
     <div className="stack">
+      {/* ── 자연어 요약 카드 ── */}
+      <NaturalInsightCard icon={analysisNLP.icon} title={analysisNLP.title} message={analysisNLP.message} tone={analysisNLP.tone} actions={analysisNLP.actions}/>
       {/* 1행: 월별 수입·지출 + 저축률 */}
       <div className="g2">
         <div className="card">
@@ -3061,8 +3089,14 @@ function TaxTab({ data, update, taxAnalysis }) {
   const set = (k, v) => update(d => ({ ...d, settings:{ ...d.settings, [k]:v } }));
   const opt = useMemo(() => calcTaxOptimization(data, taxAnalysis), [data, taxAnalysis]);
   const priorityBadge = (p) => p === "높음" ? "badge-red" : p === "중간" ? "badge-amber" : p === "완료" ? "badge-green" : "badge-muted";
+
+  // 자연어 요약
+  const taxNLP = useMemo(() => buildTaxNLP(opt, taxAnalysis), [opt, taxAnalysis]);
+
   return (
     <div className="stack">
+      {/* ── 자연어 요약 카드 ── */}
+      <NaturalInsightCard icon={taxNLP.icon} title={taxNLP.title} message={taxNLP.message} tone={taxNLP.tone} actions={taxNLP.actions}/>
       <div className="kpi-grid">
         <KpiCard label="추가 세액공제 가능액" value={opt.pensionExtraCredit} unit="원" accent/>
         <KpiCard label="ISA 예상 절세효과" value={opt.expectedIsaSaving} unit="원"/>
@@ -3162,7 +3196,7 @@ function TaxTab({ data, update, taxAnalysis }) {
 }
 
 // ─── Planning Tab ─────────────────────────────────────────────────────────────
-function PlanningTab({ data, update, eventAnalysis }) {
+function PlanningTab({ data, update, eventAnalysis, dashboard }) {
   const empty={id:"",name:"",yearsFromNow:1,amountNeeded:"",currentPrepared:"",priority:"높음"};
   const [form,setForm]=useState(empty);
   const saveEvent=()=>{
@@ -3174,8 +3208,14 @@ function PlanningTab({ data, update, eventAnalysis }) {
     });
     setForm(empty);
   };
+
+  // 자연어 요약
+  const planNLP = useMemo(() => buildPlanningNLP(eventAnalysis, dashboard), [eventAnalysis, dashboard]);
+
   return (
     <div className="stack">
+      {/* ── 자연어 요약 카드 ── */}
+      <NaturalInsightCard icon={planNLP.icon} title={planNLP.title} message={planNLP.message} tone={planNLP.tone} actions={planNLP.actions}/>
       <div className="card">
         <h3>라이프 이벤트 입력</h3>
         <div className="form-grid">
@@ -4139,6 +4179,11 @@ function SimulationTab({ data, futureSim }) {
 
   return (
     <div className="stack retirement-pro">
+      {/* ── 자연어 요약 카드 ── */}
+      {(() => {
+        const nlp = buildSimulationNLP({ advanced, base, w, targetRate, scenario });
+        return <NaturalInsightCard icon={nlp.icon} title={nlp.title} message={nlp.message} tone={nlp.tone} actions={nlp.actions}/>;
+      })()}
       <div className="card retirement-hero">
         <div>
           <div className="kpi-label">ADVANCED RETIREMENT SIMULATION</div>
@@ -5180,20 +5225,12 @@ export default function App() {
   const [data,setData]=useState(loadData);
   const [tab,setTab]=useState("dashboard");
   const [sidebarOpen,setSidebarOpen]=useState(true);
-  const [theme,setTheme]=useState(()=>localStorage.getItem("season-theme")||"dark");
   const [session,setSession]=useState(null);
   const [authLoading,setAuthLoading]=useState(true);
   const [syncState,setSyncState]=useState("");
   const [cloudReady,setCloudReady]=useState(false);
   const [showFab,setShowFab]=useState(false);
   const skipCloudSaveRef=useRef(false);
-
-  // 테마를 html[data-theme]에 적용 + localStorage 저장
-  useEffect(()=>{
-    document.documentElement.setAttribute("data-theme",theme);
-    localStorage.setItem("season-theme",theme);
-  },[theme]);
-  const toggleTheme=()=>setTheme(t=>t==="dark"?"light":"dark");
 
   useEffect(()=>{ saveData(data); },[data]);
 
@@ -5382,7 +5419,6 @@ export default function App() {
 
   return (
     <div className="app">
-      <script dangerouslySetInnerHTML={{__html:`(function(){try{var t=localStorage.getItem('season-theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})()`}}/>
       <style>{STYLES}</style>
       <div className="shell">
         {/* Sidebar */}
@@ -5421,9 +5457,6 @@ export default function App() {
                   이번달 {dashboard.net>=0?"흑자":"적자"} {fmt(Math.abs(dashboard.net))}원
                 </span>
               )}
-              <button className="theme-toggle" onClick={toggleTheme} title={theme==="dark"?"라이트 모드로 전환":"다크 모드로 전환"} aria-label={theme==="dark"?"라이트 모드로 전환":"다크 모드로 전환"}>
-                {theme==="dark"?"☀️":"🌙"}
-              </button>
             </div>
           </div>
 
@@ -5433,10 +5466,10 @@ export default function App() {
             {tab==="cfo"&&<CFOCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="automation"&&<AutomationSystemTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="transactions"&&<TransactionsTab data={data} update={update} accountNamesIn={accountNamesIn} accountNamesOut={accountNamesOut}/>}
-            {tab==="assets"&&<AssetsTab data={data} update={update} financialAnalysis={financialAnalysis}/>}
+            {tab==="assets"&&<AssetsTab data={data} update={update}/>}
             {tab==="portfolio"&&<PortfolioTab data={data} update={update} accountOptions={accountOptions} financialAnalysis={financialAnalysis}/>}
             {tab==="budget"&&<BudgetTab data={data} update={update} budgetAnalysis={budgetAnalysis}/>}
-            {tab==="planning"&&<PlanningTab data={data} update={update} eventAnalysis={eventAnalysis}/>}
+            {tab==="planning"&&<PlanningTab data={data} update={update} eventAnalysis={eventAnalysis} dashboard={dashboard}/>}
             {tab==="professional"&&<ProfessionalTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} monthlySeries={monthlySeries}/>}
             {tab==="risk"&&<Step2MddRiskPanel data={data} financialAnalysis={financialAnalysis}/>}
             {tab==="analysis"&&<AnalysisTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboardDetail={dashboardDetail}/>}
