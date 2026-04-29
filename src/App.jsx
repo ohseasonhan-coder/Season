@@ -1562,7 +1562,365 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
   .donut-wrap{grid-template-columns:1fr}
   .page{padding:20px}
 }
+
+/* ── 다크/라이트 토글 ────────────────────────────────────────────────────── */
+:root[data-theme='light']{
+  --bg:#f4f5f7;--surface:#ffffff;--surface2:#eef0f4;--surface3:#e4e7ed;
+  --border:#d0d5e0;--border2:#bcc3d4;
+  --text:#131620;--text2:#44506a;--text3:#828fa8;
+  --accent:#5060e8;--accent2:#6070ff;--accent-bg:rgba(80,96,232,.10);
+  --green:#179e5e;--green-bg:rgba(23,158,94,.10);
+  --red:#d63550;--red-bg:rgba(214,53,80,.10);
+  --amber:#c78a0c;--amber-bg:rgba(199,138,12,.10);
+}
+:root[data-theme='light'] body{background:var(--bg)}
+:root[data-theme='light'] .sidebar{background:rgba(255,255,255,.90);box-shadow:inset -1px 0 0 rgba(0,0,0,.07)}
+:root[data-theme='light'] .sidebar.collapsed{background:rgba(255,255,255,.95)}
+:root[data-theme='light'] .sidebar-toggle{border-color:rgba(0,0,0,.11);background:rgba(0,0,0,.04);color:rgba(19,22,32,.6)}
+:root[data-theme='light'] .topbar{background:rgba(255,255,255,.92);backdrop-filter:blur(12px)}
+:root[data-theme='light'] table thead tr,:root[data-theme='light'] th{background:var(--surface2)}
+:root[data-theme='light'] tr:hover td{background:rgba(0,0,0,.025)}
+.theme-toggle{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:16px;transition:.18s ease;flex-shrink:0}
+.theme-toggle:hover{background:var(--surface3);color:var(--text);transform:translateY(-1px)}
+
+/* ── 온보딩 위자드 ──────────────────────────────────────────────────────── */
+.ob-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(14px);animation:obIn .3s ease}
+@keyframes obIn{from{opacity:0}to{opacity:1}}
+.ob-card{background:var(--surface,#161920);border:1px solid var(--border,#2a2d36);border-radius:24px;width:100%;max-width:580px;padding:36px 40px;box-shadow:0 32px 80px rgba(0,0,0,.65);animation:obUp .38s cubic-bezier(.2,.8,.2,1)}
+@keyframes obUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+.ob-logo-row{display:flex;align-items:center;gap:10px;margin-bottom:26px}
+.ob-logo-mark{width:34px;height:34px;background:var(--accent,#6c7dff);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:900;color:#fff;flex-shrink:0}
+.ob-logo-name{font-size:14px;font-weight:700;color:var(--text,#f0f1f3);letter-spacing:-.02em}
+.ob-stepper{display:flex;align-items:center;gap:0;margin-bottom:24px}
+.ob-st{display:flex;align-items:center;flex:1}
+.ob-st-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;border:2px solid var(--border2,#353840);color:var(--text3,#5a6278);background:var(--surface2,#1e2129);transition:.25s}
+.ob-st-dot.active{border-color:var(--accent,#6c7dff);color:var(--accent,#6c7dff);background:rgba(108,125,255,.12)}
+.ob-st-dot.done{border-color:var(--green,#34d58a);color:var(--green,#34d58a);background:rgba(52,213,138,.12)}
+.ob-st-line{flex:1;height:2px;background:var(--border,#2a2d36);margin:0 2px;transition:.25s}
+.ob-st-line.done{background:var(--green,#34d58a)}
+.ob-eyebrow{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--text3,#5a6278);margin-bottom:5px}
+.ob-h{font-size:22px;font-weight:800;letter-spacing:-.03em;color:var(--text,#f0f1f3);line-height:1.3;margin-bottom:4px}
+.ob-sub{font-size:13px;color:var(--text3,#5a6278);line-height:1.58;margin-bottom:22px}
+.ob-fstack{display:flex;flex-direction:column;gap:13px}
+.ob-row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ob-f{display:flex;flex-direction:column;gap:6px}
+.ob-f label{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text3,#5a6278)}
+.ob-f input,.ob-f select{width:100%;padding:10px 13px;border:1px solid var(--border2,#353840);border-radius:10px;background:var(--surface2,#1e2129);color:var(--text,#f0f1f3);font-size:13.5px;font-family:inherit;outline:none;transition:.15s}
+.ob-f input:focus,.ob-f select:focus{border-color:var(--accent,#6c7dff);box-shadow:0 0 0 3px rgba(108,125,255,.14)}
+.ob-f input::placeholder{color:var(--text3,#5a6278)}
+.ob-f input[type=number]{-moz-appearance:textfield}
+.ob-f input[type=number]::-webkit-outer-spin-button,.ob-f input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+.ob-hint{font-size:11px;color:var(--text3,#5a6278);margin-top:2px;line-height:1.45}
+.ob-tags{display:flex;gap:7px;flex-wrap:wrap}
+.ob-tag{padding:6px 14px;border-radius:99px;font-size:12px;font-weight:600;border:1px solid var(--border2,#353840);background:var(--surface2,#1e2129);color:var(--text2,#9ba3b5);cursor:pointer;transition:.15s;font-family:inherit}
+.ob-tag.sel{border-color:var(--accent,#6c7dff);background:rgba(108,125,255,.14);color:var(--accent,#6c7dff)}
+.ob-tag:hover:not(.sel){background:var(--surface3,#252830);color:var(--text,#f0f1f3)}
+.ob-preview{padding:12px 15px;border-radius:11px;margin-top:2px;background:rgba(108,125,255,.09);border:1px solid rgba(108,125,255,.22)}
+.ob-preview-label{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text3,#5a6278);margin-bottom:4px}
+.ob-preview-val{font-size:19px;font-weight:900;letter-spacing:-.03em;color:var(--accent,#6c7dff);font-variant-numeric:tabular-nums}
+.ob-preview-sub{font-size:11px;color:var(--text3,#5a6278);margin-top:3px}
+.ob-footer{display:flex;align-items:center;justify-content:space-between;margin-top:26px;gap:10px}
+.ob-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px 22px;border-radius:11px;font-size:13.5px;font-weight:700;border:none;cursor:pointer;transition:.18s ease;font-family:inherit}
+.ob-btn.primary{background:var(--accent,#6c7dff);color:#fff;box-shadow:0 4px 18px rgba(108,125,255,.35)}
+.ob-btn.primary:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(108,125,255,.45)}
+.ob-btn.ghost{background:var(--surface2,#1e2129);color:var(--text2,#9ba3b5);border:1px solid var(--border,#2a2d36)}
+.ob-btn.ghost:hover{background:var(--surface3,#252830);color:var(--text,#f0f1f3)}
+.ob-btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+.ob-skip{font-size:12px;color:var(--text3,#5a6278);cursor:pointer;background:none;border:none;font-family:inherit;text-decoration:underline}
+.ob-skip:hover{color:var(--text2,#9ba3b5)}
+@media(max-width:580px){.ob-card{padding:24px 20px;border-radius:18px}.ob-row2{grid-template-columns:1fr}.ob-h{font-size:19px}}
 `;
+
+// ─── 온보딩 위자드 ────────────────────────────────────────────────────────────
+const OB_KEY = "season-onboarding-done-v1";
+
+function OnboardingWizard({ onComplete }) {
+  const [step, setStep] = useState(1);
+
+  /* Step 1 */
+  const [name,         setName]         = useState("");
+  const [age,          setAge]          = useState("36");
+  const [retireAge,    setRetireAge]    = useState("55");
+  const [salary,       setSalary]       = useState("");
+  const [spouseOn,     setSpouseOn]     = useState(false);
+  const [spouseSal,    setSpouseSal]    = useState("");
+
+  /* Step 2 */
+  const [investStyle,  setInvestStyle]  = useState("");
+  const [monthlyInv,   setMonthlyInv]   = useState("200");
+  const [retireTarget, setRetireTarget] = useState("20");
+  const [emergFund,    setEmergFund]    = useState("");
+
+  /* Step 3 */
+  const [bankBal,      setBankBal]      = useState("");
+  const [isaBal,       setIsaBal]       = useState("");
+  const [pensionBal,   setPensionBal]   = useState("");
+  const [hasLoan,      setHasLoan]      = useState(false);
+  const [loanBal,      setLoanBal]      = useState("");
+
+  const toNum = v => { const x = Number(String(v).replace(/,/g, "")); return isFinite(x) ? x : 0; };
+
+  /* 완료: settings + assets 빌드 후 콜백 */
+  const handleComplete = () => {
+    const styleMap = {
+      "안정형": { nasdaq:0.25, nasdaqH:0.15, dividend:0.60 },
+      "균형형": { nasdaq:0.45, nasdaqH:0.45, dividend:0.10 },
+      "성장형": { nasdaq:0.60, nasdaqH:0.35, dividend:0.05 },
+    };
+    const w = styleMap[investStyle] || styleMap["균형형"];
+    const mi = toNum(monthlyInv) * 10000;
+
+    const newSettings = {
+      currentAge:              toNum(age) || 36,
+      retireAge:               toNum(retireAge) || 55,
+      monthlySalary1:          toNum(salary) * 10000,
+      monthlySalary2:          spouseOn ? toNum(spouseSal) * 10000 : 0,
+      spouseEnabled:           spouseOn,
+      monthlyInvestDefault:    mi,
+      monthlyInvestStage1:     mi,
+      monthlyInvestStage2:     Math.round(mi * 1.25),
+      monthlyInvestStage3:     Math.round(mi * 2.5),
+      triggerMonthlyInvestAmount: mi,
+      retirementTargetAmount:  toNum(retireTarget) * 100000000,
+      targetNasdaqWeight:      w.nasdaq,
+      targetNasdaqHWeight:     w.nasdaqH,
+      targetDividendWeight:    w.dividend,
+      investmentTargets: [
+        { id:"target-nasdaq",   name:"나스닥",   expectedReturn:0.12, targetWeight:w.nasdaq,   memo:"TIGER 나스닥100 포함" },
+        { id:"target-nasdaqH",  name:"나스닥(H)", expectedReturn:0.11, targetWeight:w.nasdaqH,  memo:"TIGER 나스닥100(H)" },
+        { id:"target-dividend", name:"배당",     expectedReturn:0.08, targetWeight:w.dividend, memo:"배당 ETF" },
+      ],
+    };
+
+    const newAssets = [];
+    if (toNum(bankBal) > 0)    newAssets.push({ id:uid(), kind:"자산", category:"은행예금", name:"은행 잔고",   current:toNum(bankBal)*10000,    previous:0, includeInEmergency:true,  note:"온보딩 입력" });
+    if (toNum(isaBal) > 0)     newAssets.push({ id:uid(), kind:"자산", category:"ISA",      name:"ISA 계좌",    current:toNum(isaBal)*10000,     previous:0, includeInEmergency:false, note:"온보딩 입력" });
+    if (toNum(pensionBal) > 0) newAssets.push({ id:uid(), kind:"자산", category:"연금",     name:"연금저축/IRP", current:toNum(pensionBal)*10000, previous:0, includeInEmergency:false, note:"온보딩 입력" });
+    if (hasLoan && toNum(loanBal) > 0)
+                               newAssets.push({ id:uid(), kind:"부채", category:"대출",     name:"대출",         current:toNum(loanBal)*10000,    previous:0, includeInEmergency:false, note:"온보딩 입력" });
+
+    localStorage.setItem(OB_KEY, "1");
+    onComplete({ newSettings, newAssets, userName: name.trim() });
+  };
+
+  /* 건너뛰기 */
+  const handleSkip = () => { localStorage.setItem(OB_KEY, "1"); onComplete({}); };
+
+  /* 유효성 */
+  const ok1 = toNum(age) >= 18 && toNum(retireAge) > toNum(age);
+  const ok2 = !!investStyle;
+
+  /* 스텝 진행 바 */
+  const Stepper = () => (
+    <div className="ob-stepper">
+      {[1,2,3].map((s,i) => (
+        <React.Fragment key={s}>
+          {i > 0 && <div className={`ob-st-line ${step > s-1 ? "done" : step === s-1 ? "active" : ""}`}/>}
+          <div className={`ob-st-dot ${step > s ? "done" : step === s ? "active" : ""}`}>
+            {step > s ? "✓" : s}
+          </div>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+
+  /* 태그 버튼 */
+  const Tag = ({ val, sel, onClick, children }) => (
+    <button type="button" className={`ob-tag ${sel ? "sel" : ""}`} onClick={onClick}>{children}</button>
+  );
+
+  /* 순자산 미리보기 */
+  const netPreview = (toNum(bankBal) + toNum(isaBal) + toNum(pensionBal) - (hasLoan ? toNum(loanBal) : 0)) * 10000;
+  const showPreview = (toNum(bankBal) + toNum(isaBal) + toNum(pensionBal)) > 0;
+
+  return (
+    <div className="ob-overlay">
+      <div className="ob-card">
+
+        {/* 로고 */}
+        <div className="ob-logo-row">
+          <div className="ob-logo-mark">S</div>
+          <span className="ob-logo-name">Season Finance</span>
+        </div>
+
+        <Stepper/>
+
+        {/* ──────── STEP 1: 기본 정보 ──────── */}
+        {step === 1 && (
+          <>
+            <div className="ob-eyebrow">Step 1 · 기본 정보</div>
+            <div className="ob-h">안녕하세요 👋<br/>기본 정보를 알려주세요</div>
+            <div className="ob-sub">맞춤 재무 진단을 시작합니다. 언제든 설정에서 변경할 수 있어요.</div>
+
+            <div className="ob-fstack">
+              <div className="ob-f">
+                <label>이름 (선택)</label>
+                <input placeholder="홍길동" value={name} onChange={e=>setName(e.target.value)} maxLength={20}/>
+              </div>
+
+              <div className="ob-row2">
+                <div className="ob-f">
+                  <label>현재 나이</label>
+                  <input type="number" placeholder="36" value={age} onChange={e=>setAge(e.target.value)} min={18} max={80}/>
+                  <span className="ob-hint">만 나이</span>
+                </div>
+                <div className="ob-f">
+                  <label>목표 은퇴 나이</label>
+                  <input type="number" placeholder="55" value={retireAge} onChange={e=>setRetireAge(e.target.value)} min={30} max={80}/>
+                  {!ok1 && toNum(age)>0 && <span className="ob-hint" style={{color:"var(--red)"}}>은퇴 나이는 현재 나이보다 커야 해요</span>}
+                </div>
+              </div>
+
+              <div className="ob-f">
+                <label>월 세후 수입 (만원)</label>
+                <input type="number" placeholder="400" value={salary} onChange={e=>setSalary(e.target.value)} min={0}/>
+                <span className="ob-hint">세후 실수령액 · 배우자 수입은 아래에 따로 입력</span>
+              </div>
+
+              <div className="ob-f">
+                <label>배우자 수입 포함</label>
+                <div className="ob-tags">
+                  <Tag sel={!spouseOn} onClick={()=>setSpouseOn(false)}>해당 없음</Tag>
+                  <Tag sel={spouseOn}  onClick={()=>setSpouseOn(true)}>포함할게요</Tag>
+                </div>
+              </div>
+              {spouseOn && (
+                <div className="ob-f">
+                  <label>배우자 월 수입 (만원)</label>
+                  <input type="number" placeholder="350" value={spouseSal} onChange={e=>setSpouseSal(e.target.value)} min={0}/>
+                </div>
+              )}
+            </div>
+
+            <div className="ob-footer">
+              <button className="ob-skip" onClick={handleSkip}>나중에 할게요</button>
+              <button className="ob-btn primary" onClick={()=>setStep(2)} disabled={!ok1}>
+                다음 단계 →
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ──────── STEP 2: 투자 성향 & 목표 ──────── */}
+        {step === 2 && (
+          <>
+            <div className="ob-eyebrow">Step 2 · 투자 목표</div>
+            <div className="ob-h">투자 성향과<br/>목표를 알려주세요</div>
+            <div className="ob-sub">시뮬레이션과 리밸런싱 추천에 바로 반영됩니다.</div>
+
+            <div className="ob-fstack">
+              <div className="ob-f">
+                <label>투자 성향</label>
+                <div className="ob-tags">
+                  {[
+                    ["안정형",  "배당 비중 높게"],
+                    ["균형형",  "나스닥+배당 Mix"],
+                    ["성장형",  "나스닥 집중"],
+                  ].map(([v, d]) => (
+                    <div key={v} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                      <Tag val={v} sel={investStyle===v} onClick={()=>setInvestStyle(v)}>{v}</Tag>
+                      <span style={{fontSize:10,color:"var(--text3)",textAlign:"center"}}>{d}</span>
+                    </div>
+                  ))}
+                </div>
+                {!ok2 && <span className="ob-hint" style={{color:"var(--amber)"}}>투자 성향을 하나 선택해주세요</span>}
+              </div>
+
+              <div className="ob-row2">
+                <div className="ob-f">
+                  <label>월 투자금 (만원)</label>
+                  <input type="number" placeholder="200" value={monthlyInv} onChange={e=>setMonthlyInv(e.target.value)} min={0}/>
+                  <span className="ob-hint">현재 여력 기준</span>
+                </div>
+                <div className="ob-f">
+                  <label>은퇴 목표자산 (억원)</label>
+                  <input type="number" placeholder="20" value={retireTarget} onChange={e=>setRetireTarget(e.target.value)} min={1}/>
+                  <span className="ob-hint">예: 20억 → 20 입력</span>
+                </div>
+              </div>
+
+              <div className="ob-f">
+                <label>현재 비상금 (만원)</label>
+                <input type="number" placeholder="1000" value={emergFund} onChange={e=>setEmergFund(e.target.value)} min={0}/>
+                <span className="ob-hint">파킹통장·CMA 등 즉시 인출 가능한 금액. 월 지출 3~6개월치가 권장이에요.</span>
+              </div>
+            </div>
+
+            <div className="ob-footer">
+              <button className="ob-btn ghost" onClick={()=>setStep(1)}>← 이전</button>
+              <button className="ob-btn primary" onClick={()=>setStep(3)} disabled={!ok2}>
+                다음 단계 →
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ──────── STEP 3: 첫 자산 입력 ──────── */}
+        {step === 3 && (
+          <>
+            <div className="ob-eyebrow">Step 3 · 자산 입력</div>
+            <div className="ob-h">주요 자산을<br/>입력해주세요</div>
+            <div className="ob-sub">대략적인 금액도 괜찮아요. 나중에 자산 탭에서 수정할 수 있어요.</div>
+
+            <div className="ob-fstack">
+              <div className="ob-row2">
+                <div className="ob-f">
+                  <label>은행 잔고 (만원)</label>
+                  <input type="number" placeholder="3000" value={bankBal} onChange={e=>setBankBal(e.target.value)} min={0}/>
+                </div>
+                <div className="ob-f">
+                  <label>ISA 계좌 (만원)</label>
+                  <input type="number" placeholder="1500" value={isaBal} onChange={e=>setIsaBal(e.target.value)} min={0}/>
+                </div>
+              </div>
+
+              <div className="ob-row2">
+                <div className="ob-f">
+                  <label>연금저축 / IRP (만원)</label>
+                  <input type="number" placeholder="800" value={pensionBal} onChange={e=>setPensionBal(e.target.value)} min={0}/>
+                </div>
+                <div className="ob-f">
+                  <label>대출 여부</label>
+                  <div className="ob-tags" style={{marginTop:2}}>
+                    <Tag sel={!hasLoan} onClick={()=>setHasLoan(false)}>없음</Tag>
+                    <Tag sel={hasLoan}  onClick={()=>setHasLoan(true)}>있음</Tag>
+                  </div>
+                </div>
+              </div>
+
+              {hasLoan && (
+                <div className="ob-f">
+                  <label>대출 잔액 (만원)</label>
+                  <input type="number" placeholder="5000" value={loanBal} onChange={e=>setLoanBal(e.target.value)} min={0}/>
+                </div>
+              )}
+
+              {showPreview && (
+                <div className="ob-preview">
+                  <div className="ob-preview-label">입력 중인 순자산</div>
+                  <div className="ob-preview-val">
+                    {new Intl.NumberFormat("ko-KR").format(netPreview)}원
+                  </div>
+                  <div className="ob-preview-sub">
+                    포트폴리오·거래 내역 입력 후 더 정확해집니다
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="ob-footer">
+              <button className="ob-btn ghost" onClick={()=>setStep(2)}>← 이전</button>
+              <button className="ob-btn primary" onClick={handleComplete}>
+                🚀 시작하기
+              </button>
+            </div>
+          </>
+        )}
+
+      </div>
+    </div>
+  );
+}
 
 // ─── SVG Charts ───────────────────────────────────────────────────────────────
 function polarToCartesian(cx,cy,r,deg){ const rad=(deg-90)*Math.PI/180; return {x:cx+r*Math.cos(rad),y:cy+r*Math.sin(rad)}; }
@@ -7052,6 +7410,7 @@ function DataTab({ data, update, validations, calculationAudit }) {
           </div>
           <div className="stack">
             <button className="btn btn-danger" onClick={()=>{ if(!window.confirm("현재 데이터를 수동 백업한 뒤 전체 초기화할까요?")) return; createManualStorageBackup(data,"before-clear"); update(()=>emptyData()); refreshBackups(); setStatusMessage("전체 데이터를 초기화했습니다. 초기화 직전 백업이 생성되었습니다."); }}>전체 초기화</button>
+            <button className="btn btn-ghost" onClick={()=>{ localStorage.removeItem(OB_KEY); window.location.reload(); }} title="온보딩 위자드를 다시 보여줍니다">🚀 온보딩 다시 보기</button>
             <button className="btn btn-ghost" onClick={refreshBackups}>백업 목록 새로고침</button>
           </div>
           <div style={{marginTop:12,fontSize:12,color:"var(--text3)",lineHeight:1.5}}>
@@ -7739,6 +8098,18 @@ export default function App() {
   const [data,setData]=useState(loadData);
   const [tab,setTab]=useState("dashboard");
   const [sidebarOpen,setSidebarOpen]=useState(true);
+
+  // ── 온보딩: localStorage 플래그로 최초 1회만 표시
+  const [showOnboarding,setShowOnboarding]=useState(()=>!localStorage.getItem(OB_KEY));
+
+  // ── 다크/라이트 테마
+  const [theme,setTheme]=useState(()=>localStorage.getItem("season-theme")||"dark");
+  useEffect(()=>{
+    document.documentElement.setAttribute("data-theme",theme);
+    localStorage.setItem("season-theme",theme);
+  },[theme]);
+  const toggleTheme=()=>setTheme(t=>t==="dark"?"light":"dark");
+
   const [session,setSession]=useState(null);
   const [authLoading,setAuthLoading]=useState(true);
   const [syncState,setSyncState]=useState("");
@@ -7781,6 +8152,21 @@ export default function App() {
   },[data,session?.user?.id,cloudReady]);
 
   const update=(fn)=>setData(prev=>migrateData(fn(prev)));
+
+  // ── 온보딩 완료 핸들러
+  const handleOnboardingComplete=({ newSettings={}, newAssets=[], userName="" }={})=>{
+    if(Object.keys(newSettings).length > 0 || newAssets.length > 0) {
+      update(d=>({
+        ...d,
+        settings: { ...d.settings, ...newSettings },
+        assets: newAssets.length > 0
+          ? [...d.assets.filter(a=>a.note!=="온보딩 입력"), ...newAssets]
+          : d.assets,
+      }));
+    }
+    setShowOnboarding(false);
+    setTab("dashboard");
+  };
   const accountOptions=useMemo(()=>data.accounts.filter(a=>a.active),[data.accounts]);
   const accountNamesIn=useMemo(()=>accountOptions.filter(a=>a.type!=="카드").map(a=>a.name),[accountOptions]);
   const accountNamesOut=useMemo(()=>accountOptions.map(a=>a.name),[accountOptions]);
@@ -7961,7 +8347,14 @@ export default function App() {
 
   return (
     <div className="app">
+      <script dangerouslySetInnerHTML={{__html:`(function(){try{var t=localStorage.getItem('season-theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})()`}}/>
       <style>{STYLES}</style>
+
+      {/* ── 온보딩 위자드 (최초 방문 시만) ── */}
+      {showOnboarding && (
+        <OnboardingWizard onComplete={handleOnboardingComplete}/>
+      )}
+
       <div className="shell">
         {/* Sidebar */}
         <nav className={`sidebar ${sidebarOpen ? "" : "collapsed"}`}>
@@ -7999,6 +8392,14 @@ export default function App() {
                   이번달 {dashboard.net>=0?"흑자":"적자"} {fmt(Math.abs(dashboard.net))}원
                 </span>
               )}
+              <button
+                className="theme-toggle"
+                onClick={toggleTheme}
+                title={theme==="dark"?"라이트 모드로 전환":"다크 모드로 전환"}
+                aria-label={theme==="dark"?"라이트 모드로 전환":"다크 모드로 전환"}
+              >
+                {theme==="dark"?"☀️":"🌙"}
+              </button>
             </div>
           </div>
 
