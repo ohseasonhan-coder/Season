@@ -1200,6 +1200,9 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 
 
 
+/* Calculation Validation Center */
+.calc-audit-hero{background:linear-gradient(135deg,var(--surface),rgba(52,213,138,.07));border-color:rgba(52,213,138,.20)}
+.calc-audit-hero .backup-health-box{background:rgba(52,213,138,.09);border-color:rgba(52,213,138,.20)}
 /* Backup / Restore Center */
 .backup-hero-card{background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.08));border-color:rgba(108,125,255,.22)}
 .backup-health-box{min-width:132px;padding:18px;border-radius:20px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.08);text-align:center}
@@ -5896,8 +5899,65 @@ function AccountsTab({ data, update }) {
   );
 }
 
+
+// ─── Calculation Validation Center ───────────────────────────────────────────
+function nearEqual(a,b,tolerance=1){return Math.abs(n(a)-n(b))<=tolerance;}
+function calcAuditBadge(errorCount,warnCount){if(errorCount>0)return{cls:"badge-red",text:"확인필요"};if(warnCount>0)return{cls:"badge-amber",text:"주의"};return{cls:"badge-green",text:"정상"};}
+function buildCalculationAudit({data,dashboard,financialAnalysis,monthlySeries,budgetAnalysis,taxAnalysis,futureSim}){
+  const month=thisMonthISO();
+  const tx=(data.transactions||[]).filter(t=>monthOf(t.date)===month);
+  const income=tx.filter(t=>t.type==="수입").reduce((s,t)=>s+n(t.amount),0);
+  const expense=tx.filter(t=>t.type==="지출").reduce((s,t)=>s+n(t.amount),0);
+  const net=income-expense;
+  const assets=(data.assets||[]).filter(a=>a.kind==="자산").reduce((s,a)=>s+n(a.current),0);
+  const liabs=(data.assets||[]).filter(a=>a.kind==="부채").reduce((s,a)=>s+n(a.current),0);
+  const portKRW=(data.portfolio||[]).reduce((s,p)=>s+n(p.qty)*priceToKRW(p,data.settings||{}),0);
+  const portDash=n(dashboard?.portValue);
+  const netWorthKRW=assets-liabs+portKRW;
+  const row=(monthlySeries||[]).find(r=>r.month===month)||{net:0};
+  const budgetSpent=(budgetAnalysis||[]).reduce((s,b)=>s+n(b.spent),0);
+  const taxValue=(taxAnalysis||[]).reduce((s,r)=>s+n(r.value),0);
+  const futureLast=(futureSim||[]).length?futureSim[futureSim.length-1]:null;
+  const usdRows=(data.portfolio||[]).filter(p=>normalizeCurrency(p.currency)==="USD"&&n(p.qty)>0);
+  const fx=getFxUsdKrw(data.settings||{});
+  const checks=[
+    {id:"income",area:"월간",title:"수입 합계",expected:income,actual:n(dashboard?.income),formula:"이번 달 수입 거래 합계 = 대시보드 수입",action:"수입 거래의 날짜·금액·구분을 확인",severity:nearEqual(income,dashboard?.income)?"ok":"error"},
+    {id:"expense",area:"월간",title:"지출 합계",expected:expense,actual:n(dashboard?.expense),formula:"이번 달 지출 거래 합계 = 대시보드 지출",action:"지출 거래의 날짜·금액·구분을 확인",severity:nearEqual(expense,dashboard?.expense)?"ok":"error"},
+    {id:"net",area:"월간",title:"순수입",expected:net,actual:n(dashboard?.net),formula:"수입 - 지출 = 순수입",action:"월 필터와 거래유형을 확인",severity:nearEqual(net,dashboard?.net)?"ok":"error"},
+    {id:"series",area:"월간추이",title:"월간 추이 일치",expected:net,actual:n(row.net),formula:"월간추이 순수입 = 거래 기준 순수입",action:"거래 날짜 형식 YYYY-MM-DD 확인",severity:nearEqual(net,row.net)?"ok":"error"},
+    {id:"assets",area:"자산",title:"총자산",expected:assets,actual:n(dashboard?.totalAssets),formula:"자산 current 합계 = 총자산",action:"자산/부채 구분값 확인",severity:nearEqual(assets,dashboard?.totalAssets)?"ok":"error"},
+    {id:"liabs",area:"부채",title:"총부채",expected:liabs,actual:n(dashboard?.totalLiabs),formula:"부채 current 합계 = 총부채",action:"부채 잔액은 양수 입력 권장",severity:nearEqual(liabs,dashboard?.totalLiabs)?"ok":"error"},
+    {id:"portfolio",area:"투자",title:"포트폴리오 원화평가",expected:portKRW,actual:n(financialAnalysis?.total),formula:"수량 × 현재가 × 환율",action:"USD 종목은 환율 입력 확인",severity:nearEqual(portKRW,financialAnalysis?.total)?"ok":"error"},
+    {id:"portfolioDash",area:"투자",title:"대시보드 투자금액",expected:portKRW,actual:portDash,formula:"대시보드 투자금액 = 원화 환산 평가액",action:usdRows.length?"대시보드 계산식에 USD 환율 반영 필요":"포트폴리오 계산식 확인",severity:nearEqual(portKRW,portDash)?"ok":(usdRows.length?"warn":"error")},
+    {id:"nw",area:"순자산",title:"순자산",expected:netWorthKRW,actual:n(dashboard?.netWorth),formula:"총자산 - 총부채 + 포트폴리오 원화평가",action:usdRows.length?"해외주식 환율 반영 기준 통일":"순자산 계산식 확인",severity:nearEqual(netWorthKRW,dashboard?.netWorth)?"ok":(usdRows.length?"warn":"error")},
+    {id:"budget",area:"예산",title:"예산 지출 합계",expected:expense,actual:budgetSpent,formula:"예산 사용액 합계 = 이번 달 지출",action:"예산에 없는 지출 대분류 추가",severity:nearEqual(expense,budgetSpent)?"ok":"warn"},
+    {id:"tax",area:"세금",title:"계좌별 세금 평가금액",expected:portKRW,actual:taxValue,formula:"세금 그룹 합계 = 포트폴리오 원화평가",action:"계좌명을 ISA/연금저축/IRP/일반계좌 기준과 맞추기",severity:nearEqual(portKRW,taxValue)?"ok":"error"},
+    {id:"sim",area:"시뮬레이션",title:"미래 시뮬레이션 유효성",expected:n((futureLast||{}).total),actual:n((futureLast||{}).total),formula:"은퇴연령 > 현재나이, 결과값 0 이상",action:"현재나이·은퇴나이·월투자금·수익률 확인",severity:n(data.settings?.retireAge)<=n(data.settings?.currentAge)?"warn":(n((futureLast||{}).total)>=0?"ok":"error")},
+  ];
+  const warnings=[];
+  if(usdRows.length>0&&fx<=0)warnings.push({title:"USD 환율 미설정",text:"해외주식이 있지만 환율이 0입니다.",action:"설정에서 USD/KRW 환율 입력"});
+  if((data.transactions||[]).some(t=>n(t.amount)<0))warnings.push({title:"음수 거래 감지",text:"음수 금액은 월간 합계를 왜곡할 수 있습니다.",action:"금액은 양수, 유형으로 수입/지출 구분"});
+  if((data.assets||[]).some(a=>n(a.current)<0))warnings.push({title:"음수 자산/부채 감지",text:"순자산 계산이 틀어질 수 있습니다.",action:"부채도 양수 잔액으로 입력"});
+  const errorCount=checks.filter(c=>c.severity==="error").length;
+  const warnCount=checks.filter(c=>c.severity==="warn").length+warnings.length;
+  return{checks,warnings,summary:{errorCount,warnCount,okCount:checks.filter(c=>c.severity==="ok").length,total:checks.length,score:clamp(Math.round(100-errorCount*18-warnCount*7),0,100),badge:calcAuditBadge(errorCount,warnCount),numbers:{income,expense,net,assets,liabs,portKRW,netWorthKRW,dashboardNW:n(dashboard?.netWorth)}}};
+}
+function CalculationValidationCenter({audit}){
+  const s=audit.summary;const issueRows=audit.checks.filter(c=>c.severity!=="ok");
+  return <div className="stack">
+    <div className="card calc-audit-hero">
+      <div className="row-between" style={{alignItems:"flex-start",flexWrap:"wrap"}}><div><span className="badge badge-accent">3단계 완료형</span><h2 style={{marginTop:10,fontSize:24,letterSpacing:"-.04em"}}>계산값 검증 센터</h2><p style={{marginTop:8,color:"var(--text3)",fontSize:13,lineHeight:1.6}}>대시보드, 월간 추이, 자산·부채, 포트폴리오, 세금, 미래 시뮬레이션의 핵심 계산값을 독립 계산식으로 재검증합니다.</p></div><div className="backup-health-box"><div className="backup-health-value">{s.score}</div><div className="backup-health-label">신뢰 점수</div></div></div>
+      <div className="backup-summary-grid"><div className="backup-summary-item"><span>상태</span><strong><span className={`badge ${s.badge.cls}`}>{s.badge.text}</span></strong><small>계산 검증 결과</small></div><div className="backup-summary-item"><span>오류</span><strong>{s.errorCount}건</strong><small>즉시 수정</small></div><div className="backup-summary-item"><span>주의</span><strong>{s.warnCount}건</strong><small>왜곡 가능성</small></div><div className="backup-summary-item"><span>통과</span><strong>{s.okCount}/{s.total}</strong><small>검증 공식</small></div></div>
+      {s.errorCount>0&&<div className="alert alert-danger" style={{marginTop:14}}>계산 불일치가 있습니다. 외부 베타 테스트 전 반드시 수정하세요.</div>}{s.errorCount===0&&s.warnCount>0&&<div className="alert alert-warn" style={{marginTop:14}}>큰 오류는 없지만 환율·예산·설정값 검토가 필요합니다.</div>}{s.errorCount===0&&s.warnCount===0&&<div className="alert alert-ok" style={{marginTop:14}}>핵심 계산값이 모두 정상입니다.</div>}
+    </div>
+    <div className="card"><div className="card-title"><h3>핵심 숫자 대조</h3><span className="badge badge-muted">독립 계산</span></div><div className="table-wrap"><table><thead><tr><th>항목</th><th className="td-right">값</th><th>설명</th></tr></thead><tbody>{[["거래 기준 수입",s.numbers.income,"이번 달 수입 거래 합계"],["거래 기준 지출",s.numbers.expense,"이번 달 지출 거래 합계"],["거래 기준 순수입",s.numbers.net,"수입 - 지출"],["총자산",s.numbers.assets,"자산 항목 합계"],["총부채",s.numbers.liabs,"부채 항목 합계"],["포트폴리오 원화평가",s.numbers.portKRW,"수량 × 현재가 × 환율"],["검증 기준 순자산",s.numbers.netWorthKRW,"총자산 - 총부채 + 포트폴리오"],["대시보드 순자산",s.numbers.dashboardNW,"현재 표시값"]].map(r=><tr key={r[0]}><td className="td-name">{r[0]}</td><td className="td-right td-mono">{fmt(r[1])}원</td><td>{r[2]}</td></tr>)}</tbody></table></div></div>
+    <div className="card"><div className="card-title"><h3>계산 검증 상세</h3><span className="badge badge-accent">{audit.checks.length}개 공식</span></div><div className="table-wrap"><table><thead><tr><th>영역</th><th>항목</th><th>상태</th><th className="td-right">기대값</th><th className="td-right">현재값</th><th>공식</th><th>조치</th></tr></thead><tbody>{audit.checks.map(c=><tr key={c.id}><td>{c.area}</td><td className="td-name">{c.title}</td><td>{c.severity==="ok"?<span className="badge badge-green">정상</span>:c.severity==="warn"?<span className="badge badge-amber">주의</span>:<span className="badge badge-red">오류</span>}</td><td className="td-right td-mono">{fmt(c.expected)}원</td><td className="td-right td-mono">{fmt(c.actual)}원</td><td style={{color:"var(--text3)",fontSize:12}}>{c.formula}</td><td style={{color:"var(--text3)",fontSize:12}}>{c.action}</td></tr>)}</tbody></table></div></div>
+    <div className="g2"><div className="card"><div className="card-title"><h3>즉시 수정 목록</h3><span className="badge badge-red">우선순위</span></div>{issueRows.length===0&&audit.warnings.length===0?<div className="empty">즉시 수정할 계산 이슈가 없습니다.</div>:<div className="stack">{issueRows.slice(0,6).map(c=><div key={c.id} className={`compact-insight ${c.severity==="error"?"danger":"warn"}`}><span>{c.severity==="error"?"🚨":"⚠️"}</span><div><strong>{c.title}</strong><p>{c.action}</p></div></div>)}{audit.warnings.map((w,i)=><div key={i} className="compact-insight warn"><span>⚠️</span><div><strong>{w.title}</strong><p>{w.text} {w.action}</p></div></div>)}</div>}</div><div className="card"><div className="card-title"><h3>테스트 기준</h3><span className="badge badge-muted">출시 전 하한선</span></div><div className="stack"><div className="stat-row"><span className="stat-label">계산 오류</span><span className="stat-value">0건</span></div><div className="stat-row"><span className="stat-label">주의 이슈</span><span className="stat-value">2건 이하</span></div><div className="stat-row"><span className="stat-label">신뢰 점수</span><span className="stat-value">90점 이상</span></div></div><div className="alert alert-info" style={{marginTop:14}}>이 센터에서 오류 0건이 되어야 외부 베타 테스트를 시작하는 것이 안전합니다.</div></div></div>
+  </div>;
+}
+
 // ─── Data Tab ─────────────────────────────────────────────────────────────────
-function DataTab({ data, update, validations }) {
+function DataTab({ data, update, validations, calculationAudit }) {
   const fileRef = useRef();
   const [backupList, setBackupList] = useState(() => getStorageBackupList());
   const [selectedBackupKey, setSelectedBackupKey] = useState("");
@@ -6026,6 +6086,8 @@ function DataTab({ data, update, validations }) {
           </table>
         </div>
       </div>
+
+      <CalculationValidationCenter audit={calculationAudit}/>
 
       <div className="g2">
         <div className="card">
@@ -6928,6 +6990,8 @@ export default function App() {
     return{monthlyTrend:monthlySeries,assetSegments,retirementTarget:n(data.settings.retirementTargetAmount),retirementProjected:dashboardDetail.retirementRow?.total||0,totalEventTarget,totalEventPrepared};
   },[data.assets,data.settings.retirementTargetAmount,monthlySeries,financialAnalysis.total,eventAnalysis,dashboardDetail.retirementRow]);
 
+  const calculationAudit=useMemo(()=>buildCalculationAudit({data,dashboard,financialAnalysis,monthlySeries,budgetAnalysis,taxAnalysis,futureSim}),[data,dashboard,financialAnalysis,monthlySeries,budgetAnalysis,taxAnalysis,futureSim]);
+
   const totalIssues=validations.reduce((s,v)=>s+n(v.count),0);
 
   return (
@@ -6992,7 +7056,7 @@ export default function App() {
             {tab==="decision"&&<DecisionCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="settings"&&<SettingsTab data={data} update={update}/>}
             {tab==="accounts"&&<AccountsTab data={data} update={update}/>}
-            {tab==="data"&&<DataTab data={data} update={update} validations={validations}/>}
+            {tab==="data"&&<DataTab data={data} update={update} validations={validations} calculationAudit={calculationAudit}/>}
           </div>
         </div>
       </div>
