@@ -1108,13 +1108,13 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .report-hero p{font-size:13px;color:var(--text3);line-height:1.5}
 .monthly-report textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 
-/* CFO goal UX v11 */
+/* CFO goal UX v12 - compact harmony */
 .cfo-goal-card{
   width:100%;
-  padding:18px;
+  padding:20px;
   border-radius:22px;
-  background:rgba(255,255,255,.035);
-  border:1px solid rgba(255,255,255,.075);
+  background:linear-gradient(135deg,rgba(255,255,255,.055),rgba(255,255,255,.028));
+  border:1px solid rgba(255,255,255,.085);
 }
 .cfo-goal-top{
   display:flex;
@@ -1123,25 +1123,31 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
   gap:14px;
   margin-bottom:18px;
 }
-.cfo-goal-headline{
+.cfo-goal-main{
   display:flex;
-  align-items:flex-end;
-  gap:8px;
+  align-items:baseline;
+  gap:5px;
   margin-top:8px;
 }
-.cfo-goal-headline strong{
-  font-size:34px;
+.cfo-goal-current{
+  font-size:52px;
   font-weight:950;
-  letter-spacing:-.055em;
-  line-height:1;
+  letter-spacing:-.065em;
+  line-height:.92;
+  font-variant-numeric:tabular-nums;
 }
-.cfo-goal-headline span{
-  font-size:12px;
-  font-weight:800;
+.cfo-goal-slash{
+  font-size:20px;
+  font-weight:900;
   color:var(--text3);
-  padding-bottom:4px;
 }
-.cfo-goal-badge{
+.cfo-goal-target{
+  font-size:17px;
+  font-weight:900;
+  color:var(--text2);
+  letter-spacing:-.02em;
+}
+.cfo-goal-chip{
   flex-shrink:0;
   display:inline-flex;
   align-items:center;
@@ -1155,54 +1161,43 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 }
 .cfo-goal-track{
   position:relative;
-  height:12px;
+  height:8px;
   border-radius:999px;
-  background:rgba(255,255,255,.075);
-  overflow:visible;
-  box-shadow:inset 0 1px 3px rgba(0,0,0,.24);
+  background:rgba(255,255,255,.08);
+  overflow:hidden;
 }
 .cfo-goal-fill{
   height:100%;
   border-radius:999px;
   transition:width .35s ease;
-  min-width:6px;
+  min-width:4px;
 }
-.cfo-goal-marker{
-  position:absolute;
-  top:50%;
-  width:18px;
-  height:18px;
-  border-radius:999px;
-  background:var(--surface);
-  border:4px solid var(--accent);
-  transform:translate(-50%,-50%);
-  box-shadow:0 8px 18px rgba(0,0,0,.28);
-  transition:left .35s ease;
-}
-.cfo-goal-scale{
+.cfo-goal-meta{
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:12px;
-  margin-top:13px;
+  margin-top:12px;
   font-size:12px;
   color:var(--text3);
 }
-.cfo-goal-scale b{
+.cfo-goal-meta b{
   color:var(--text);
   font-weight:900;
   font-variant-numeric:tabular-nums;
 }
-.cfo-goal-note{
-  margin-top:13px;
-  padding:12px;
-  border-radius:14px;
-  background:rgba(255,255,255,.04);
-  border:1px solid rgba(255,255,255,.06);
+.cfo-goal-mini-note{
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid rgba(255,255,255,.07);
   color:var(--text2);
   font-size:12px;
   line-height:1.55;
   word-break:keep-all;
+}
+@media(max-width:700px){
+  .cfo-goal-current{font-size:42px}
+  .cfo-goal-top{flex-direction:column}
 }
 
 @media print{
@@ -1675,36 +1670,37 @@ function GoalGauge({ value, target, title }) {
   const goal = clamp(n(target || 70), 1, 100);
   const progress = clamp((current / goal) * 100, 0, 100);
   const gap = Math.max(goal - current, 0);
-  const color = current >= goal ? "#34d58a" : current >= 50 ? "#6c7dff" : current >= 35 ? "#f0b429" : "#ff5c72";
+  const color = current >= goal ? "var(--green)" : current >= 50 ? "var(--accent2)" : current >= 35 ? "var(--amber)" : "var(--red)";
+  const bg = current >= goal ? "var(--green-bg)" : current >= 50 ? "var(--accent-bg)" : current >= 35 ? "var(--amber-bg)" : "var(--red-bg)";
   return (
     <div className="cfo-goal-card">
       <div className="cfo-goal-top">
         <div>
-          <div className="kpi-label">{title || "CFO 목표 대비"}</div>
-          <div className="cfo-goal-headline">
-            <strong style={{color}}>{fmtPct(progress)}</strong>
-            <span>목표 달성률</span>
+          <div className="kpi-label">{title || "목표 대비 CFO 점수"}</div>
+          <div className="cfo-goal-main">
+            <span className="cfo-goal-current" style={{color}}>{Math.round(current)}</span>
+            <span className="cfo-goal-slash">/</span>
+            <span className="cfo-goal-target">{Math.round(goal)}점</span>
           </div>
         </div>
-        <div className="cfo-goal-badge" style={{background: current >= goal ? "var(--green-bg)" : "var(--amber-bg)", color: current >= goal ? "var(--green)" : "var(--amber)"}}>
-          {current >= goal ? "목표 달성" : `${gap}점 부족`}
+        <div className="cfo-goal-chip" style={{background:bg,color}}>
+          {current >= goal ? "목표 달성" : `${gap}점 남음`}
         </div>
       </div>
 
       <div className="cfo-goal-track">
         <div className="cfo-goal-fill" style={{width:`${progress}%`, background:color}} />
-        <div className="cfo-goal-marker" style={{left:`${progress}%`, borderColor:color}} />
       </div>
 
-      <div className="cfo-goal-scale">
-        <span>현재 <b>{Math.round(current)}점</b></span>
-        <span>목표 <b>{Math.round(goal)}점</b></span>
+      <div className="cfo-goal-meta">
+        <span>달성률 <b>{fmtPct(progress,0)}</b></span>
+        <span>목표 70점</span>
       </div>
 
-      <div className="cfo-goal-note">
+      <div className="cfo-goal-mini-note">
         {current >= goal
-          ? "현재 CFO 기준 목표 점수를 달성했습니다. 다음 목표는 유지율과 자동화 안정성입니다."
-          : `목표까지 ${gap}점 남았습니다. 비상금·현금흐름·투자비중 중 낮은 항목부터 개선하면 점수가 가장 빠르게 올라갑니다.`}
+          ? "현재 목표 구간입니다. 유지와 자동화 점검이 우선입니다."
+          : "비상금·현금흐름·투자비중 중 낮은 항목부터 개선하세요."}
       </div>
     </div>
   );
