@@ -960,6 +960,10 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 @media(max-width:700px){.dashboard-advice-list{grid-template-columns:1fr}}
 
 
+
+/* Net Worth Goal Timeline */
+.networth-timeline-card{border-color:rgba(108,125,255,.22);background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.055))}
+.networth-timeline-card .table-wrap{max-height:360px}
 /* Responsive */
 @media(max-width:900px){
   .sidebar{width:180px}
@@ -3908,42 +3912,100 @@ function CFOCenterTab({ data, dashboard, dashboardDetail, financialAnalysis, bud
 
 // ─── Goal Funding Tab ────────────────────────────────────────────────────────
 function GoalFundingTab({ data, update, dashboard, dashboardDetail, futureSim }) {
-  const empty={id:"",name:"",yearsFromNow:3,amountNeeded:"",currentPrepared:"",priority:"중간"};
+  const empty={
+    id:"", goalKind:"일반목표", name:"", yearsFromNow:3,
+    amountNeeded:"", currentPrepared:"", priority:"중간",
+    targetNetWorth:"", startNetWorth:"", memo:""
+  };
   const [form,setForm]=useState(empty);
+  const [timelineView,setTimelineView]=useState("순자산목표");
   const events=Array.isArray(data.events)?data.events:[];
+  const currentNetWorth=n(dashboard?.netWorth);
+  const avgMonthlyNet=n(dashboardDetail?.avgNet || dashboard?.net || 0);
 
   const analysis=useMemo(()=>{
     const income=n(dashboard.income);
     const expense=n(dashboard.expense);
     const net=n(dashboard.net);
+    const avgNet=n(dashboardDetail?.avgNet || net);
+    const currentNW=n(dashboard?.netWorth);
     const monthlyInvest=n(data.settings?.monthlyInvestDefault||data.settings?.monthlyInvestStage1||0);
     const investCapacity=Math.max(income-expense,0);
     return events.map(e=>{
+      const kind=e.goalKind || "일반목표";
+      const months=Math.max(Math.round(n(e.yearsFromNow)*12),1);
+      if(kind==="순자산목표"){
+        const startNW=n(e.startNetWorth)>0?n(e.startNetWorth):currentNW;
+        const targetNW=n(e.targetNetWorth||e.amountNeeded);
+        const shortage=Math.max(targetNW-startNW,0);
+        const monthlyNeed=shortage/months;
+        const projectedAtCurrentPace=startNW + Math.max(avgNet,0)*months;
+        const projectedGap=Math.max(targetNW-projectedAtCurrentPace,0);
+        const progress=targetNW>0?startNW/targetNW*100:0;
+        const conflict=monthlyNeed>Math.max(avgNet,0) && shortage>0;
+        const afterGoalInvestCapacity=Math.max(investCapacity-monthlyNeed,0);
+        return {
+          ...e, goalKind:kind, targetNetWorth:targetNW, startNetWorth:startNW,
+          amountNeeded:targetNW, currentPrepared:startNW,
+          shortage, monthlyNeed, progress, conflict, afterGoalInvestCapacity,
+          months, projectedAtCurrentPace, projectedGap,
+          summary:`${Math.round(months/12*10)/10}년 후 ${fmt(targetNW)}원 달성을 위해 월 ${fmt(monthlyNeed)}원 순증가가 필요합니다.`
+        };
+      }
       const shortage=Math.max(n(e.amountNeeded)-n(e.currentPrepared),0);
-      const months=Math.max(n(e.yearsFromNow)*12,1);
       const monthlyNeed=shortage/months;
       const progress=n(e.amountNeeded)>0?n(e.currentPrepared)/n(e.amountNeeded)*100:0;
       const conflict=monthlyNeed+monthlyInvest>investCapacity && shortage>0;
       const afterGoalInvestCapacity=Math.max(investCapacity-monthlyNeed,0);
-      return {...e,shortage,monthlyNeed,progress,conflict,afterGoalInvestCapacity};
+      return {...e,goalKind:kind,shortage,monthlyNeed,progress,conflict,afterGoalInvestCapacity,months,summary:`${e.name} 목표까지 월 ${fmt(monthlyNeed)}원 적립이 필요합니다.`};
     }).sort((a,b)=>{
       const pa={높음:3,중간:2,낮음:1};
-      return (pa[b.priority]||0)-(pa[a.priority]||0)||b.monthlyNeed-a.monthlyNeed;
+      if((a.goalKind==="순자산목표") !== (b.goalKind==="순자산목표")) return a.goalKind==="순자산목표"?-1:1;
+      return (pa[b.priority]||0)-(pa[a.priority]||0)||n(a.yearsFromNow)-n(b.yearsFromNow)||b.monthlyNeed-a.monthlyNeed;
     });
-  },[events,dashboard,data.settings]);
+  },[events,dashboard,dashboardDetail,data.settings]);
 
+  const netWorthGoals=analysis.filter(g=>g.goalKind==="순자산목표");
+  const normalGoals=analysis.filter(g=>g.goalKind!=="순자산목표");
+  const visibleGoals=timelineView==="전체"?analysis:timelineView==="순자산목표"?netWorthGoals:normalGoals;
   const totalMonthlyNeed=analysis.reduce((s,e)=>s+n(e.monthlyNeed),0);
+  const netWorthMonthlyNeed=netWorthGoals.reduce((s,e)=>s+n(e.monthlyNeed),0);
   const conflictCount=analysis.filter(e=>e.conflict).length;
+  const nextNetWorthGoal=netWorthGoals[0] || null;
+
+  const timelineRows=useMemo(()=>{
+    if(!nextNetWorthGoal) return [];
+    const months=Math.max(nextNetWorthGoal.months,1);
+    const monthlyNeed=n(nextNetWorthGoal.monthlyNeed);
+    const startNW=n(nextNetWorthGoal.startNetWorth);
+    const targetNW=n(nextNetWorthGoal.targetNetWorth);
+    const rows=[];
+    for(let m=0;m<=months;m++){
+      if(m!==0 && m!==months && m%3!==0) continue;
+      const required=startNW + monthlyNeed*m;
+      const projected=startNW + Math.max(avgMonthlyNet,0)*m;
+      rows.push({month:m, required, projected, gap:Math.max(required-projected,0), rate:targetNW>0?required/targetNW*100:0});
+    }
+    return rows;
+  },[nextNetWorthGoal,avgMonthlyNet]);
 
   const save=()=>{
-    if(!form.name||n(form.amountNeeded)<=0) return alert("목표명과 목표금액을 입력하세요.");
+    if(!form.name) return alert("목표명을 입력하세요.");
+    if(form.goalKind==="순자산목표"){
+      if(n(form.targetNetWorth||form.amountNeeded)<=0) return alert("목표 순자산을 입력하세요.");
+    } else if(n(form.amountNeeded)<=0) return alert("목표금액을 입력하세요.");
     update(d=>{
+      const goalKind=form.goalKind||"일반목표";
       const row={
         ...form,
         id:form.id||uid(),
+        goalKind,
         yearsFromNow:n(form.yearsFromNow),
-        amountNeeded:n(form.amountNeeded),
-        currentPrepared:n(form.currentPrepared),
+        amountNeeded:goalKind==="순자산목표"?n(form.targetNetWorth||form.amountNeeded):n(form.amountNeeded),
+        currentPrepared:goalKind==="순자산목표"?n(form.startNetWorth||currentNetWorth):n(form.currentPrepared),
+        targetNetWorth:goalKind==="순자산목표"?n(form.targetNetWorth||form.amountNeeded):0,
+        startNetWorth:goalKind==="순자산목표"?n(form.startNetWorth||currentNetWorth):0,
+        memo:form.memo||"",
       };
       const list=form.id?d.events.map(e=>e.id===form.id?row:e):[...d.events,row];
       return {...d,events:list};
@@ -3952,33 +4014,83 @@ function GoalFundingTab({ data, update, dashboard, dashboardDetail, futureSim })
   };
 
   const remove=(id)=>update(d=>({...d,events:d.events.filter(e=>e.id!==id)}));
+  const loadPreset=(years,target)=>setForm({
+    ...empty, goalKind:"순자산목표", name:`${years}년 후 ${fmt(target)}원 달성`, yearsFromNow:years,
+    targetNetWorth:target, startNetWorth:currentNetWorth, priority:"높음",
+    memo:"은퇴 시뮬레이션과 분리한 단기 순자산 목표"
+  });
 
   return (
     <div className="stack goal-center">
       <AICoachPanel coach={buildIntegratedCoach({ area:"목표 자금관리", data, dashboard, dashboardDetail, futureSim, eventAnalysis:analysis })}/>
       <div className="card goal-hero">
         <div>
-          <div className="kpi-label">GOAL FUNDING</div>
-          <h2>목표별 자금관리</h2>
-          <p>차량, 여행, 비상금, 은퇴 외 목표의 필요 월 적립액과 투자 충돌을 자동 점검합니다.</p>
+          <div className="kpi-label">NET WORTH TIMELINE</div>
+          <h2>순자산 목표 타임라인</h2>
+          <p>“3년 후 5억 달성”처럼 중간 순자산 목표를 만들고, 월별 필요 순증가액을 역산합니다. 은퇴 시뮬레이션과 분리해서 단기 목표를 관리합니다.</p>
+        </div>
+        <div className="stack" style={{minWidth:220}}>
+          <button className="btn btn-primary" onClick={()=>loadPreset(3,500000000)}>+ 3년 후 5억 목표</button>
+          <button className="btn btn-ghost" onClick={()=>loadPreset(5,1000000000)}>+ 5년 후 10억 목표</button>
         </div>
       </div>
 
       <div className="kpi-grid">
-        <KpiCard label="등록 목표" value={analysis.length} unit="개"/>
-        <KpiCard label="월 필요 적립액" value={totalMonthlyNeed} unit="원" accent/>
-        <KpiCard label="투자 충돌 목표" value={conflictCount} unit="개" tone={conflictCount?"red":"green"}/>
-        <KpiCard label="현재 순현금흐름" value={dashboard.net} unit="원" tone={dashboard.net>=0?"green":"red"}/>
+        <KpiCard label="현재 순자산" value={currentNetWorth} unit="원" accent/>
+        <KpiCard label="순자산 목표 월 필요액" value={netWorthMonthlyNeed} unit="원" tone={netWorthMonthlyNeed<=Math.max(avgMonthlyNet,0)?"green":"red"}/>
+        <KpiCard label="전체 목표 월 필요액" value={totalMonthlyNeed} unit="원"/>
+        <KpiCard label="충돌 목표" value={conflictCount} unit="개" tone={conflictCount?"red":"green"}/>
       </div>
+
+      {nextNetWorthGoal && (
+        <div className="card networth-timeline-card">
+          <div className="card-title">
+            <h3>가장 가까운 순자산 목표 요약</h3>
+            <span className={`badge ${nextNetWorthGoal.conflict?"badge-red":"badge-green"}`}>{nextNetWorthGoal.conflict?"현재 속도 부족":"현재 속도 가능권"}</span>
+          </div>
+          <div className="g3">
+            <div className="compact-insight info"><span>🎯</span><div><strong>{nextNetWorthGoal.name}</strong><p>{nextNetWorthGoal.summary}</p></div></div>
+            <div className="compact-insight green"><span>📈</span><div><strong>현재 속도 예상</strong><p>현재 평균 순현금흐름 기준 예상 순자산은 {fmt(nextNetWorthGoal.projectedAtCurrentPace)}원입니다.</p></div></div>
+            <div className={`compact-insight ${nextNetWorthGoal.projectedGap>0?"warn":"green"}`}><span>🧭</span><div><strong>추가 필요액</strong><p>{nextNetWorthGoal.projectedGap>0?`현재 속도 대비 ${fmt(nextNetWorthGoal.projectedGap)}원이 부족합니다.`:"현재 흐름이면 목표선에 도달 가능한 구간입니다."}</p></div></div>
+          </div>
+          <div className="table-wrap" style={{marginTop:14}}>
+            <table>
+              <thead><tr><th>경과</th><th>필요 순자산</th><th>현재 속도 예상</th><th>차이</th><th>목표 진행률</th></tr></thead>
+              <tbody>
+                {timelineRows.map(r=>(
+                  <tr key={r.month}>
+                    <td>{r.month===0?"현재":`${r.month}개월 후`}</td>
+                    <td className="td-right td-mono">{fmt(r.required)}원</td>
+                    <td className="td-right td-mono">{fmt(r.projected)}원</td>
+                    <td className={`td-right td-mono ${r.gap>0?"text-red":"text-green"}`}>{fmt(r.gap)}원</td>
+                    <td className="td-right td-mono">{fmtPct(r.rate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <h3>{form.id?"목표 수정":"목표 추가"}</h3>
         <div className="form-grid">
-          <Field label="목표명"><input placeholder="예: 차량 교체, 가족여행" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field>
-          <Field label="목표금액"><input placeholder="0" value={form.amountNeeded} onChange={e=>setForm({...form,amountNeeded:n(e.target.value)})}/></Field>
-          <Field label="현재 준비금"><input placeholder="0" value={form.currentPrepared} onChange={e=>setForm({...form,currentPrepared:n(e.target.value)})}/></Field>
+          <Field label="목표 유형"><select value={form.goalKind} onChange={e=>setForm({...form,goalKind:e.target.value})}><option>순자산목표</option><option>일반목표</option></select></Field>
+          <Field label="목표명"><input placeholder="예: 3년 후 5억 달성" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field>
+          {form.goalKind==="순자산목표" ? (
+            <>
+              <Field label="목표 순자산"><input placeholder="500000000" value={form.targetNetWorth} onChange={e=>setForm({...form,targetNetWorth:n(e.target.value),amountNeeded:n(e.target.value)})}/></Field>
+              <Field label="시작 순자산"><input placeholder={fmt(currentNetWorth)} value={form.startNetWorth} onChange={e=>setForm({...form,startNetWorth:n(e.target.value),currentPrepared:n(e.target.value)})}/></Field>
+            </>
+          ) : (
+            <>
+              <Field label="목표금액"><input placeholder="0" value={form.amountNeeded} onChange={e=>setForm({...form,amountNeeded:n(e.target.value)})}/></Field>
+              <Field label="현재 준비금"><input placeholder="0" value={form.currentPrepared} onChange={e=>setForm({...form,currentPrepared:n(e.target.value)})}/></Field>
+            </>
+          )}
           <Field label="기간(년)"><input type="number" value={form.yearsFromNow} onChange={e=>setForm({...form,yearsFromNow:n(e.target.value)})}/></Field>
           <Field label="우선순위"><select value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}><option>높음</option><option>중간</option><option>낮음</option></select></Field>
+          <Field label="메모"><input placeholder="목표 설명" value={form.memo||""} onChange={e=>setForm({...form,memo:e.target.value})}/></Field>
         </div>
         <div className="form-actions">
           <button className="btn btn-primary" onClick={save}>{form.id?"수정 저장":"목표 저장"}</button>
@@ -3986,36 +4098,42 @@ function GoalFundingTab({ data, update, dashboard, dashboardDetail, futureSim })
         </div>
       </div>
 
+      <div className="tab-row">
+        {["순자산목표","일반목표","전체"].map(v=><button key={v} className={`tab-chip ${timelineView===v?"active":""}`} onClick={()=>setTimelineView(v)}>{v}</button>)}
+      </div>
+
       <div className="g2">
-        {analysis.map(g=>(
+        {visibleGoals.map(g=> (
           <div key={g.id} className={`card-sm goal-item-pro ${g.conflict?"goal-conflict":""}`}>
             <div className="goal-head">
               <div>
                 <strong>{g.name}</strong>
-                <p>{g.yearsFromNow}년 후 · 우선순위 {g.priority}</p>
+                <p>{g.goalKind} · {g.yearsFromNow}년 후 · 우선순위 {g.priority}</p>
               </div>
-              <span className={`badge ${g.conflict?"badge-red":g.priority==="높음"?"badge-amber":"badge-accent"}`}>{g.conflict?"충돌":"정상"}</span>
+              <span className={`badge ${g.conflict?"badge-red":g.priority==="높음"?"badge-amber":"badge-accent"}`}>{g.conflict?"조정필요":"정상"}</span>
             </div>
             <div className="progress" style={{margin:"12px 0 8px"}}>
               <div className={`progress-fill ${g.conflict?"pf-red":"pf-accent"}`} style={{width:`${clamp(g.progress,0,100)}%`}}/>
             </div>
             <div className="stat-row"><span className="stat-label">달성률</span><span className="stat-value">{fmtPct(g.progress)}</span></div>
+            <div className="stat-row"><span className="stat-label">목표금액</span><span className="stat-value">{fmt(g.goalKind==="순자산목표"?g.targetNetWorth:g.amountNeeded)}원</span></div>
+            <div className="stat-row"><span className="stat-label">현재 기준액</span><span className="stat-value">{fmt(g.goalKind==="순자산목표"?g.startNetWorth:g.currentPrepared)}원</span></div>
             <div className="stat-row"><span className="stat-label">부족액</span><span className="stat-value">{fmt(g.shortage)}원</span></div>
-            <div className="stat-row"><span className="stat-label">월 필요 적립액</span><span className="stat-value text-accent">{fmt(g.monthlyNeed)}원</span></div>
-            <div className="stat-row"><span className="stat-label">목표 반영 후 투자여력</span><span className={`stat-value ${g.conflict?"text-red":"text-green"}`}>{fmt(g.afterGoalInvestCapacity)}원</span></div>
+            <div className="stat-row"><span className="stat-label">월 필요 {g.goalKind==="순자산목표"?"순증가액":"적립액"}</span><span className="stat-value text-accent">{fmt(g.monthlyNeed)}원</span></div>
+            {g.goalKind==="순자산목표" && <div className="stat-row"><span className="stat-label">현재 속도 예상 부족액</span><span className={`stat-value ${g.projectedGap>0?"text-red":"text-green"}`}>{fmt(g.projectedGap)}원</span></div>}
+            <div className="alert alert-info" style={{marginTop:12,fontSize:12,lineHeight:1.5}}>{g.summary}</div>
             <div className="form-actions">
-              <button className="btn btn-sm btn-ghost" onClick={()=>setForm({...g})}>수정</button>
+              <button className="btn btn-sm btn-ghost" onClick={()=>setForm({...empty,...g,targetNetWorth:g.targetNetWorth||g.amountNeeded,startNetWorth:g.startNetWorth||g.currentPrepared})}>수정</button>
               <button className="btn btn-sm btn-danger" onClick={()=>remove(g.id)}>삭제</button>
             </div>
           </div>
         ))}
-        {!analysis.length&&<div className="empty">목표를 추가해주세요.</div>}
+        {!visibleGoals.length&&<div className="empty">목표를 추가해주세요.</div>}
       </div>
     </div>
   );
 }
 
-// ─── Decision Center Tab ──────────────────────────────────────────────────────
 function DecisionCenterTab({ data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim }) {
   const decisions=useMemo(()=>{
     const s=data.settings||{};
