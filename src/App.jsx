@@ -1137,6 +1137,16 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 @media(max-width:1100px){.dashboard-linked-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.dashboard-linked-grid{grid-template-columns:1fr}}
 
+
+/* CFO Decision Dashboard */
+.cfo-decision-hero{position:relative;overflow:hidden;border-radius:26px;padding:24px;background:linear-gradient(135deg,rgba(108,125,255,.16),rgba(52,213,138,.07));border:1px solid rgba(108,125,255,.25);box-shadow:0 18px 48px rgba(0,0,0,.22)}
+.cfo-decision-head{display:grid;grid-template-columns:1.1fr .9fr;gap:18px;align-items:stretch;position:relative;z-index:1}
+.cfo-kicker{font-size:11px;font-weight:950;letter-spacing:.09em;text-transform:uppercase;color:var(--accent2);margin-bottom:9px}.cfo-main-title{font-size:26px;font-weight:950;letter-spacing:-.045em;line-height:1.18;margin-bottom:10px}.cfo-main-message{font-size:14px;line-height:1.72;color:var(--text2);white-space:pre-line;max-width:760px}
+.cfo-score-box{display:flex;align-items:center;justify-content:space-between;gap:14px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);border-radius:22px;padding:18px}.cfo-big-score{font-size:54px;font-weight:950;letter-spacing:-.07em;line-height:1}.cfo-big-score span{font-size:16px;color:var(--text3);margin-left:3px}.cfo-status-pill{display:inline-flex;padding:7px 11px;border-radius:999px;font-size:12px;font-weight:900;margin-top:8px}
+.cfo-score-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px;position:relative;z-index:1}.cfo-score-item{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:13px}.cfo-score-item strong{display:block;font-size:18px;font-weight:950;letter-spacing:-.035em;margin-top:6px}.cfo-score-item small{font-size:11px;color:var(--text3);font-weight:800}.cfo-score-item p{font-size:11px;color:var(--text3);line-height:1.42;margin-top:5px}
+.cfo-action-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.cfo-problem-card,.cfo-action-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:18px}.cfo-problem-list,.cfo-action-list{display:flex;flex-direction:column;gap:9px;margin-top:12px}.cfo-list-row{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:flex-start;padding:11px;border-radius:14px;background:var(--surface2);border:1px solid var(--border)}.cfo-list-no{width:30px;height:30px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:950;background:rgba(255,255,255,.07)}.cfo-list-row strong{display:block;font-size:13px;color:var(--text);margin-bottom:3px}.cfo-list-row p{font-size:11.5px;color:var(--text3);line-height:1.45}.cfo-priority{font-size:10px;font-weight:900;padding:4px 7px;border-radius:999px;white-space:nowrap}.cfo-priority.high{background:var(--red-bg);color:var(--red);border:1px solid rgba(255,92,114,.25)}.cfo-priority.mid{background:var(--amber-bg);color:var(--amber);border:1px solid rgba(240,180,41,.25)}.cfo-priority.low{background:var(--green-bg);color:var(--green);border:1px solid rgba(52,213,138,.25)}
+@media(max-width:1100px){.cfo-decision-head{grid-template-columns:1fr}.cfo-score-grid{grid-template-columns:repeat(2,1fr)}.cfo-action-grid{grid-template-columns:1fr}}@media(max-width:650px){.cfo-score-grid{grid-template-columns:1fr}.cfo-main-title{font-size:22px}.cfo-big-score{font-size:42px}.cfo-score-box{flex-direction:column;align-items:flex-start}}
+
 /* Dashboard Pro */
 .dashboard-hero{display:grid;grid-template-columns:1.1fr 1.4fr;gap:14px}
 .health-card{background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.08));border:1px solid rgba(108,125,255,.22);border-radius:var(--radius-lg);padding:22px;overflow:hidden}
@@ -2080,6 +2090,156 @@ function Field({ label, error, warn, children }) {
 }
 
 
+// ─── 개인 CFO 판단 로직: 점수 → 문제 → 행동 ────────────────────────────────
+function buildCFODecisionModel({ data={}, dashboard={}, dashboardDetail={}, financialAnalysis={}, budgetAnalysis=[], futureSim=[] }) {
+  const income = n(dashboard.income);
+  const expense = n(dashboard.expense);
+  const net = n(dashboard.net);
+  const emergencyFund = n(dashboardDetail.emergencyFund);
+  const emergencyMonths = expense > 0 ? emergencyFund / expense : 0;
+  const investmentAssets = n(financialAnalysis.total);
+  const totalAssetsBase = Math.max(n(dashboard.totalAssets) + investmentAssets, n(dashboard.netWorth) + n(dashboard.totalLiabs), investmentAssets);
+  const investmentRatioPct = totalAssetsBase > 0 ? investmentAssets / totalAssetsBase * 100 : 0;
+  const savingsRatePct = income > 0 ? net / income * 100 : 0;
+  const lastFuture = Array.isArray(futureSim) && futureSim.length ? futureSim[futureSim.length - 1] : null;
+  const retireTarget = n(data?.settings?.retirementTargetAmount);
+  const retireProjected = n(lastFuture?.total || dashboardDetail?.retirementRow?.total || 0);
+  const retirementProgressPct = retireTarget > 0 ? retireProjected / retireTarget * 100 : 0;
+  const overBudget = (budgetAnalysis || []).filter((b) => b.status === "초과");
+  const warnBudget = (budgetAnalysis || []).filter((b) => b.status === "주의");
+
+  let scoreConsumption = 0;
+  if (income <= 0 && expense <= 0) scoreConsumption = 12;
+  else if (savingsRatePct >= 50) scoreConsumption = 25;
+  else if (savingsRatePct >= 30) scoreConsumption = 21;
+  else if (savingsRatePct >= 20) scoreConsumption = 17;
+  else if (savingsRatePct >= 10) scoreConsumption = 11;
+  else if (savingsRatePct >= 0) scoreConsumption = 7;
+  else scoreConsumption = 3;
+  scoreConsumption = Math.max(0, scoreConsumption - overBudget.length * 2);
+
+  let scoreInvestment = 0;
+  if (investmentRatioPct >= 70) scoreInvestment = 30;
+  else if (investmentRatioPct >= 50) scoreInvestment = 25;
+  else if (investmentRatioPct >= 30) scoreInvestment = 18;
+  else if (investmentRatioPct >= 10) scoreInvestment = 10;
+  else scoreInvestment = investmentAssets > 0 ? 6 : 3;
+
+  let scoreEmergency = 0;
+  if (emergencyMonths >= 6) scoreEmergency = 20;
+  else if (emergencyMonths >= 3) scoreEmergency = 15;
+  else if (emergencyMonths >= 1) scoreEmergency = 8;
+  else scoreEmergency = 2;
+
+  const scoreRetirement = retireTarget > 0 ? Math.round(clamp(retirementProgressPct / 100 * 25, 0, 25)) : 10;
+  const totalScore = clamp(Math.round(scoreConsumption + scoreInvestment + scoreEmergency + scoreRetirement), 0, 100);
+  const status = totalScore >= 85 ? "매우 우수" : totalScore >= 70 ? "양호" : totalScore >= 50 ? "주의 필요" : "위험";
+  const tone = totalScore >= 85 ? "green" : totalScore >= 70 ? "accent" : totalScore >= 50 ? "amber" : "red";
+  const toneColor = tone === "green" ? "var(--green)" : tone === "accent" ? "var(--accent)" : tone === "amber" ? "var(--amber)" : "var(--red)";
+  const toneBg = tone === "green" ? "var(--green-bg)" : tone === "accent" ? "var(--accent-bg)" : tone === "amber" ? "var(--amber-bg)" : "var(--red-bg)";
+
+  const problems = [];
+  const actions = [];
+  const pushProblem = (title, desc, priority="mid") => problems.push({ title, desc, priority });
+  const pushAction = (title, desc, priority="mid") => actions.push({ title, desc, priority });
+
+  if (net < 0) {
+    pushProblem("월 현금흐름 적자", `이번 달 순수입이 ${fmt(net)}원입니다. 지출 구조를 먼저 확인해야 합니다.`, "high");
+    pushAction("이번 달 지출 TOP 3부터 줄이기", "식비·구독·카드 지출처럼 바로 조정 가능한 항목부터 확인하세요.", "high");
+  } else if (scoreConsumption < 15) {
+    pushProblem("저축률 부족", `현재 저축률은 ${fmtPct(savingsRatePct)}입니다. 최소 20~30% 이상을 목표로 잡는 것이 좋습니다.`, "mid");
+    pushAction("지출 10% 절감 목표 설정", `현재 월 지출 ${fmt(expense)}원 기준으로 약 ${fmt(expense * 0.1)}원 절감을 우선 검토하세요.`, "mid");
+  }
+
+  if (emergencyMonths < 3 && expense > 0) {
+    const need = Math.max(expense * 3 - emergencyFund, 0);
+    pushProblem("비상금 부족", `현재 비상금은 ${emergencyMonths.toFixed(1)}개월치입니다. 최소 3개월치까지 ${fmt(need)}원이 부족합니다.`, "high");
+    pushAction("투자 증액보다 비상금 우선 확보", `우선 ${fmt(need)}원을 비상금 목표로 분리하세요.`, "high");
+  } else if (emergencyMonths < 6 && expense > 0) {
+    const need = Math.max(expense * 6 - emergencyFund, 0);
+    pushProblem("비상금 보강 필요", `현재 비상금은 ${emergencyMonths.toFixed(1)}개월치입니다. 안정권인 6개월치까지 ${fmt(need)}원이 필요합니다.`, "mid");
+    pushAction("비상금 6개월치까지 단계 보강", "월 투자금 일부를 비상금 계좌로 나누는 방식을 검토하세요.", "mid");
+  }
+
+  if (scoreInvestment < 15) {
+    pushProblem("성장자산 비중 부족", `투자자산 비중이 ${fmtPct(investmentRatioPct)}로 낮습니다. 장기 목표 대비 성장성이 약할 수 있습니다.`, "mid");
+    pushAction("월 자동투자 비중 재설정", "비상금 확보 후 ETF 중심의 정기 투자 비중을 높이는 방향을 검토하세요.", "mid");
+  }
+
+  if (retireTarget > 0 && retirementProgressPct < 50) {
+    pushProblem("은퇴 목표 달성률 낮음", `현재 가정 기준 은퇴 목표 달성률은 ${fmtPct(retirementProgressPct)}입니다.`, "mid");
+    pushAction("월 투자금·은퇴나이·수익률 가정 재점검", "은퇴 시뮬레이션에서 월 투자금 10~20% 증액 시나리오를 비교하세요.", "mid");
+  }
+
+  if (overBudget.length > 0) {
+    pushProblem("예산 초과 발생", `${overBudget.slice(0, 3).map((b) => b.cat1).join("·")} 항목이 예산을 초과했습니다.`, "mid");
+    pushAction("예산 초과 항목 재분류", "초과 지출이 일회성인지 반복 지출인지 구분하세요.", "mid");
+  } else if (warnBudget.length > 0) {
+    pushProblem("예산 주의 항목 존재", `${warnBudget.slice(0, 3).map((b) => b.cat1).join("·")} 항목이 예산 주의 구간입니다.`, "low");
+  }
+
+  if (!problems.length) {
+    pushProblem("큰 위험 신호 없음", "현재 입력된 데이터 기준으로 치명적인 재무 오류는 보이지 않습니다.", "low");
+    pushAction("현재 전략 유지 + 월 1회 점검", "급하게 바꾸기보다 월말마다 현금흐름과 투자 비중을 확인하세요.", "low");
+  }
+
+  const sortedPriority = { high: 3, mid: 2, low: 1 };
+  problems.sort((a,b)=>sortedPriority[b.priority]-sortedPriority[a.priority]);
+  actions.sort((a,b)=>sortedPriority[b.priority]-sortedPriority[a.priority]);
+
+  const scoreItems = [
+    { label:"소비 관리", score:scoreConsumption, max:25, desc:`저축률 ${fmtPct(savingsRatePct)}` },
+    { label:"투자 전략", score:scoreInvestment, max:30, desc:`투자비중 ${fmtPct(investmentRatioPct)}` },
+    { label:"비상금", score:scoreEmergency, max:20, desc:`${emergencyMonths.toFixed(1)}개월치` },
+    { label:"은퇴 준비", score:scoreRetirement, max:25, desc:`목표대비 ${fmtPct(retirementProgressPct)}` },
+  ];
+
+  const message = totalScore >= 85
+    ? "현재 재무 구조는 매우 안정적입니다. 큰 방향은 유지하되, 월 1회 점검과 리밸런싱만 해도 충분합니다."
+    : totalScore >= 70
+      ? "현재 방향은 좋습니다. 다만 비상금·예산·은퇴 목표 중 낮은 항목을 보강하면 안정성이 더 올라갑니다."
+      : totalScore >= 50
+        ? "재무 구조에 관리가 필요한 구간입니다. 모든 기능을 보려 하기보다 가장 위험한 문제 1개부터 해결하는 것이 좋습니다."
+        : "현재는 재무 위험 신호가 강합니다. 투자 확대보다 현금흐름과 비상금 안정화가 먼저입니다.";
+
+  return { totalScore, status, tone, toneColor, toneBg, message, scoreItems, problems: problems.slice(0, 4), actions: actions.slice(0, 4) };
+}
+
+function CFODecisionDashboard({ model }) {
+  if (!model) return null;
+  const priorityLabel = { high:"최우선", mid:"중요", low:"관리" };
+  return (
+    <div className="cfo-decision-hero">
+      <div className="cfo-decision-head">
+        <div>
+          <div className="cfo-kicker">PERSONAL CFO DECISION</div>
+          <div className="cfo-main-title">내 돈을 기록하는 것을 넘어, 인생 재무 결정을 도와주는 개인 CFO 앱</div>
+          <div className="cfo-main-message">{model.message}</div>
+        </div>
+        <div className="cfo-score-box">
+          <div>
+            <div className="kpi-label">CFO 종합 점수</div>
+            <div className="cfo-big-score" style={{color:model.toneColor}}>{model.totalScore}<span>/100</span></div>
+            <div className="cfo-status-pill" style={{background:model.toneBg,color:model.toneColor}}>{model.status}</div>
+          </div>
+          <GoalGauge value={model.totalScore} target={100} title="CFO 판단" />
+        </div>
+      </div>
+      <div className="cfo-score-grid">
+        {model.scoreItems.map((item, idx) => {
+          const rate = item.max > 0 ? item.score / item.max * 100 : 0;
+          const color = rate >= 80 ? "var(--green)" : rate >= 55 ? "var(--accent)" : rate >= 35 ? "var(--amber)" : "var(--red)";
+          return <div key={idx} className="cfo-score-item"><small>{item.label}</small><strong style={{color}}>{item.score}<span style={{fontSize:12,color:"var(--text3)"}}>/{item.max}</span></strong><div className="progress" style={{marginTop:8}}><div className="progress-fill" style={{width:`${clamp(rate,0,100)}%`,background:color}} /></div><p>{item.desc}</p></div>;
+        })}
+      </div>
+      <div className="cfo-action-grid">
+        <div className="cfo-problem-card"><div className="card-title"><h3>현재 문제</h3><span className="badge badge-muted">진단</span></div><div className="cfo-problem-list">{model.problems.map((p,i)=><div key={i} className="cfo-list-row"><span className="cfo-list-no">{i+1}</span><div><strong>{p.title}</strong><p>{p.desc}</p></div><span className={`cfo-priority ${p.priority}`}>{priorityLabel[p.priority]}</span></div>)}</div></div>
+        <div className="cfo-action-card"><div className="card-title"><h3>지금 해야 할 행동</h3><span className="badge badge-accent">Action</span></div><div className="cfo-action-list">{model.actions.map((a,i)=><div key={i} className="cfo-list-row"><span className="cfo-list-no">{i+1}</span><div><strong>{a.title}</strong><p>{a.desc}</p></div><span className={`cfo-priority ${a.priority}`}>{priorityLabel[a.priority]}</span></div>)}</div></div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Dashboard Tab ────────────────────────────────────────────────────────────
 function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, taxAnalysis, futureSim }) {
   const recentTx=dashboardDetail.recentTx||[];
@@ -2139,12 +2299,18 @@ function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, fi
     [advanced, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, taxAnalysis, futureSim, data]
   );
 
+  const cfoDecisionModel = useMemo(
+    () => buildCFODecisionModel({ data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, futureSim }),
+    [data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, futureSim]
+  );
+
   const healthColor=advanced.tone==="green"?"var(--green)":advanced.tone==="accent"?"var(--accent)":advanced.tone==="amber"?"var(--amber)":"var(--red)";
   const healthBg=advanced.tone==="green"?"var(--green-bg)":advanced.tone==="accent"?"var(--accent-bg)":advanced.tone==="amber"?"var(--amber-bg)":"var(--red-bg)";
 
   return (
     <div className="stack dashboard-pro">
       <DashboardAdvicePanel nlp={dashboardNLP} />
+      <CFODecisionDashboard model={cfoDecisionModel} />
       <AICoachPanel coach={buildIntegratedCoach({ area:"대시보드", data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim, eventAnalysis, monthlySeries })}/>
 
       <div className="dashboard-hero">
