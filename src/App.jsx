@@ -12,6 +12,9 @@ import {
 // ─── Constants ──────────────────────────────────────────────────────────────
 const STORAGE_KEY = "asset-app-final-complete-v1";
 const LEGACY_STORAGE_KEYS = ["asset-app-sidebar-premium-season-fixed","asset-app-sidebar-premium-season-stock-server","asset-app-excel-parity-v1"];
+const STORAGE_BACKUP_PREFIX = `${STORAGE_KEY}:backup:`;
+const STORAGE_TEMP_KEY = `${STORAGE_KEY}:temp`;
+const MAX_BACKUPS = 10;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const CLOUD_TABLE = "asset_app_profiles";
@@ -183,17 +186,145 @@ function migrateData(d) {
   x.settings.taxUpdateSource = x.settings.taxUpdateSource || "";
   return x;
 }
+function safeParseJSON(raw) {
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function isValidAppData(data) {
+  if (!data || typeof data !== "object") return false;
+  if (!Array.isArray(data.transactions)) return false;
+  if (!Array.isArray(data.accounts)) return false;
+  if (!Array.isArray(data.assets)) return false;
+  if (!Array.isArray(data.portfolio)) return false;
+  if (!Array.isArray(data.budgets)) return false;
+  if (!Array.isArray(data.events)) return false;
+  if (!data.settings || typeof data.settings !== "object") return false;
+  return true;
+}
+
+function cleanupOldBackups() {
+  try {
+    const backupKeys = Object.keys(localStorage)
+      .filter((key) => key.startsWith(STORAGE_BACKUP_PREFIX))
+      .sort()
+      .reverse();
+
+    backupKeys.slice(MAX_BACKUPS).forEach((key) => {
+      localStorage.removeItem(key);
+    });
+  } catch (error) {
+    console.warn("백업 정리 실패:", error);
+  }
+}
+
+function createStorageBackup() {
+  try {
+    const currentRaw = localStorage.getItem(STORAGE_KEY);
+    if (!currentRaw) return;
+
+    const currentParsed = safeParseJSON(currentRaw);
+    if (!currentParsed) return;
+
+    const backupKey = `${STORAGE_BACKUP_PREFIX}${new Date().toISOString()}`;
+    localStorage.setItem(backupKey, currentRaw);
+    cleanupOldBackups();
+  } catch (error) {
+    console.warn("자동 백업 생성 실패:", error);
+  }
+}
+
+function restoreLatestValidBackup() {
+  try {
+    const backupKeys = Object.keys(localStorage)
+      .filter((key) => key.startsWith(STORAGE_BACKUP_PREFIX))
+      .sort()
+      .reverse();
+
+    for (const key of backupKeys) {
+      const parsed = safeParseJSON(localStorage.getItem(key));
+      if (!parsed) continue;
+
+      const restored = migrateData({ ...emptyData(), ...parsed });
+      if (isValidAppData(restored)) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
+        console.warn("최신 정상 백업으로 복구 완료:", key);
+        return restored;
+      }
+    }
+  } catch (error) {
+    console.error("백업 복구 실패:", error);
+  }
+
+  return emptyData();
+}
+
 function loadData() {
   try {
     for (const key of [STORAGE_KEY, ...LEGACY_STORAGE_KEYS]) {
       const raw = localStorage.getItem(key);
       if (!raw) continue;
-      return migrateData({ ...emptyData(), ...JSON.parse(raw) });
+
+      const parsed = safeParseJSON(raw);
+      if (!parsed) {
+        console.warn("저장 데이터 손상 감지:", key);
+        return restoreLatestValidBackup();
+      }
+
+      const migrated = migrateData({ ...emptyData(), ...parsed });
+      if (!isValidAppData(migrated)) {
+        console.warn("저장 데이터 구조 오류 감지:", key);
+        return restoreLatestValidBackup();
+      }
+
+      return migrated;
     }
+
     return emptyData();
-  } catch { return emptyData(); }
+  } catch (error) {
+    console.error("데이터 불러오기 실패:", error);
+    return restoreLatestValidBackup();
+  }
 }
-function saveData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...d, lastSavedAt: new Date().toISOString() })); }
+
+function saveData(d) {
+  try {
+    const nextData = migrateData({
+      ...emptyData(),
+      ...d,
+      lastSavedAt: new Date().toISOString(),
+    });
+
+    if (!isValidAppData(nextData)) {
+      throw new Error("저장 데이터 구조가 올바르지 않습니다.");
+    }
+
+    createStorageBackup();
+
+    const serialized = JSON.stringify(nextData);
+
+    localStorage.setItem(STORAGE_TEMP_KEY, serialized);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    localStorage.removeItem(STORAGE_TEMP_KEY);
+
+    console.info("데이터 저장 완료:", nextData.lastSavedAt);
+    return { ok: true, savedAt: nextData.lastSavedAt };
+  } catch (error) {
+    console.error("데이터 저장 실패:", error);
+
+    try {
+      localStorage.removeItem(STORAGE_TEMP_KEY);
+    } catch {}
+
+    return {
+      ok: false,
+      error: error.message || "알 수 없는 저장 오류",
+    };
+  }
+}
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 const STYLES = `
