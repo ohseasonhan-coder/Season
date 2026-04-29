@@ -1108,100 +1108,10 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .report-hero p{font-size:13px;color:var(--text3);line-height:1.5}
 .monthly-report textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 
-/* CFO goal UX v12 - compact harmony */
-.cfo-goal-card{
-  width:100%;
-  padding:20px;
-  border-radius:22px;
-  background:linear-gradient(135deg,rgba(255,255,255,.055),rgba(255,255,255,.028));
-  border:1px solid rgba(255,255,255,.085);
-}
-.cfo-goal-top{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:14px;
-  margin-bottom:18px;
-}
-.cfo-goal-main{
-  display:flex;
-  align-items:baseline;
-  gap:5px;
-  margin-top:8px;
-}
-.cfo-goal-current{
-  font-size:52px;
-  font-weight:950;
-  letter-spacing:-.065em;
-  line-height:.92;
-  font-variant-numeric:tabular-nums;
-}
-.cfo-goal-slash{
-  font-size:20px;
-  font-weight:900;
-  color:var(--text3);
-}
-.cfo-goal-target{
-  font-size:17px;
-  font-weight:900;
-  color:var(--text2);
-  letter-spacing:-.02em;
-}
-.cfo-goal-chip{
-  flex-shrink:0;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-height:28px;
-  padding:6px 10px;
-  border-radius:999px;
-  font-size:12px;
-  font-weight:900;
-  white-space:nowrap;
-}
-.cfo-goal-track{
-  position:relative;
-  height:8px;
-  border-radius:999px;
-  background:rgba(255,255,255,.08);
-  overflow:hidden;
-}
-.cfo-goal-fill{
-  height:100%;
-  border-radius:999px;
-  transition:width .35s ease;
-  min-width:4px;
-}
-.cfo-goal-meta{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  margin-top:12px;
-  font-size:12px;
-  color:var(--text3);
-}
-.cfo-goal-meta b{
-  color:var(--text);
-  font-weight:900;
-  font-variant-numeric:tabular-nums;
-}
-.cfo-goal-mini-note{
-  margin-top:14px;
-  padding-top:12px;
-  border-top:1px solid rgba(255,255,255,.07);
-  color:var(--text2);
-  font-size:12px;
-  line-height:1.55;
-  word-break:keep-all;
-}
-@media(max-width:700px){
-  .cfo-goal-current{font-size:42px}
-  .cfo-goal-top{flex-direction:column}
-}
 
+/* CFO animated score v15 fixed */
+.goal-gauge-compact{width:100%;padding:12px;border-radius:16px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)}
 
-/* CFO animated score v14 */
 .cfo-score-box-unified{
   display:flex!important;
   flex-direction:column!important;
@@ -1743,11 +1653,11 @@ function AssetDonutChart({ segments }) {
   );
 }
 
-
 function AnimatedScoreBar({ value }) {
   const score = clamp(n(value), 0, 100);
   const color = score >= 70 ? "#34d58a" : score >= 50 ? "#6c7dff" : score >= 35 ? "#f0b429" : "#ff5c72";
   const label = score >= 70 ? "안정권" : score >= 50 ? "관리 필요" : score >= 35 ? "주의 구간" : "위험 구간";
+
   return (
     <div className="animated-score-wrap">
       <div className="animated-score-top">
@@ -1755,13 +1665,33 @@ function AnimatedScoreBar({ value }) {
         <b>{Math.round(score)}%</b>
       </div>
       <div className="animated-score-track">
-        <div className="animated-score-fill" style={{width:`${score}%`, background:color}} />
-        <div className="animated-score-glow" style={{left:`${score}%`, background:color}} />
+        <div className="animated-score-fill" style={{ width: `${score}%`, background: color }} />
+        <div className="animated-score-glow" style={{ left: `${score}%`, background: color }} />
       </div>
       <div className="animated-score-scale">
         <span>0</span>
         <span>50</span>
         <span>100</span>
+      </div>
+    </div>
+  );
+}
+
+function GoalGauge({ value, target, title }) {
+  const score = Math.min((Math.max(n(value), 0) / Math.max(n(target), 1)) * 100, 100);
+  const color = score >= 70 ? "#34d58a" : score >= 50 ? "#6c7dff" : score >= 35 ? "#f0b429" : "#ff5c72";
+  return (
+    <div className="goal-gauge-compact">
+      <div className="row-between" style={{marginBottom:8}}>
+        <span className="kpi-label">{title}</span>
+        <strong style={{color, fontSize:14}}>{fmtPct(score,0)}</strong>
+      </div>
+      <div className="animated-score-track">
+        <div className="animated-score-fill" style={{ width: `${score}%`, background: color }} />
+      </div>
+      <div className="row-between" style={{marginTop:8,fontSize:11,color:"var(--text3)"}}>
+        <span>현재 {fmt(value)}</span>
+        <span>목표 {fmt(target)}</span>
       </div>
     </div>
   );
@@ -2692,17 +2622,11 @@ function CFODecisionDashboard({ model }) {
             <p>{model.scoreLosses.length ? `가장 큰 감점 요인은 ${model.scoreLosses.map((x)=>`${x.label} -${x.lost}점`).join(", ")}입니다.` : "현재 입력된 데이터 기준으로 큰 감점 요인이 없습니다."}</p>
           </div>
         </div>
-        
-<div className="cfo-score-box cfo-score-box-unified">
-  <AnimatedScoreBar value={model.totalScore} />
-  <div className="kpi-label">CFO 종합 점수</div>
-  <div className="cfo-big-score" style={{color:model.toneColor}}>
-    {model.totalScore}<span>/100</span>
-  </div>
-  <div className="cfo-status-pill" style={{background:model.toneBg,color:model.toneColor}}>
-    {model.status}
-  </div>
-</div>
+        <div className="cfo-score-box cfo-score-box-unified">
+          <AnimatedScoreBar value={model.totalScore} />
+          <div className="kpi-label">CFO 종합 점수</div>
+          <div className="cfo-big-score" style={{color:model.toneColor}}>{model.totalScore}<span>/100</span></div>
+          <div className="cfo-status-pill" style={{background:model.toneBg,color:model.toneColor}}>{model.status}</div>
         </div>
       </div>
 
