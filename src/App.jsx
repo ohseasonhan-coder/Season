@@ -1188,6 +1188,274 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
   margin-top:2px;
 }
 
+
+/* CFO product redesign v16 */
+.cfo-product-card{
+  position:relative;
+  overflow:hidden;
+  border-radius:28px;
+  padding:24px;
+  border:1px solid rgba(255,255,255,.085);
+  background:linear-gradient(135deg,rgba(22,25,32,.98),rgba(30,33,41,.86));
+  box-shadow:0 18px 50px rgba(0,0,0,.28);
+}
+.cfo-product-card:after{
+  content:"";
+  position:absolute;
+  right:-120px;
+  top:-160px;
+  width:340px;
+  height:340px;
+  background:radial-gradient(circle,rgba(108,125,255,.16),transparent 68%);
+  pointer-events:none;
+}
+.cfo-product-card.danger:after{background:radial-gradient(circle,rgba(255,92,114,.15),transparent 68%)}
+.cfo-product-card.warn:after{background:radial-gradient(circle,rgba(240,180,41,.15),transparent 68%)}
+.cfo-product-card.ok:after{background:radial-gradient(circle,rgba(52,213,138,.15),transparent 68%)}
+.cfo-product-hero{
+  display:grid;
+  grid-template-columns:minmax(0,1.35fr) 300px;
+  gap:22px;
+  align-items:stretch;
+  position:relative;
+  z-index:1;
+}
+.cfo-product-kicker{
+  font-size:11px;
+  font-weight:950;
+  letter-spacing:.12em;
+  color:var(--accent2);
+  margin-bottom:10px;
+}
+.cfo-product-left h2{
+  font-size:30px;
+  line-height:1.18;
+  letter-spacing:-.055em;
+  font-weight:950;
+  margin-bottom:12px;
+  max-width:780px;
+}
+.cfo-product-left p{
+  font-size:14px;
+  line-height:1.7;
+  color:var(--text2);
+  max-width:820px;
+}
+.cfo-product-reason{
+  margin-top:18px;
+  display:grid;
+  gap:5px;
+  padding:14px;
+  border-radius:18px;
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(255,255,255,.075);
+}
+.cfo-product-reason span{
+  font-size:11px;
+  font-weight:900;
+  color:var(--text3);
+}
+.cfo-product-reason strong{
+  font-size:14px;
+  color:var(--text);
+}
+.cfo-product-reason small{
+  color:var(--text2);
+  line-height:1.5;
+}
+.cfo-product-score{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:flex-start;
+  gap:10px;
+  min-height:220px;
+  padding:20px;
+  border-radius:24px;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.085);
+}
+.cfo-product-score-row{
+  display:flex;
+  align-items:baseline;
+  gap:4px;
+}
+.cfo-product-score-row strong{
+  font-size:58px;
+  font-weight:950;
+  letter-spacing:-.07em;
+  line-height:.92;
+}
+.cfo-product-score-row span{
+  color:var(--text3);
+  font-size:18px;
+  font-weight:900;
+}
+.cfo-product-action-panel{
+  position:relative;
+  z-index:1;
+  margin-top:16px;
+  padding:18px;
+  border-radius:24px;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.075);
+}
+.cfo-product-action-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  margin-bottom:14px;
+}
+.cfo-product-section-label{
+  display:block;
+  font-size:11px;
+  font-weight:950;
+  letter-spacing:.09em;
+  color:var(--text3);
+  margin-bottom:5px;
+}
+.cfo-product-action-head h3{
+  font-size:18px;
+  letter-spacing:-.03em;
+}
+.cfo-action-focus{
+  display:grid;
+  grid-template-columns:36px 1fr auto;
+  gap:14px;
+  align-items:center;
+  padding:16px;
+  border-radius:20px;
+  background:rgba(108,125,255,.09);
+  border:1px solid rgba(108,125,255,.16);
+}
+.cfo-action-rank{
+  width:36px;
+  height:36px;
+  border-radius:14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--accent);
+  color:white;
+  font-weight:950;
+}
+.cfo-action-copy strong{
+  font-size:15px;
+  color:var(--text);
+}
+.cfo-action-copy p{
+  margin-top:7px;
+  font-size:12.5px;
+  line-height:1.55;
+  color:var(--text2);
+}
+.cfo-action-impact{
+  margin-top:9px;
+  display:inline-flex;
+  padding:5px 9px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+  color:var(--green);
+  background:var(--green-bg);
+}
+.cfo-action-sub{
+  margin-top:10px;
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  align-items:center;
+  gap:10px;
+  padding:12px;
+  border-radius:16px;
+  background:rgba(255,255,255,.035);
+  border:1px solid rgba(255,255,255,.065);
+}
+.cfo-action-sub span{
+  color:var(--text3);
+  font-size:11px;
+  font-weight:900;
+}
+.cfo-action-sub strong{
+  font-size:13px;
+  color:var(--text);
+}
+.cfo-product-grid{
+  position:relative;
+  z-index:1;
+  margin-top:14px;
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+}
+.cfo-product-mini{
+  padding:14px;
+  border-radius:18px;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.07);
+}
+.cfo-product-mini span{
+  display:block;
+  font-size:11px;
+  font-weight:900;
+  color:var(--text3);
+  margin-bottom:7px;
+}
+.cfo-product-mini strong{
+  display:block;
+  font-size:18px;
+  color:var(--text);
+  letter-spacing:-.035em;
+  margin-bottom:7px;
+}
+.cfo-product-mini p{
+  font-size:12px;
+  line-height:1.5;
+  color:var(--text2);
+}
+.cfo-product-detail{
+  position:relative;
+  z-index:1;
+  margin-top:14px;
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+}
+.cfo-product-score-item{
+  padding:13px;
+  border-radius:16px;
+  background:rgba(255,255,255,.035);
+  border:1px solid rgba(255,255,255,.065);
+}
+.cfo-product-score-item span{
+  font-size:12px;
+  font-weight:900;
+  color:var(--text2);
+}
+.cfo-product-score-item b{
+  font-size:13px;
+  font-weight:950;
+}
+.cfo-product-score-item p{
+  margin-top:9px;
+  font-size:11.5px;
+  color:var(--text3);
+  line-height:1.45;
+}
+@media(max-width:1100px){
+  .cfo-product-hero{grid-template-columns:1fr}
+  .cfo-product-score{min-height:auto}
+  .cfo-product-grid{grid-template-columns:1fr}
+  .cfo-product-detail{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:760px){
+  .cfo-product-card{padding:18px}
+  .cfo-product-left h2{font-size:23px}
+  .cfo-action-focus{grid-template-columns:1fr}
+  .cfo-action-sub{grid-template-columns:1fr}
+  .cfo-product-detail{grid-template-columns:1fr}
+}
+
 @media print{
   .sidebar,.topbar,.auth-bar,.fab,.tab-row,.btn{display:none!important}
   .main{margin-left:0!important;height:auto!important;overflow:visible!important}
@@ -2965,137 +3233,213 @@ function buildCFODecisionModel({ data={}, dashboard={}, dashboardDetail={}, fina
   return { totalScore, status, tone, toneColor, toneBg, message, scoreItems, scoreLosses, problems: problems.slice(0, 4), actions: actions.slice(0, 4), simulation, detailedDiagnosis, nextPlan, guardSummary };
 }
 
-function CFODecisionDashboard({ model }) {
+function CFODecisionDashboard({ model, onExecuteAction }) {
   if (!model) return null;
   const priorityLabel = { high:"최우선", mid:"중요", low:"관리" };
+  const topAction = model.actions?.[0];
+  const secondAction = model.actions?.[1];
+  const mainReason = model.scoreLosses?.[0];
+
+  const toneClass = model.tone === "green" ? "ok" : model.tone === "accent" ? "info" : model.tone === "amber" ? "warn" : "danger";
+
   return (
-    <div className="cfo-decision-hero">
-      <div className="cfo-decision-head">
-        <div>
-          <div className="cfo-kicker">PERSONAL CFO DECISION</div>
-          <div className="cfo-main-title">내 돈을 기록하는 것을 넘어, 인생 재무 결정을 도와주는 개인 CFO 앱</div>
-          <div className="cfo-main-message">{model.message}</div>
-          <div className="cfo-why-box">
-            <strong>왜 {model.totalScore}점인가요?</strong>
-            <p>{model.scoreLosses.length ? `가장 큰 감점 요인은 ${model.scoreLosses.map((x)=>`${x.label} -${x.lost}점`).join(", ")}입니다.` : "현재 입력된 데이터 기준으로 큰 감점 요인이 없습니다."}</p>
+    <div className={`cfo-product-card ${toneClass}`}>
+      <div className="cfo-product-hero">
+        <div className="cfo-product-left">
+          <div className="cfo-product-kicker">PERSONAL CFO DECISION</div>
+          <h2>
+            {model.status === "위험"
+              ? "지금은 투자보다 재무 안전장치가 먼저입니다."
+              : model.status === "주의 필요"
+                ? "방향은 잡혔지만 현금흐름 보강이 필요합니다."
+                : model.status === "양호"
+                  ? "좋은 흐름입니다. 낮은 항목만 보강하면 됩니다."
+                  : "현재 재무 구조는 매우 안정적입니다."}
+          </h2>
+          <p>{model.message}</p>
+
+          <div className="cfo-product-reason">
+            <span>왜 이렇게 판단했나요?</span>
+            <strong>
+              {mainReason
+                ? `${mainReason.label}에서 ${mainReason.lost}점 감점`
+                : "현재 입력 기준 큰 감점 요인이 없습니다."}
+            </strong>
+            <small>{mainReason?.reason || "월 1회 점검만 유지해도 충분합니다."}</small>
           </div>
         </div>
-        <div className="cfo-score-box cfo-score-box-unified">
+
+        <div className="cfo-product-score">
           <AnimatedScoreBar value={model.totalScore} />
-          <div className="kpi-label">CFO 종합 점수</div>
-          <div className="cfo-big-score" style={{color:model.toneColor}}>{model.totalScore}<span>/100</span></div>
+          <div className="cfo-product-score-row">
+            <strong style={{color:model.toneColor}}>{model.totalScore}</strong>
+            <span>/100</span>
+          </div>
           <div className="cfo-status-pill" style={{background:model.toneBg,color:model.toneColor}}>{model.status}</div>
         </div>
       </div>
 
-      <div className="cfo-score-grid">
-        {model.scoreItems.map((item, idx) => {
+      <div className="cfo-product-action-panel">
+        <div className="cfo-product-action-head">
+          <div>
+            <span className="cfo-product-section-label">NOW ACTION</span>
+            <h3>지금 바로 할 일</h3>
+          </div>
+          <span className="badge badge-muted">자동 반영 가능</span>
+        </div>
+
+        <div className="cfo-action-focus">
+          {topAction ? (
+            <>
+              <div className="cfo-action-rank">1</div>
+              <div className="cfo-action-copy">
+                <div className="row-between">
+                  <strong>{topAction.title}</strong>
+                  <span className={`badge ${topAction.priority==="high"?"badge-red":topAction.priority==="mid"?"badge-amber":"badge-accent"}`}>
+                    {priorityLabel[topAction.priority] || "관리"}
+                  </span>
+                </div>
+                <p>{topAction.desc}</p>
+                <div className="cfo-action-impact">예상 개선: +{topAction.expectedScore || 0}점</div>
+              </div>
+              <button className="btn btn-primary" onClick={()=>onExecuteAction?.(topAction)}>
+                실행 반영
+              </button>
+            </>
+          ) : (
+            <div className="empty">추천 행동이 없습니다.</div>
+          )}
+        </div>
+
+        {secondAction && (
+          <div className="cfo-action-sub">
+            <span>다음 행동</span>
+            <strong>{secondAction.title}</strong>
+            <button className="btn btn-ghost btn-sm" onClick={()=>onExecuteAction?.(secondAction)}>반영</button>
+          </div>
+        )}
+      </div>
+
+      <div className="cfo-product-grid">
+        <div className="cfo-product-mini">
+          <span>핵심 문제</span>
+          <strong>{model.problems?.[0]?.title || "큰 위험 신호 없음"}</strong>
+          <p>{model.problems?.[0]?.desc || "현재 전략을 유지하면서 월 1회 점검하세요."}</p>
+        </div>
+        <div className="cfo-product-mini">
+          <span>6개월 후 예상</span>
+          <strong>{model.simulation?.checkpoints?.find(r=>r.month===6)?.score || model.totalScore}점</strong>
+          <p>현재 저축·투자 흐름을 유지하는 기준입니다.</p>
+        </div>
+        <div className="cfo-product-mini">
+          <span>70점 도달 예상</span>
+          <strong>{model.simulation?.monthsTo70 ? `${model.simulation.monthsTo70}개월` : "24개월 초과"}</strong>
+          <p>비상금과 현금흐름을 우선 개선할 때의 예상입니다.</p>
+        </div>
+      </div>
+
+      <div className="cfo-product-detail">
+        {(model.scoreItems || []).map((item, idx)=>{
           const rate = item.max > 0 ? item.score / item.max * 100 : 0;
           const color = rate >= 80 ? "var(--green)" : rate >= 55 ? "var(--accent)" : rate >= 35 ? "var(--amber)" : "var(--red)";
           return (
-            <div key={idx} className="cfo-score-item">
-              <small>{item.label}</small>
-              <strong style={{color}}>{item.score}<span style={{fontSize:12,color:"var(--text3)"}}>/{item.max}</span></strong>
-              <div className="progress" style={{marginTop:8}}><div className="progress-fill" style={{width:`${clamp(rate,0,100)}%`,background:color}} /></div>
-              <p>{item.desc}</p>
-              <div className="cfo-score-reason">{item.reason}</div>
+            <div key={idx} className="cfo-product-score-item">
+              <div className="row-between">
+                <span>{item.label}</span>
+                <b style={{color}}>{item.score}/{item.max}</b>
+              </div>
+              <div className="progress"><div className="progress-fill" style={{width:`${clamp(rate,0,100)}%`,background:color}} /></div>
+              <p>{item.reason}</p>
             </div>
           );
         })}
-      </div>
-
-      <div className="cfo-detail-panel">
-        <div className="cfo-detail-card">
-          <div className="card-title"><h3>상세 판단 근거</h3><span className="badge badge-accent">Detail</span></div>
-          <div className="cfo-detail-list">
-            {(model.detailedDiagnosis||[]).map((d,i)=>(
-              <div key={i} className="cfo-detail-row">
-                <div className="cfo-detail-icon">{["💸","🛡️","📈","🎯"][i] || "•"}</div>
-                <div className="cfo-detail-copy">
-                  <div className="cfo-detail-top">
-                    <strong>{d.label}</strong>
-                    <span>{d.value}</span>
-                  </div>
-                  <p>{d.text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="cfo-detail-card">
-          <div className="card-title"><h3>입력 오류 방어 상태</h3><span className="badge badge-muted">Guard</span></div>
-          <p className="cfo-guard-desc">계산 오류가 생길 수 있는 주요 입력값을 대시보드에서 함께 감시합니다.</p>
-          <div className="cfo-guard-grid">
-            <div className={`cfo-guard-card ${model.guardSummary?.targetWeightSum>1?"danger":"ok"}`}>
-              <span>투자목표 합계</span>
-              <strong>{fmtPct((model.guardSummary?.targetWeightSum||0)*100)}</strong>
-              <small>{model.guardSummary?.targetWeightSum>1 ? "100% 초과 조정 필요" : "정상 범위"}</small>
-            </div>
-            <div className={`cfo-guard-card ${model.guardSummary?.legacyWeightSum>1?"danger":"ok"}`}>
-              <span>기본비중 합계</span>
-              <strong>{fmtPct((model.guardSummary?.legacyWeightSum||0)*100)}</strong>
-              <small>{model.guardSummary?.legacyWeightSum>1 ? "100% 초과 조정 필요" : "정상 범위"}</small>
-            </div>
-            <div className={`cfo-guard-card ${model.guardSummary?.usdHoldingsNeedFx?"danger":"ok"}`}>
-              <span>USD 환율</span>
-              <strong>{model.guardSummary?.usdHoldingsNeedFx?"확인 필요":"정상"}</strong>
-              <small>{model.guardSummary?.usdHoldingsNeedFx ? "해외자산 평가 차단" : "원화 평가 가능"}</small>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="cfo-plan-grid">
-        {(model.nextPlan||[]).map((p,i)=>(
-          <div key={i} className="cfo-plan-card">
-            <small>{p.month} 실행안</small>
-            <strong>{p.score}점</strong>
-            <p><b>{p.title}</b><br/>{p.text}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="cfo-action-grid">
-        <div className="cfo-problem-card">
-          <div className="card-title"><h3>현재 문제</h3><span className="badge badge-muted">진단</span></div>
-          <div className="cfo-problem-list">
-            {model.problems.map((p,i)=><div key={i} className="cfo-list-row"><span className="cfo-list-no">{i+1}</span><div><strong>{p.title}</strong><p>{p.desc}</p></div><span className={`cfo-priority ${p.priority}`}>{priorityLabel[p.priority]}</span></div>)}
-          </div>
-        </div>
-        <div className="cfo-action-card">
-          <div className="card-title"><h3>지금 해야 할 행동</h3><span className="badge badge-accent">Action</span></div>
-          <div className="cfo-action-list">
-            {model.actions.map((a,i)=><div key={i} className="cfo-list-row"><span className="cfo-list-no">{i+1}</span><div><strong>{a.title}</strong><p>{a.desc}</p>{a.expectedScore>0&&<em className="cfo-expected">예상 개선 +{a.expectedScore}점</em>}</div><span className={`cfo-priority ${a.priority}`}>{priorityLabel[a.priority]}</span></div>)}
-          </div>
-        </div>
-      </div>
-
-      <div className="cfo-simulation-card">
-        <div className="card-title">
-          <h3>점수 자동 상승 시뮬레이션</h3>
-          <span className="badge badge-green">월 {fmt(model.simulation.monthlyInvest)}원 기준</span>
-        </div>
-        <div className="cfo-sim-grid">
-          <div className="cfo-sim-main">
-            <div className="kpi-label">예상 도달 시점</div>
-            <strong>{model.simulation.monthsTo70 ? `${model.simulation.monthsTo70}개월 후 70점` : "24개월 내 70점 미도달"}</strong>
-            <p>현재 월 저축·투자 흐름을 유지하고, 비상금 부족 구간에서는 일부 금액을 비상금으로 우선 배분하는 가정입니다.</p>
-          </div>
-          {model.simulation.checkpoints.map((r)=>(
-            <div key={r.month} className="cfo-sim-point">
-              <small>{r.month}개월 후</small>
-              <strong>{r.score}점</strong>
-              <p>비상금 {r.emergencyMonths.toFixed(1)}개월</p>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
 }
 
+function applyCFOActionToData(data, action) {
+  if (!action) return data;
+  const now = todayISO();
+  const title = String(action.title || "");
+  const desc = String(action.desc || "");
+  const next = migrateData({ ...data });
+
+  const addSystemEvent = (name, amountNeeded=0, priority="중간") => {
+    const exists = (next.events || []).some(e => String(e.name || "").includes(name));
+    if (!exists) {
+      next.events = [
+        ...(next.events || []),
+        {
+          id: uid(),
+          name,
+          yearsFromNow: 1,
+          amountNeeded,
+          currentPrepared: 0,
+          priority,
+        },
+      ];
+    }
+  };
+
+  if (title.includes("비상금") || desc.includes("비상금")) {
+    const monthlyExpense = Math.max(
+      (next.transactions || [])
+        .filter(t => monthOf(t.date) === thisMonthISO() && t.type === "지출")
+        .reduce((sum,t)=>sum+n(t.amount),0),
+      n(next.settings?.retirementMonthlyExpense),
+      0
+    );
+    const emergencyTarget = monthlyExpense > 0 ? monthlyExpense * 3 : 3000000;
+    addSystemEvent("🛡️ 비상금 3개월치 확보", emergencyTarget, "높음");
+    next.settings = {
+      ...next.settings,
+      triggerCashAvailable: Math.max(n(next.settings?.triggerCashAvailable), Math.round(emergencyTarget)),
+    };
+  }
+
+  if (title.includes("지출") || desc.includes("지출") || title.includes("예산")) {
+    next.budgets = (next.budgets || []).map(b => ({
+      ...b,
+      budget: Math.max(Math.round(n(b.budget) * 0.97), 0),
+    }));
+  }
+
+  if (title.includes("자동투자") || title.includes("투자금") || desc.includes("월 투자금")) {
+    next.settings = {
+      ...next.settings,
+      autoTriggerEnabled: true,
+      autoBuyTriggerEnabled: true,
+      triggerMonthlyInvestAmount: Math.max(n(next.settings?.triggerMonthlyInvestAmount), n(next.settings?.monthlyInvestDefault), 100000),
+    };
+  }
+
+  if (title.includes("은퇴") || desc.includes("은퇴")) {
+    next.settings = {
+      ...next.settings,
+      monthlyInvestDefault: Math.max(n(next.settings?.monthlyInvestDefault), n(next.settings?.triggerMonthlyInvestAmount), 100000),
+    };
+  }
+
+  const memoTx = {
+    id: uid(),
+    date: now,
+    type: "자산이동",
+    cat1: "계좌이체",
+    cat2: "내계좌간이체",
+    amount: 0,
+    fromAccount: "",
+    toAccount: "",
+    memo: `CFO 실행 반영: ${title}`,
+  };
+
+  next.transactions = [memoTx, ...(next.transactions || [])];
+  next.lastCfoActionAt = new Date().toISOString();
+  return next;
+}
+
 // ─── Dashboard Tab ────────────────────────────────────────────────────────────
-function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, taxAnalysis, futureSim }) {
+function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChartData, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, taxAnalysis, futureSim }) {
   const recentTx=dashboardDetail.recentTx||[];
   const topExp=dashboardDetail.topExpenseCats||[];
 
@@ -3164,7 +3508,7 @@ function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, fi
   return (
     <div className="stack dashboard-pro">
       <DashboardAdvicePanel nlp={dashboardNLP} />
-      <CFODecisionDashboard model={cfoDecisionModel} />
+      <CFODecisionDashboard model={cfoDecisionModel} onExecuteAction={(action)=>update?.(d=>applyCFOActionToData(d, action))} />
       <AICoachPanel coach={buildIntegratedCoach({ area:"대시보드", data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim, eventAnalysis, monthlySeries })}/>
 
       <div className="dashboard-hero">
@@ -8404,7 +8748,7 @@ export default function App() {
           </div>
 
           <div className="page">
-            {tab==="dashboard"&&<DashboardTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} dashboardChartData={dashboardChartData} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} monthlySeries={monthlySeries} eventAnalysis={eventAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
+            {tab==="dashboard"&&<DashboardTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} dashboardChartData={dashboardChartData} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} monthlySeries={monthlySeries} eventAnalysis={eventAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="goals"&&<GoalFundingTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} futureSim={futureSim}/>}
             {tab==="cfo"&&<CFOCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="automation"&&<AutomationSystemTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
