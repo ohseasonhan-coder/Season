@@ -15,6 +15,8 @@ const LEGACY_STORAGE_KEYS = ["asset-app-sidebar-premium-season-fixed","asset-app
 const STORAGE_BACKUP_PREFIX = `${STORAGE_KEY}:backup:`;
 const STORAGE_TEMP_KEY = `${STORAGE_KEY}:temp`;
 const MAX_BACKUPS = 10;
+const MARKET_CACHE_KEY = `${STORAGE_KEY}:market-cache`;
+const MAX_MARKET_CACHE_AGE_DAYS = 14;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const CLOUD_TABLE = "asset_app_profiles";
@@ -3133,15 +3135,45 @@ function AutoTriggerCard({rows,settings}){
 function normalizeStockQuery(v){ return String(v||"").toLowerCase().replace(/\s+/g,"").replace(/[()\-_.]/g,""); }
 function buildServerSymbolFromRow(row){ if(row.symbol) return row.symbol; if((row.market==="KRX"||row.market==="KRX ETF")&&/^\d{6}$/.test(String(row.code||row.ticker||""))) return `${String(row.code||row.ticker).padStart(6,"0")}.KS`; return String(row.ticker||row.code||"").trim().toUpperCase(); }
 function normalizeCurrency(v){ return String(v||"KRW").trim().toUpperCase(); }
-function getFxUsdKrw(settings){ return n(settings?.fxUsdKrw||0)>0?n(settings.fxUsdKrw):1; }
-function priceToKRW(row, settings){ const price=n(row.currentPrice||row.avgPrice); return normalizeCurrency(row.currency)==="USD" ? price*getFxUsdKrw(settings) : price; }
-function investedToKRW(row, settings){ const price=n(row.avgPrice); return normalizeCurrency(row.currency)==="USD" ? price*getFxUsdKrw(settings) : price; }
-async function fetchFxUsdKrw(){
+function getFxUsdKrw(settings){ return n(settings?.fxUsdKrw||0)>0?n(settings.fxUsdKrw):0; }
+function priceToKRW(row, settings){ const price=n(row.currentPrice||row.avgPrice); const fx=getFxUsdKrw(settings); return normalizeCurrency(row.currency)==="USD" ? (fx>0?price*fx:0) : price; }
+function investedToKRW(row, settings){ const price=n(row.avgPrice); const fx=getFxUsdKrw(settings); return normalizeCurrency(row.currency)==="USD" ? (fx>0?price*fx:0) : price; }
+function loadMarketCache(){ try{ return JSON.parse(localStorage.getItem(MARKET_CACHE_KEY)||'{"quotes":{},"fx":null}'); }catch{ return {quotes:{},fx:null}; } }
+function saveMarketCache(cache){ try{ localStorage.setItem(MARKET_CACHE_KEY, JSON.stringify({quotes:{},fx:null,...cache,updatedAt:new Date().toISOString()})); }catch(error){ console.warn("시세 캐시 저장 실패:", error); } }
+function isFreshMarketAsOf(asOf, maxDays=MAX_MARKET_CACHE_AGE_DAYS){ const t=new Date(asOf||0).getTime(); return Number.isFinite(t)&&t>0&&Date.now()-t<=maxDays*24*60*60*1000; }
+function cacheQuoteKey(row){ return buildServerSymbolFromRow(row) || String(row.name||row.id||"").trim(); }
+function getCachedQuote(row){ const cache=loadMarketCache(); const key=cacheQuoteKey(row); const hit=key&&cache.quotes?cache.quotes[key]:null; return hit&&n(hit.currentPrice)>0?hit:null; }
+function rememberQuote(row, quote){ if(!quote||n(quote.currentPrice)<=0)return; const cache=loadMarketCache(); const key=cacheQuoteKey({...row,...quote}); if(!key)return; cache.quotes={...(cache.quotes||{}),[key]:{...quote,cachedAt:new Date().toISOString()}}; saveMarketCache(cache); }
+async function fetchJsonWithTimeout(url, options={}, timeoutMs=7000){
+  const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(), timeoutMs);
+  try{ const r=await fetch(url,{...options,signal:controller.signal}); const text=await r.text(); let json={}; try{ json=text?JSON.parse(text):{}; }catch{ json={raw:text}; } if(!r.ok) throw new Error(`HTTP ${r.status}`); return json; }
+  finally{ clearTimeout(timer); }
+}
+async function fetchFxUsdKrw(settings={}){
   const endpoints=["/api/fx?base=USD&quote=KRW","/api/exchange-rate?base=USD&quote=KRW"];
   for(const url of endpoints){
-    try{ const r=await fetch(url); if(!r.ok) continue; const j=await r.json(); const rate=n(j.rate||j.usdKrw||j.USDKRW||j.item?.rate); if(rate>0) return {rate,asOf:j.asOf||j.date||j.item?.asOf||new Date().toISOString(),source:url}; }catch{}
+    try{ const j=await fetchJsonWithTimeout(url,{},6500); const rate=n(j.rate||j.usdKrw||j.USDKRW||j.item?.rate); if(rate>0){ const fx={rate,asOf:j.asOf||j.date||j.item?.asOf||new Date().toISOString(),source:url,stale:false}; const cache=loadMarketCache(); saveMarketCache({...cache,fx}); return fx; } }
+    catch(error){ console.warn("환율 API 실패:", url, error?.message||error); }
   }
-  throw new Error("환율 API 응답 없음");
+  const cache=loadMarketCache();
+  if(cache.fx&&n(cache.fx.rate)>0) return {...cache.fx,stale:true,source:cache.fx.source||"cache"};
+  if(n(settings.fxUsdKrw)>0) return {rate:n(settings.fxUsdKrw),asOf:settings.fxAsOf||"수동/기존값",source:"settings",stale:true};
+  throw new Error("환율 API 응답 없음 및 기존 환율 없음");
+}
+async function fetchQuoteWithFallback(row, previousRow=null){
+  const symbol=buildServerSymbolFromRow(row);
+  try{
+    const j=await fetchJsonWithTimeout(`/api/quote?symbol=${encodeURIComponent(symbol)}&name=${encodeURIComponent(row.name||"")}`,{},6500);
+    if(!j.ok||!j.item||n(j.item.currentPrice)<=0) throw new Error("invalid quote");
+    const quote={currentPrice:n(j.item.currentPrice),quoteAsOf:j.item.asOf||new Date().toISOString(),symbol:j.item.symbol||row.symbol,market:j.item.market||row.market,currency:j.item.currency||row.currency,stale:false};
+    rememberQuote(row,quote); return quote;
+  }catch(error){
+    console.warn("현재가 API 실패:", symbol, error?.message||error);
+    const cached=getCachedQuote(row);
+    if(cached) return {currentPrice:n(cached.currentPrice),quoteAsOf:cached.quoteAsOf||cached.asOf||cached.cachedAt,symbol:cached.symbol||row.symbol,market:cached.market||row.market,currency:cached.currency||row.currency,stale:true,source:"cache"};
+    if(previousRow&&n(previousRow.currentPrice)>0) return {currentPrice:n(previousRow.currentPrice),quoteAsOf:previousRow.quoteAsOf||"기존값",symbol:previousRow.symbol||row.symbol,market:previousRow.market||row.market,currency:previousRow.currency||row.currency,stale:true,source:"previous"};
+    throw new Error("현재가 API 응답 없음 및 기존 가격 없음");
+  }
 }
 
 function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
@@ -3183,11 +3215,10 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
     setForm(next);setKw(item.name||"");
     try{
       setFetching(true);
-      const r=await fetch(`/api/quote?symbol=${encodeURIComponent(buildServerSymbolFromRow(next))}&name=${encodeURIComponent(item.name)}`);
-      const j=await r.json();
-      if(!r.ok||!j.ok||!j.item)throw new Error();
-      setForm(f=>({...f,currentPrice:j.item.currentPrice?String(j.item.currentPrice):f.currentPrice,quoteAsOf:j.item.asOf||f.quoteAsOf,symbol:j.item.symbol||f.symbol,market:j.item.market||f.market,currency:j.item.currency||f.currency}));
-    }catch{setQErr("현재가 자동 조회 실패. 직접 입력하세요.");}
+      const q=await fetchQuoteWithFallback(next, null);
+      setForm(f=>({...f,currentPrice:q.currentPrice?String(q.currentPrice):f.currentPrice,quoteAsOf:q.quoteAsOf||f.quoteAsOf,symbol:q.symbol||f.symbol,market:q.market||f.market,currency:q.currency||f.currency}));
+      setQErr(q.stale?"현재가 API 실패로 캐시/기존 가격을 사용했습니다.":"");
+    }catch{setQErr("현재가 자동 조회 실패. 기존 가격도 없어 직접 입력이 필요합니다.");}
     finally{setFetching(false);}
   };
 
@@ -3202,26 +3233,36 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
   };
 
   const bulkUpdate=async()=>{
-    setBulkUp(true);
+    setBulkUp(true); setQErr("");
     try{
       const items=data.portfolio.map(p=>({id:p.id,symbol:buildServerSymbolFromRow(p),name:p.name,code:p.code,ticker:p.ticker}));
-      const r=await fetch("/api/bulk-quotes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items})});
-      const j=await r.json();
-      if(!r.ok||!j.ok)throw new Error();
-      update(d=>({...d,settings:{...d.settings,marketDataLastUpdated:new Date().toISOString()},portfolio:d.portfolio.map(p=>{ const hit=(j.results||[]).find(x=>x.id===p.id); if(!hit||!hit.ok) return p; return {...p,currentPrice:n(hit.currentPrice||p.currentPrice),quoteAsOf:hit.asOf||p.quoteAsOf,symbol:hit.symbol||p.symbol,currency:hit.currency||p.currency}; })}));
-      setMarketMsg("현재가 갱신 완료");
-    }catch{setQErr("전체 업데이트 실패");}
+      let results=[];
+      try{ const j=await fetchJsonWithTimeout("/api/bulk-quotes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items})},9000); if(!j.ok) throw new Error("bulk invalid"); results=Array.isArray(j.results)?j.results:[]; }
+      catch(error){ console.warn("전체 현재가 API 실패, 개별 fallback 실행:", error?.message||error); results=await Promise.all(data.portfolio.map(async p=>{ try{ const q=await fetchQuoteWithFallback(p,p); return {id:p.id,ok:true,currentPrice:q.currentPrice,asOf:q.quoteAsOf,symbol:q.symbol,currency:q.currency,stale:q.stale}; }catch{ return {id:p.id,ok:false}; } })); }
+      let okCount=0, staleCount=0, failCount=0;
+      update(d=>({...d,settings:{...d.settings,marketDataLastUpdated:new Date().toISOString()},portfolio:d.portfolio.map(p=>{
+        const hit=(results||[]).find(x=>x.id===p.id);
+        if(!hit||!hit.ok||n(hit.currentPrice)<=0){ failCount++; return p; }
+        okCount++; if(hit.stale) staleCount++;
+        const next={...p,currentPrice:n(hit.currentPrice||p.currentPrice),quoteAsOf:hit.asOf||hit.quoteAsOf||p.quoteAsOf,symbol:hit.symbol||p.symbol,currency:hit.currency||p.currency};
+        rememberQuote(next,{currentPrice:next.currentPrice,quoteAsOf:next.quoteAsOf,symbol:next.symbol,market:next.market,currency:next.currency});
+        return next;
+      })}));
+      setMarketMsg(`현재가 갱신 완료: 성공 ${okCount}개${staleCount?`, 기존/캐시 사용 ${staleCount}개`:""}${failCount?`, 실패 ${failCount}개`:""}`);
+      if(failCount>0) setQErr("일부 종목은 API 실패로 기존 가격을 유지했습니다.");
+    }catch(error){setQErr(`전체 업데이트 실패: ${error?.message||"알 수 없는 오류"}. 기존 가격은 유지됩니다.`);}
     finally{setBulkUp(false);}
   };
 
   const updateFx=async()=>{
-    setFxBusy(true); setMarketMsg("");
+    setFxBusy(true); setMarketMsg(""); setQErr("");
     try{
-      const fx=await fetchFxUsdKrw();
+      const fx=await fetchFxUsdKrw(data.settings||{});
       update(d=>({...d,settings:{...d.settings,fxUsdKrw:fx.rate,fxAsOf:fx.asOf,marketDataLastUpdated:new Date().toISOString()}}));
-      setMarketMsg(`환율 갱신 완료: 1 USD = ${fmt(fx.rate)} KRW`);
+      setMarketMsg(`${fx.stale?"환율 API 실패 · 기존/캐시 환율 유지":"환율 갱신 완료"}: 1 USD = ${fmt(fx.rate)} KRW`);
+      if(fx.stale) setQErr("환율 API가 실패하여 마지막 정상 환율을 사용했습니다. 환율 기준시각을 확인하세요.");
     }catch{
-      setQErr("환율 자동 조회 실패. 설정에서 USD/KRW 환율을 직접 입력하세요.");
+      setQErr("환율 자동 조회 실패. 기존 환율도 없어 USD 자산 평가는 차단됩니다. 설정에서 USD/KRW 환율을 직접 입력하세요.");
     }finally{setFxBusy(false);}
   };
 
