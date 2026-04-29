@@ -37,7 +37,7 @@ const DEFAULT_SETTINGS = {
   currentAge:36, retireAge:55, lifeExpectancy:100, currentNetWorthOverride:"",
   monthlySalary1:0, monthlySalary2:0, monthlyInvestDefault:2000000,
   annualReturnNasdaq:0.12, annualReturnDividend:0.08, annualRaise:0.03, annualInflation:0.025,
-  isaAnnualLimit:20000000, isaCycleYears:5, isaPensionTransferDeduction:3000000, isaPensionTransferRatio:1,
+  isaAnnualLimit:20000000, isaCycleYears:5, isaStartYear:2026, isaStartMonth:2, isaPensionTransferDeduction:3000000, isaPensionTransferRatio:1,
   annualPensionContribution:0, pensionAnnualTaxCreditLimit:9000000, pensionTaxCreditRate:0.165,
   annualIsaContributionCurrent:0, annualTaxableIncomeEstimate:0, annualTaxOptimizingCash:0, expectedTaxableProfitRate:0.08,
   isaTaxFreeLimit:2000000, isaTaxRate:0.099, taxableDividendTaxRate:0.154, cashTaxRate:0.154,
@@ -3445,7 +3445,91 @@ function calcTaxOptimization(data, taxAnalysis) {
   return { isa, taxable, pension, irp, pensionCurrent, pensionLimit, pensionGap, pensionExtraCredit, isaCurrent, isaLimit, isaGap, isaSavedCurrent, taxableTaxNow, expectedIsaSaving, totalImmediateBenefit, warnings, recommendations };
 }
 
-function TaxTab({ data, update, taxAnalysis }) {
+
+// ─── 세금 캘린더 / 연간 타임라인 ──────────────────────────────────────────────
+function buildTaxCalendar(data, taxAnalysis, futureSim) {
+  const s = data.settings || {};
+  const now = new Date();
+  const year = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const groups = Object.fromEntries((taxAnalysis || []).map(g => [g.name, g]));
+  const taxableTax = n(groups.일반계좌?.estimatedTax);
+  const isaGap = Math.max(n(s.isaAnnualLimit) - n(s.annualIsaContributionCurrent), 0);
+  const pensionGap = Math.max(n(s.pensionAnnualTaxCreditLimit) - n(s.annualPensionContribution), 0);
+  const isaStartYear = n(s.isaStartYear) || year;
+  const isaStartMonth = clamp(n(s.isaStartMonth) || 1, 1, 12);
+  const isaCycleYears = Math.max(n(s.isaCycleYears) || 5, 1);
+  const isaMaturityYear = isaStartYear + isaCycleYears;
+  const isaMaturityMonth = isaStartMonth;
+  const finalFuture = Array.isArray(futureSim) && futureSim.length ? futureSim[futureSim.length - 1] : null;
+  const target = n(s.retirementTargetAmount);
+  const projected = n(finalFuture?.total);
+  const events = [
+    { month:5, type:"신고", title:"종합소득세", amount:taxableTax, desc: taxableTax > 0 ? `일반계좌 추정 과세 노출 ${fmt(taxableTax)}원 점검` : "근로 외 소득·금융소득·사업소득 여부 확인", tone:"amber" },
+    { month:7, type:"납부", title:"재산세 1기", amount:0, desc:"주택·건물분 재산세 납부 여부 확인", tone:"info" },
+    { month:9, type:"납부", title:"재산세 2기", amount:0, desc:"토지·주택분 재산세 납부 여부 확인", tone:"info" },
+    { month:12, type:"절세", title:"연금/IRP 한도 마감", amount:pensionGap, desc:pensionGap > 0 ? `세액공제 잔여 한도 ${fmt(pensionGap)}원` : "연금 세액공제 한도 사용 완료", tone:pensionGap > 0 ? "green" : "info" },
+    { month:12, type:"절세", title:"ISA 연간 한도 점검", amount:isaGap, desc:isaGap > 0 ? `ISA 남은 납입 여력 ${fmt(isaGap)}원` : "ISA 연간 납입 한도 사용 완료", tone:isaGap > 0 ? "green" : "info" },
+  ];
+  if (isaMaturityYear === year) {
+    events.push({ month:isaMaturityMonth, type:"만기", title:"ISA 만기", amount:0, desc:"만기자금 중 연금 이전·새 ISA 재개설·일반계좌 분리를 결정", tone:"red" });
+  } else {
+    events.push({ month:12, type:"예정", title:`ISA 만기 예정 ${isaMaturityYear}.${String(isaMaturityMonth).padStart(2,"0")}`, amount:0, desc:"올해는 만기 전 준비 단계입니다. 이전 비율과 재개설 계획을 미리 정리하세요.", tone:"accent" });
+  }
+  if (target > 0 && projected > 0) {
+    events.push({ month:12, type:"시뮬", title:"은퇴 시뮬 점검", amount:projected-target, desc: projected >= target ? `목표 대비 예상 초과 ${fmt(projected-target)}원` : `목표 대비 예상 부족 ${fmt(target-projected)}원`, tone:projected >= target ? "green" : "amber" });
+  }
+  const months = Array.from({ length:12 }, (_,i) => ({ month:i+1, label:`${i+1}월`, events:events.filter(e => e.month === i+1) }));
+  const upcoming = events.filter(e => e.month >= currentMonth).sort((a,b)=>a.month-b.month).slice(0,4);
+  const next = upcoming[0] || events.sort((a,b)=>a.month-b.month)[0];
+  const actions = [];
+  if (taxableTax > 0) actions.push(`5월 종합소득세 전 일반계좌 손익과 배당 내역을 정리하세요.`);
+  if (isaGap > 0) actions.push(`12월 전 ISA 잔여 한도 ${fmt(isaGap)}원을 월별로 나눠 납입 계획을 세우세요.`);
+  if (pensionGap > 0) actions.push(`연말정산 전 연금/IRP 잔여 한도 ${fmt(pensionGap)}원을 확인하세요.`);
+  if (isaMaturityYear <= year + 1) actions.push(`ISA 만기가 가까우면 연금 이전 금액과 새 ISA 재개설 금액을 미리 정하세요.`);
+  return { year, months, events, upcoming, next, actions: actions.slice(0,4), isaMaturityYear, isaMaturityMonth, taxableTax, isaGap, pensionGap };
+}
+
+function TaxCalendarTimeline({ calendar }) {
+  const toneClass = (t) => t === "red" ? "badge-red" : t === "amber" ? "badge-amber" : t === "green" ? "badge-green" : t === "accent" ? "badge-accent" : "badge-muted";
+  return (
+    <div className="card">
+      <div className="card-title">
+        <div>
+          <h3>세금 캘린더 · 연간 타임라인</h3>
+          <p className="small muted" style={{marginTop:4}}>taxAnalysis와 futureSim을 연결해 신고·납부·절세·ISA 만기 일정을 한눈에 보여줍니다.</p>
+        </div>
+        <span className="badge badge-accent">{calendar.year}년</span>
+      </div>
+      <div className="g3" style={{marginBottom:14}}>
+        <div className="compact-insight amber"><span>🧾</span><div><strong>다음 세금 일정</strong><p>{calendar.next ? `${calendar.next.month}월 · ${calendar.next.title}` : "등록된 일정 없음"}</p></div></div>
+        <div className="compact-insight green"><span>🌱</span><div><strong>절세 잔여 여력</strong><p>ISA {fmt(calendar.isaGap)}원 · 연금 {fmt(calendar.pensionGap)}원</p></div></div>
+        <div className="compact-insight info"><span>🏁</span><div><strong>ISA 만기</strong><p>{calendar.isaMaturityYear}.{String(calendar.isaMaturityMonth).padStart(2,"0")} 예정</p></div></div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gap:8,alignItems:"stretch"}}>
+        {calendar.months.map(m => (
+          <div key={m.month} style={{minHeight:118,border:"1px solid var(--border)",borderRadius:12,background:"var(--surface2)",padding:8}}>
+            <div className="row-between" style={{marginBottom:7}}><strong style={{fontSize:12}}>{m.label}</strong>{m.events.length>0&&<span className="badge badge-muted">{m.events.length}</span>}</div>
+            <div className="stack" style={{gap:6}}>
+              {m.events.length ? m.events.map((e,idx)=>(
+                <div key={`${e.title}-${idx}`} style={{border:"1px solid var(--border2)",borderRadius:10,padding:7,background:"rgba(255,255,255,.035)"}}>
+                  <span className={`badge ${toneClass(e.tone)}`}>{e.type}</span>
+                  <div style={{fontSize:11.5,fontWeight:800,marginTop:5,color:"var(--text)"}}>{e.title}</div>
+                  <div style={{fontSize:10.5,color:"var(--text3)",lineHeight:1.35,marginTop:3}}>{e.desc}</div>
+                </div>
+              )) : <div style={{fontSize:11,color:"var(--text3)",paddingTop:20,textAlign:"center"}}>주요 일정 없음</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+      {calendar.actions.length > 0 && <div className="ai-suggest-card">
+        <div><div className="ai-suggest-title">AI 세금 코칭</div><div className="ai-suggest-desc">{calendar.actions[0]}</div><div className="ai-chip-row">{calendar.actions.slice(1).map(a=><span key={a} className="ai-chip">{a}</span>)}</div></div>
+      </div>}
+    </div>
+  );
+}
+
+function TaxTab({ data, update, taxAnalysis, futureSim }) {
   const s = data.settings || {};
   const set = (k, v) => update(d => ({ ...d, settings:{ ...d.settings, [k]:v } }));
   const opt = useMemo(() => calcTaxOptimization(data, taxAnalysis), [data, taxAnalysis]);
@@ -3453,13 +3537,15 @@ function TaxTab({ data, update, taxAnalysis }) {
 
   // 자연어 요약
   const taxNLP = useMemo(() => buildTaxNLP(opt, taxAnalysis), [opt, taxAnalysis]);
-  const taxCoach = useMemo(() => buildIntegratedCoach({ area:"세금·절세", data, taxAnalysis }), [data, taxAnalysis]);
+  const taxCoach = useMemo(() => buildIntegratedCoach({ area:"세금·절세", data, taxAnalysis, futureSim }), [data, taxAnalysis, futureSim]);
+  const taxCalendar = useMemo(() => buildTaxCalendar(data, taxAnalysis, futureSim), [data, taxAnalysis, futureSim]);
 
   return (
     <div className="stack">
       {/* ── 자연어 요약 카드 ── */}
       <NaturalInsightCard icon={taxNLP.icon} title={taxNLP.title} message={taxNLP.message} tone={taxNLP.tone} actions={taxNLP.actions}/>
       <AICoachPanel coach={taxCoach}/>
+      <TaxCalendarTimeline calendar={taxCalendar}/>
       <div className="kpi-grid">
         <KpiCard label="추가 세액공제 가능액" value={opt.pensionExtraCredit} unit="원" accent/>
         <KpiCard label="ISA 예상 절세효과" value={opt.expectedIsaSaving} unit="원"/>
@@ -6060,7 +6146,7 @@ export default function App() {
             {tab==="professional"&&<ProfessionalTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} monthlySeries={monthlySeries}/>}
             {tab==="risk"&&<Step2MddRiskPanel data={data} financialAnalysis={financialAnalysis}/>}
             {tab==="analysis"&&<AnalysisTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboardDetail={dashboardDetail}/>}
-            {tab==="tax"&&<TaxTab data={data} update={update} taxAnalysis={taxAnalysis}/>}
+            {tab==="tax"&&<TaxTab data={data} update={update} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="simulation"&&<SimulationTab data={data} futureSim={futureSim}/>}
             {tab==="monthlyReport"&&<MonthlyReportTab data={data} monthlySeries={monthlySeries} budgetAnalysis={budgetAnalysis} financialAnalysis={financialAnalysis} dashboard={dashboard} dashboardDetail={dashboardDetail} taxAnalysis={taxAnalysis}/>}
             {tab==="decision"&&<DecisionCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
