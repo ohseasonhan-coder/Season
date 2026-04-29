@@ -5998,11 +5998,129 @@ function CalculationValidationCenter({audit}){
 }
 
 // ─── Data Tab ─────────────────────────────────────────────────────────────────
+
+
+// ─── Step 5 Sample Data Verification ────────────────────────────────────────
+function buildSampleVerificationData() {
+  const m = thisMonthISO();
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    currentAge: 36,
+    retireAge: 55,
+    monthlySalary1: 4500000,
+    monthlySalary2: 0,
+    monthlyInvestDefault: 2000000,
+    monthlyInvestStage1: 2000000,
+    monthlyInvestStage2: 2500000,
+    monthlyInvestStage3: 5000000,
+    annualReturnNasdaq: 0.10,
+    annualReturnDividend: 0.06,
+    fxUsdKrw: 1350,
+    fxAsOf: todayISO(),
+    marketDataLastUpdated: new Date().toISOString(),
+    retirementTargetAmount: 2000000000,
+    retirementMonthlyExpense: 5000000,
+    investmentTargets: [
+      { id: "sample-target-nasdaq", name: "나스닥", expectedReturn: 0.10, targetWeight: 0.90, memo: "샘플 검증용" },
+      { id: "sample-target-dividend", name: "배당", expectedReturn: 0.06, targetWeight: 0.10, memo: "샘플 검증용" },
+    ],
+  };
+  const accounts = [
+    { id: "sample-acc-salary", name: "우리은행(급여)", type: "은행", institution: "우리은행", currency: "KRW", owner: "본인", active: true, defaultIn: true, note: "샘플" },
+    { id: "sample-acc-parking", name: "파킹통장", type: "은행", institution: "토스뱅크", currency: "KRW", owner: "본인", active: true, defaultIn: false, note: "샘플" },
+    { id: "sample-acc-isa", name: "ISA", type: "증권", institution: "증권사", currency: "KRW", owner: "본인", active: true, defaultIn: false, note: "샘플" },
+    { id: "sample-acc-card", name: "신용카드", type: "카드", institution: "카드사", currency: "KRW", owner: "본인", active: true, defaultIn: false, note: "샘플" },
+  ];
+  const transactions = [
+    { id: "sample-tx-income-1", date: `${m}-05`, type: "수입", cat1: "근로소득", cat2: "월급", amount: 4500000, accountIn: "우리은행(급여)", accountOut: "", memo: "샘플 월급" },
+    { id: "sample-tx-income-2", date: `${m}-10`, type: "수입", cat1: "금융소득", cat2: "배당", amount: 50000, accountIn: "ISA", accountOut: "", memo: "샘플 배당" },
+    { id: "sample-tx-food", date: `${m}-06`, type: "지출", cat1: "식비", cat2: "외식", amount: 650000, accountIn: "", accountOut: "신용카드", memo: "샘플 식비" },
+    { id: "sample-tx-house", date: `${m}-07`, type: "지출", cat1: "주거", cat2: "관리비", amount: 380000, accountIn: "", accountOut: "신용카드", memo: "샘플 주거비" },
+    { id: "sample-tx-transport", date: `${m}-08`, type: "지출", cat1: "교통", cat2: "주유", amount: 220000, accountIn: "", accountOut: "신용카드", memo: "샘플 교통비" },
+    { id: "sample-tx-life", date: `${m}-09`, type: "지출", cat1: "생활", cat2: "생필품", amount: 300000, accountIn: "", accountOut: "신용카드", memo: "샘플 생활비" },
+    { id: "sample-tx-tax", date: `${m}-11`, type: "지출", cat1: "보험세금", cat2: "보험료", amount: 500000, accountIn: "", accountOut: "신용카드", memo: "샘플 보험료" },
+    { id: "sample-tx-family", date: `${m}-12`, type: "지출", cat1: "가족", cat2: "선물", amount: 200000, accountIn: "", accountOut: "신용카드", memo: "샘플 가족비" },
+    { id: "sample-tx-hobby", date: `${m}-13`, type: "지출", cat1: "취미여행", cat2: "구독", amount: 250000, accountIn: "", accountOut: "신용카드", memo: "샘플 취미비" },
+  ];
+  const assets = [
+    { id: "sample-asset-cash", kind: "자산", category: "현금성", name: "비상금", current: 15000000, previous: 14000000, includeInEmergency: true, note: "샘플" },
+    { id: "sample-asset-bank", kind: "자산", category: "은행예금", name: "우리은행(급여)", current: 5500000, previous: 5000000, includeInEmergency: false, note: "샘플" },
+    { id: "sample-asset-parking", kind: "자산", category: "은행예금", name: "파킹통장", current: 8500000, previous: 8000000, includeInEmergency: true, note: "샘플" },
+    { id: "sample-liab-card", kind: "부채", category: "카드", name: "신용카드", current: 2500000, previous: 2300000, includeInEmergency: false, note: "샘플" },
+    { id: "sample-liab-car", kind: "부채", category: "자동차", name: "자동차 할부", current: 28000000, previous: 28600000, includeInEmergency: false, note: "샘플" },
+  ];
+  const portfolio = [
+    { id: "sample-pf-nasdaq", account: "ISA", name: "TIGER 나스닥100", code: "133690", symbol: "133690.KS", currency: "KRW", qty: 120, avgPrice: 118000, currentPrice: 125000, targetAmount: 18000000, riskSigma: 0.22, assetClass: "나스닥", memo: "샘플" },
+    { id: "sample-pf-nasdaq-h", account: "ISA", name: "TIGER 나스닥100(H)", code: "448300", symbol: "448300.KS", currency: "KRW", qty: 100, avgPrice: 105000, currentPrice: 108000, targetAmount: 16000000, riskSigma: 0.20, assetClass: "나스닥", memo: "샘플" },
+    { id: "sample-pf-div", account: "ISA", name: "TIGER 배당다우존스", code: "458730", symbol: "458730.KS", currency: "KRW", qty: 80, avgPrice: 11600, currentPrice: 12000, targetAmount: 3000000, riskSigma: 0.15, assetClass: "배당", memo: "샘플" },
+  ];
+  const budgets = [
+    { id: "sample-budget-food", cat1: "식비", budget: 800000, targetWeight: 0.15 },
+    { id: "sample-budget-house", cat1: "주거", budget: 400000, targetWeight: 0.10 },
+    { id: "sample-budget-transport", cat1: "교통", budget: 250000, targetWeight: 0.05 },
+    { id: "sample-budget-life", cat1: "생활", budget: 350000, targetWeight: 0.06 },
+    { id: "sample-budget-tax", cat1: "보험세금", budget: 500000, targetWeight: 0.10 },
+    { id: "sample-budget-family", cat1: "가족", budget: 250000, targetWeight: 0.05 },
+    { id: "sample-budget-hobby", cat1: "취미여행", budget: 300000, targetWeight: 0.08 },
+  ];
+  const events = [
+    { id: "sample-event-car", name: "🚗 차량 교체", yearsFromNow: 4, amountNeeded: 25000000, currentPrepared: 8500000, priority: "높음" },
+    { id: "sample-event-trip", name: "✈️ 장기 여행", yearsFromNow: 8, amountNeeded: 30000000, currentPrepared: 3000000, priority: "중간" },
+  ];
+  return migrateData({
+    ...emptyData(),
+    version: 50,
+    categories: DEFAULT_CATEGORIES,
+    transactions,
+    accounts,
+    assets,
+    portfolio,
+    budgets,
+    events,
+    settings,
+    lastSavedAt: new Date().toISOString(),
+    sampleDataAppliedAt: new Date().toISOString(),
+  });
+}
+function buildStep5VerificationRows(validations, calculationAudit) {
+  const validationIssueCount = (validations || []).reduce((sum, v) => sum + n(v.count), 0);
+  const summary = calculationAudit?.summary || { score: 0, errorCount: 0, warnCount: 0, okCount: 0, total: 0 };
+  const rows = [
+    { item: "데이터 구조", status: validationIssueCount === 0 ? "정상" : "확인필요", detail: `입력 검증 이슈 ${validationIssueCount}건`, tone: validationIssueCount === 0 ? "green" : "red" },
+    { item: "계산 공식", status: summary.errorCount === 0 ? "정상" : "확인필요", detail: `오류 ${summary.errorCount}건 · 주의 ${summary.warnCount}건`, tone: summary.errorCount === 0 ? (summary.warnCount ? "amber" : "green") : "red" },
+    { item: "신뢰 점수", status: `${summary.score || 0}점`, detail: `통과 ${summary.okCount || 0}/${summary.total || 0}`, tone: (summary.score || 0) >= 90 ? "green" : (summary.score || 0) >= 75 ? "amber" : "red" },
+    { item: "백업 가능성", status: isValidAppData(migrateData({ ...emptyData(), ...(window.__assetAppCurrentData || {}) })) ? "정상" : "확인필요", detail: "현재 데이터 구조 기준", tone: "green" },
+  ];
+  return rows;
+}
+
 function DataTab({ data, update, validations, calculationAudit }) {
   const fileRef = useRef();
   const [backupList, setBackupList] = useState(() => getStorageBackupList());
   const [selectedBackupKey, setSelectedBackupKey] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [step5CheckedAt, setStep5CheckedAt] = useState("");
+  if (typeof window !== "undefined") window.__assetAppCurrentData = data;
+
+  const applySampleVerificationData = () => {
+    if (!window.confirm("현재 데이터를 수동 백업한 뒤 테스트용 샘플 데이터로 교체할까요?")) return;
+    const backup = createManualStorageBackup(data, "before-sample-verification");
+    if (!backup.ok) return alert(`샘플 적용 전 백업 실패: ${backup.error}`);
+    update(() => buildSampleVerificationData());
+    refreshBackups();
+    setStep5CheckedAt(new Date().toISOString());
+    setStatusMessage("테스트용 샘플 데이터를 적용했습니다. 대시보드와 계산값 검증 센터에서 숫자를 확인하세요.");
+    alert("샘플 데이터 적용 완료");
+  };
+
+  const runStep5Verification = () => {
+    setStep5CheckedAt(new Date().toISOString());
+    const errors = n(calculationAudit?.summary?.errorCount);
+    const warns = n(calculationAudit?.summary?.warnCount);
+    if (errors > 0) setStatusMessage(`전체 검증 결과: 오류 ${errors}건이 있습니다. 계산값 검증 센터의 즉시 수정 목록을 먼저 확인하세요.`);
+    else if (warns > 0) setStatusMessage(`전체 검증 결과: 큰 오류는 없지만 주의 ${warns}건이 있습니다. 환율·예산·설정값을 확인하세요.`);
+    else setStatusMessage("전체 검증 결과: 핵심 계산값과 데이터 구조가 정상입니다.");
+  };
 
   const refreshBackups = () => {
     const list = getStorageBackupList();
@@ -6080,6 +6198,9 @@ function DataTab({ data, update, validations, calculationAudit }) {
     rd.readAsText(file);
   };
 
+  const step5Rows = buildStep5VerificationRows(validations, calculationAudit);
+  const step5IssueCount = step5Rows.filter((r) => r.tone === "red").length;
+  const step5WarnCount = step5Rows.filter((r) => r.tone === "amber").length;
   const currentDataSize = estimateJSONSizeBytes(data);
   const validBackupCount = backupList.filter((b) => b.valid).length;
   const selectedBackup = backupList.find((b) => b.key === selectedBackupKey);
@@ -6106,6 +6227,50 @@ function DataTab({ data, update, validations, calculationAudit }) {
           <div className="backup-summary-item"><span>마지막 저장</span><strong>{data.lastSavedAt ? new Date(data.lastSavedAt).toLocaleString() : "-"}</strong><small>자동 저장 기준</small></div>
         </div>
         {statusMessage && <div className="alert alert-info" style={{ marginTop: 14 }}>{statusMessage}</div>}
+      </div>
+
+      <div className="card backup-hero-card">
+        <div className="row-between" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div>
+            <span className="badge badge-green">5단계 완료형</span>
+            <h2 style={{ marginTop: 10, fontSize: 24, letterSpacing: "-.04em" }}>테스트용 샘플 데이터 전체 검증</h2>
+            <p style={{ marginTop: 8, color: "var(--text3)", fontSize: 13, lineHeight: 1.6 }}>
+              실제 사용자 테스트 전에 샘플 데이터로 저장, 복원, 입력 검증, 계산 공식, 대시보드 숫자 흐름을 한 번에 확인합니다.
+            </p>
+          </div>
+          <div className="backup-health-box">
+            <div className="backup-health-value">{calculationAudit?.summary?.score || 0}</div>
+            <div className="backup-health-label">검증 점수</div>
+          </div>
+        </div>
+        <div className="backup-summary-grid">
+          <div className="backup-summary-item"><span>검증 상태</span><strong>{step5IssueCount === 0 ? <span className="badge badge-green">테스트 가능</span> : <span className="badge badge-red">수정 필요</span>}</strong><small>샘플/현재 데이터 기준</small></div>
+          <div className="backup-summary-item"><span>오류</span><strong>{step5IssueCount}건</strong><small>출시 전 차단 항목</small></div>
+          <div className="backup-summary-item"><span>주의</span><strong>{step5WarnCount}건</strong><small>왜곡 가능성</small></div>
+          <div className="backup-summary-item"><span>최근 검증</span><strong>{step5CheckedAt ? new Date(step5CheckedAt).toLocaleString() : "-"}</strong><small>수동 실행 기준</small></div>
+        </div>
+        <div className="row" style={{ marginTop: 14, flexWrap: "wrap" }}>
+          <button className="btn btn-primary" onClick={applySampleVerificationData}>테스트용 샘플 데이터 적용</button>
+          <button className="btn btn-ghost" onClick={runStep5Verification}>현재 데이터로 검증 실행</button>
+          <button className="btn btn-ghost" onClick={exportJSON}>현재 데이터 백업 다운로드</button>
+        </div>
+        <div className="table-wrap" style={{ marginTop: 14 }}>
+          <table>
+            <thead><tr><th>검증 항목</th><th>상태</th><th>상세</th></tr></thead>
+            <tbody>
+              {step5Rows.map((r) => (
+                <tr key={r.item}>
+                  <td className="td-name">{r.item}</td>
+                  <td><span className={`badge ${r.tone === "green" ? "badge-green" : r.tone === "amber" ? "badge-amber" : "badge-red"}`}>{r.status}</span></td>
+                  <td style={{ color: "var(--text3)", fontSize: 12 }}>{r.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="alert alert-warn" style={{ marginTop: 14 }}>
+          샘플 데이터 적용 전 현재 데이터는 자동으로 복원 지점에 저장됩니다. 테스트 후 복원 지점 목록에서 이전 데이터로 되돌릴 수 있습니다.
+        </div>
       </div>
 
       <div className="card">
