@@ -2194,6 +2194,8 @@ function buildCFOScoreSimulation({ data={}, dashboard={}, dashboardDetail={}, fi
   };
 }
 
+function modelSafeScore(v){ return clamp(Math.round(n(v)),0,100); }
+
 function buildCFODecisionModel({ data={}, dashboard={}, dashboardDetail={}, financialAnalysis={}, budgetAnalysis=[], futureSim=[] }) {
   const income = n(dashboard.income);
   const expense = n(dashboard.expense);
@@ -2301,6 +2303,8 @@ function buildCFODecisionModel({ data={}, dashboard={}, dashboardDetail={}, fina
   const baseMetrics = { income, expense, net, emergencyFund, investmentAssets, totalAssetsBase, retireTarget, retirementProgressPct, overBudgetCount:overBudget.length };
   const simulation = buildCFOScoreSimulation({ data, dashboard, dashboardDetail, financialAnalysis, baseMetrics, months:24 });
 
+  const targetWeightSum = (data.settings?.investmentTargets||[]).reduce((sum,t)=>sum+n(t.targetWeight),0);
+
   const message = totalScore >= 85
     ? "현재 재무 구조는 매우 안정적입니다. 큰 방향은 유지하되, 월 1회 점검과 리밸런싱만 해도 충분합니다."
     : totalScore >= 70
@@ -2309,7 +2313,23 @@ function buildCFODecisionModel({ data={}, dashboard={}, dashboardDetail={}, fina
         ? "재무 구조에 관리가 필요한 구간입니다. 모든 기능을 보려 하기보다 가장 위험한 문제 1개부터 해결하는 것이 좋습니다."
         : "현재는 재무 위험 신호가 강합니다. 투자 확대보다 현금흐름과 비상금 안정화가 먼저입니다.";
 
-  return { totalScore, status, tone, toneColor, toneBg, message, scoreItems, scoreLosses, problems: problems.slice(0, 4), actions: actions.slice(0, 4), simulation };
+  const detailedDiagnosis = [
+    { label:"현금흐름", value:`월 순수입 ${fmt(net)}원`, text: income>0 ? `수입 ${fmt(income)}원 대비 지출 ${fmt(expense)}원, 저축률 ${fmtPct(savingsRatePct)}입니다.` : "수입 데이터가 부족해 현금흐름 판단 정확도가 낮습니다." },
+    { label:"안전성", value:`비상금 ${emergencyMonths.toFixed(1)}개월`, text: expense>0 ? `최소 3개월, 안정권 6개월 기준으로 ${emergencyMonths<3?"위험 구간":emergencyMonths<6?"보강 구간":"안정 구간"}입니다.` : "월 지출 데이터가 있어야 비상금 개월 수를 판단할 수 있습니다." },
+    { label:"성장성", value:`투자비중 ${fmtPct(investmentRatioPct)}`, text: `투자자산 ${fmt(investmentAssets)}원 / 판단 기준 총자산 ${fmt(totalAssetsBase)}원으로 계산했습니다.` },
+    { label:"장기목표", value:`은퇴 ${fmtPct(retirementProgressPct)}`, text: retireTarget>0 ? `은퇴목표 ${fmt(retireTarget)}원 대비 현재/예상 진행률입니다.` : "은퇴 목표금액을 입력하면 장기 목표 달성률이 더 정확해집니다." },
+  ];
+  const nextPlan = [
+    { month:"1개월", title: actions[0]?.title || "데이터 입력 정리", score:modelSafeScore(totalScore + (actions[0]?.expectedScore||2)), text: actions[0]?.desc || "거래·자산·포트폴리오 입력값을 먼저 정리합니다." },
+    { month:"3개월", title: emergencyMonths<3?"비상금 3개월치 접근":"예산 초과 항목 안정화", score: simulation.checkpoints.find(r=>r.month===3)?.score || totalScore, text: "저축/투자 루틴이 유지되는지 확인하는 구간입니다." },
+    { month:"6개월", title: "CFO 점수 재평가", score: simulation.checkpoints.find(r=>r.month===6)?.score || totalScore, text: "비상금·투자비중·은퇴 목표를 다시 계산합니다." },
+  ];
+  const guardSummary = {
+    targetWeightSum,
+    legacyWeightSum:n(data.settings?.targetNasdaqWeight)+n(data.settings?.targetNasdaqHWeight)+n(data.settings?.targetDividendWeight),
+    usdHoldingsNeedFx:(data.portfolio||[]).some(p=>normalizeCurrency(p.currency)==="USD") && n(data.settings?.fxUsdKrw)<=0,
+  };
+  return { totalScore, status, tone, toneColor, toneBg, message, scoreItems, scoreLosses, problems: problems.slice(0, 4), actions: actions.slice(0, 4), simulation, detailedDiagnosis, nextPlan, guardSummary };
 }
 
 function CFODecisionDashboard({ model }) {
@@ -2351,6 +2371,39 @@ function CFODecisionDashboard({ model }) {
             </div>
           );
         })}
+      </div>
+
+      <div className="cfo-detail-panel">
+        <div className="cfo-detail-card">
+          <div className="card-title"><h3>상세 판단 근거</h3><span className="badge badge-accent">Detail</span></div>
+          <div className="cfo-detail-list">
+            {(model.detailedDiagnosis||[]).map((d,i)=>(
+              <div key={i} className="cfo-detail-row">
+                <div><strong>{d.label}</strong><br/><span>{d.value}</span></div>
+                <span>{d.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="cfo-detail-card">
+          <div className="card-title"><h3>입력 오류 방어 상태</h3><span className="badge badge-muted">Guard</span></div>
+          <p>계산이 틀어질 수 있는 값은 저장 전·검증센터·대시보드에서 함께 감지하도록 강화했습니다.</p>
+          <div className="cfo-guard-chip-row">
+            <span className={`cfo-guard-chip ${model.guardSummary?.targetWeightSum>1?"danger":"ok"}`}>투자목표 합계 {fmtPct((model.guardSummary?.targetWeightSum||0)*100)}</span>
+            <span className={`cfo-guard-chip ${model.guardSummary?.legacyWeightSum>1?"danger":"ok"}`}>기본비중 합계 {fmtPct((model.guardSummary?.legacyWeightSum||0)*100)}</span>
+            <span className={`cfo-guard-chip ${model.guardSummary?.usdHoldingsNeedFx?"danger":"ok"}`}>USD 환율 {model.guardSummary?.usdHoldingsNeedFx?"필요":"정상"}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="cfo-plan-grid">
+        {(model.nextPlan||[]).map((p,i)=>(
+          <div key={i} className="cfo-plan-card">
+            <small>{p.month} 실행안</small>
+            <strong>{p.score}점</strong>
+            <p><b>{p.title}</b><br/>{p.text}</p>
+          </div>
+        ))}
       </div>
 
       <div className="cfo-action-grid">
@@ -7451,15 +7504,41 @@ export default function App() {
     return{month,income,expense,net:income-expense,totalAssets,totalLiabs,portValue,netWorth:totalAssets-totalLiabs+portValue};
   },[data]);
 
-  const validations=useMemo(()=>[
-    {item:"거래내역 필수값 누락",count:data.transactions.filter(t=>t.type&&(!t.cat1||!t.cat2)).length,where:"거래내역",desc:"구분 선택 시 대분류/소분류 필수"},
-    {item:"거래 금액 오류",count:data.transactions.filter(t=>t.amount!==""&&n(t.amount)<=0).length,where:"거래내역",desc:"금액은 0보다 커야 합니다"},
-    {item:"수입 계좌 누락",count:data.transactions.filter(t=>t.type==="수입"&&!t.inAccount).length,where:"거래내역",desc:"수입은 입금계좌가 필요합니다"},
-    {item:"지출 계좌 누락",count:data.transactions.filter(t=>t.type==="지출"&&!t.outAccount).length,where:"거래내역",desc:"지출은 출금계좌가 필요합니다"},
-    {item:"자산이동 계좌 누락",count:data.transactions.filter(t=>t.type==="자산이동"&&(!t.inAccount||!t.outAccount)).length,where:"거래내역",desc:"자산이동은 입출금 계좌 모두 필요"},
-    {item:"자산/부채 이름 중복",count:data.assets.length-new Set(data.assets.map(a=>a.name)).size,where:"자산·부채",desc:"같은 이름의 항목이 중복되었습니다"},
-    {item:"포트폴리오 현재가 미입력",count:data.portfolio.filter(p=>n(p.qty)>0&&n(p.currentPrice||0)<=0).length,where:"포트폴리오",desc:"보유 수량 있으면 현재가 필요"},
-  ],[data]);
+  const validations=useMemo(()=>{
+    const accountNames = data.accounts.map(a=>String(a.name||"").trim()).filter(Boolean);
+    const duplicateAccountNames = accountNames.length - new Set(accountNames).size;
+    const assetNames = data.assets.map(a=>String(a.name||"").trim()).filter(Boolean);
+    const duplicateAssetNames = assetNames.length - new Set(assetNames).size;
+    const validAccounts = new Set(accountNames);
+    const today = todayISO();
+    const targetWeightSum = (data.settings?.investmentTargets||[]).reduce((sum,t)=>sum+n(t.targetWeight),0);
+    const legacyWeightSum = n(data.settings?.targetNasdaqWeight)+n(data.settings?.targetNasdaqHWeight)+n(data.settings?.targetDividendWeight);
+    const fx = n(data.settings?.fxUsdKrw);
+    const usdHoldings = data.portfolio.filter(p=>normalizeCurrency(p.currency)==="USD" || STOCK_MASTER.find(s=>s.name===p.name||s.symbol===p.symbol)?.currency==="USD");
+    const badReturnSettings = [data.settings?.annualReturnNasdaq,data.settings?.annualReturnDividend,data.settings?.postRetirementReturn]
+      .filter(v=>n(v)<-0.8 || n(v)>1).length;
+    return [
+      {item:"거래내역 필수값 누락",count:data.transactions.filter(t=>t.type&&(!t.cat1||!t.cat2)).length,where:"거래내역",desc:"구분 선택 시 대분류/소분류 필수"},
+      {item:"거래 금액 오류",count:data.transactions.filter(t=>t.amount!==""&&n(t.amount)<=0).length,where:"거래내역",desc:"금액은 0보다 커야 합니다"},
+      {item:"거래 날짜 오류",count:data.transactions.filter(t=>!t.date || String(t.date).length<10 || String(t.date)>today).length,where:"거래내역",desc:"날짜 누락 또는 미래일자는 확인이 필요합니다"},
+      {item:"수입 계좌 누락",count:data.transactions.filter(t=>t.type==="수입"&&!t.inAccount).length,where:"거래내역",desc:"수입은 입금계좌가 필요합니다"},
+      {item:"지출 계좌 누락",count:data.transactions.filter(t=>t.type==="지출"&&!t.outAccount).length,where:"거래내역",desc:"지출은 출금계좌가 필요합니다"},
+      {item:"존재하지 않는 계좌 참조",count:data.transactions.filter(t=>(t.inAccount&&!validAccounts.has(t.inAccount))||(t.outAccount&&!validAccounts.has(t.outAccount))).length,where:"거래내역",desc:"거래내역 계좌명이 계좌관리 목록에 없습니다"},
+      {item:"자산이동 계좌 누락",count:data.transactions.filter(t=>t.type==="자산이동"&&(!t.inAccount||!t.outAccount)).length,where:"거래내역",desc:"자산이동은 입출금 계좌 모두 필요"},
+      {item:"동일 계좌 이체",count:data.transactions.filter(t=>t.type==="자산이동"&&t.inAccount&&t.outAccount&&t.inAccount===t.outAccount).length,where:"거래내역",desc:"입금계좌와 출금계좌가 같으면 이동거래가 성립하지 않습니다"},
+      {item:"계좌명 중복",count:duplicateAccountNames,where:"계좌관리",desc:"같은 계좌명이 있으면 거래 연결이 틀어질 수 있습니다"},
+      {item:"자산/부채 이름 중복",count:duplicateAssetNames,where:"자산·부채",desc:"같은 이름의 항목이 중복되었습니다"},
+      {item:"자산/부채 금액 오류",count:data.assets.filter(a=>n(a.current)<0||n(a.previous)<0).length,where:"자산·부채",desc:"자산·부채 현재/전월 금액은 음수일 수 없습니다"},
+      {item:"포트폴리오 수량 오류",count:data.portfolio.filter(p=>n(p.qty)<0||n(p.avgPrice)<0||n(p.currentPrice)<0).length,where:"포트폴리오",desc:"수량·평균단가·현재가는 음수일 수 없습니다"},
+      {item:"포트폴리오 현재가 미입력",count:data.portfolio.filter(p=>n(p.qty)>0&&n(p.currentPrice||0)<=0).length,where:"포트폴리오",desc:"보유 수량 있으면 현재가 필요"},
+      {item:"USD 환율 누락",count:usdHoldings.length>0&&fx<=0?usdHoldings.length:0,where:"시장데이터",desc:"해외자산 원화평가를 위해 USD/KRW 환율이 필요합니다"},
+      {item:"투자 목표 비중 100% 초과",count:targetWeightSum>1.000001?1:0,where:"설정",desc:`목표 비중 합계 ${(targetWeightSum*100).toFixed(1)}%입니다. 100% 이하로 조정하세요`},
+      {item:"기본 목표 비중 100% 초과",count:legacyWeightSum>1.000001?1:0,where:"설정",desc:`나스닥/배당 기본 비중 합계 ${(legacyWeightSum*100).toFixed(1)}%입니다`},
+      {item:"기대수익률 입력 범위 오류",count:badReturnSettings,where:"설정",desc:"연 수익률은 -80%~100% 범위에서 점검하세요. 화면 입력은 % 기준입니다"},
+      {item:"예산 금액 오류",count:data.budgets.filter(b=>n(b.budget)<0||n(b.targetWeight)<0||n(b.targetWeight)>1).length,where:"예산",desc:"예산은 0 이상, 목표비중은 0~100%여야 합니다"},
+      {item:"목표 이벤트 금액 오류",count:data.events.filter(e=>n(e.amountNeeded)<0||n(e.currentPrepared)<0||n(e.currentPrepared)>n(e.amountNeeded)&&n(e.amountNeeded)>0).length,where:"목표",desc:"목표금액·준비금액의 음수 또는 초과값을 확인하세요"},
+    ];
+  },[data]);
 
   const budgetAnalysis=useMemo(()=>{
     const month=thisMonthISO();
