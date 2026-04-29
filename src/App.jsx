@@ -1190,6 +1190,66 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 
 
 
+
+/* CFO execution confirmation v18 */
+.cfo-executed-panel{
+  position:relative;
+  z-index:1;
+  margin-top:12px;
+  display:grid;
+  grid-template-columns:42px 1fr;
+  gap:12px;
+  align-items:flex-start;
+  padding:14px;
+  border-radius:20px;
+  background:rgba(52,213,138,.09);
+  border:1px solid rgba(52,213,138,.22);
+}
+.cfo-executed-icon{
+  width:42px;
+  height:42px;
+  border-radius:16px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--green);
+  color:#07110c;
+  font-weight:950;
+  font-size:18px;
+  box-shadow:0 10px 24px rgba(52,213,138,.22);
+}
+.cfo-executed-copy strong{
+  display:block;
+  color:var(--green);
+  font-size:14px;
+  margin-bottom:4px;
+}
+.cfo-executed-copy p{
+  color:var(--text);
+  font-size:13px;
+  font-weight:800;
+  margin-bottom:10px;
+}
+.cfo-executed-detail{
+  display:grid;
+  grid-template-columns:auto 1fr;
+  gap:6px 10px;
+  padding:10px;
+  border-radius:14px;
+  background:rgba(0,0,0,.14);
+  border:1px solid rgba(255,255,255,.06);
+}
+.cfo-executed-detail span{
+  font-size:11px;
+  font-weight:900;
+  color:var(--text3);
+}
+.cfo-executed-detail b{
+  font-size:11.5px;
+  color:var(--text2);
+  font-weight:900;
+}
+
 /* CFO action preview visualization v17 */
 .cfo-action-preview{
   margin-top:14px;
@@ -3366,12 +3426,25 @@ function buildCFOActionPreview(model, action) {
 
 function CFODecisionDashboard({ model, onExecuteAction }) {
   if (!model) return null;
+  const [executedAction, setExecutedAction] = useState(null);
   const priorityLabel = { high:"최우선", mid:"중요", low:"관리" };
   const topAction = model.actions?.[0];
   const secondAction = model.actions?.[1];
   const mainReason = model.scoreLosses?.[0];
 
   const toneClass = model.tone === "green" ? "ok" : model.tone === "accent" ? "info" : model.tone === "amber" ? "warn" : "danger";
+
+  const handleExecuteAction = (action) => {
+    if (!action) return;
+    const preview = buildCFOActionPreview(model, action);
+    onExecuteAction?.(action);
+    setExecutedAction({
+      id: uid(),
+      title: action.title,
+      preview,
+      executedAt: new Date().toLocaleString("ko-KR"),
+    });
+  };
 
   return (
     <div className={`cfo-product-card ${toneClass}`}>
@@ -3462,7 +3535,7 @@ function CFODecisionDashboard({ model, onExecuteAction }) {
                   </div>
                 </div>
 
-                <button className="cfo-execute-btn" onClick={()=>onExecuteAction?.(topAction)}>
+                <button className="cfo-execute-btn" onClick={()=>handleExecuteAction(topAction)}>
                   지금 실행 반영
                 </button>
               </>
@@ -3476,10 +3549,28 @@ function CFODecisionDashboard({ model, onExecuteAction }) {
           <div className="cfo-action-sub">
             <span>다음 행동</span>
             <strong>{secondAction.title}</strong>
-            <button className="btn btn-ghost btn-sm" onClick={()=>onExecuteAction?.(secondAction)}>간단 반영</button>
+            <button className="btn btn-ghost btn-sm" onClick={()=>handleExecuteAction(secondAction)}>간단 반영</button>
           </div>
         )}
       </div>
+
+      {executedAction && (
+        <div className="cfo-executed-panel">
+          <div className="cfo-executed-icon">✓</div>
+          <div className="cfo-executed-copy">
+            <strong>실행 반영 완료</strong>
+            <p>{executedAction.title}</p>
+            <div className="cfo-executed-detail">
+              <span>점수 예상</span>
+              <b>{executedAction.preview.currentScore} → {executedAction.preview.nextScore}</b>
+              <span>반영 항목</span>
+              <b>{executedAction.preview.target}</b>
+              <span>처리 시간</span>
+              <b>{executedAction.executedAt}</b>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="cfo-product-grid">
         <div className="cfo-product-mini">
@@ -3524,7 +3615,20 @@ function applyCFOActionToData(data, action) {
   const now = todayISO();
   const title = String(action.title || "");
   const desc = String(action.desc || "");
+  const executedAt = new Date().toISOString();
   const next = migrateData({ ...data });
+
+  next.cfoActionHistory = [
+    {
+      id: uid(),
+      title,
+      desc,
+      executedAt,
+      expectedScore: n(action.expectedScore),
+      priority: action.priority || "mid",
+    },
+    ...((next.cfoActionHistory || []).slice(0, 19)),
+  ];
 
   const addSystemEvent = (name, amountNeeded=0, priority="중간") => {
     const exists = (next.events || []).some(e => String(e.name || "").includes(name));
@@ -3591,7 +3695,7 @@ function applyCFOActionToData(data, action) {
     amount: 0,
     fromAccount: "",
     toAccount: "",
-    memo: `CFO 실행 반영: ${title}`,
+    memo: `CFO 실행 반영 완료: ${title}`,
   };
 
   next.transactions = [memoTx, ...(next.transactions || [])];
