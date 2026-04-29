@@ -4181,17 +4181,9 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
       `이번 달 수입은 ${fmt(income)}원, 지출은 ${fmt(expense)}원이에요. 그래서 최종 순현금흐름은 ${fmt(net)}원입니다.`,
       `저축률은 ${fmtPct(savingsRate)}이고, 전월 대비 지출 변화율은 ${fmtPct(expenseChange)}예요. ${topExpenseSentence}`,
       `현재 판단: ${headline}`,
-      issues.length ? `확인할 점
-${issues.map(i=>`• ${i.title}: ${i.text}`).join("
-")}` : "확인할 점
-• 특별한 이상 신호는 크지 않아요.",
-      actions.length ? `다음 달 추천 행동
-${actions.map(a=>`• ${a.title}: ${a.text}`).join("
-")}` : "다음 달 추천 행동
-• 지금처럼 꾸준히 기록하고 점검하면 돼요."
-    ].join("
-
-");
+      issues.length ? `확인할 점\n${issues.map(i => `• ${i.title}: ${i.text}`).join("\n")}` : "확인할 점\n• 특별한 이상 신호는 크지 않아요.",
+      actions.length ? `다음 달 추천 행동\n${actions.map(a => `• ${a.title}: ${a.text}`).join("\n")}` : "다음 달 추천 행동\n• 지금처럼 꾸준히 기록하고 점검하면 돼요."
+    ].join("\n\n");
 
     return {tx,income,expense,transfer,net,savingsRate,incomeChange,expenseChange,netChange,topExpenses,incomeBreakdown,highTx,topDays,budgetRows,overBudget,warningBudget,issues,actions,summaryText,headline,topExpenseSentence};
   },[data.transactions,month,monthlySeries,budgetAnalysis,taxAnalysis,dashboardDetail]);
