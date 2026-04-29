@@ -29,6 +29,11 @@ const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const n = (v) => { const x = Number(String(v ?? "").replace(/,/g,"").trim()); return Number.isFinite(x) ? x : 0; };
 const fmt = (v) => new Intl.NumberFormat("ko-KR").format(Math.round(n(v)));
 const fmtPct = (v, d=1) => `${n(v).toFixed(d)}%`;
+const ratioToPercent = (v, d=2) => {
+  const x = n(v) * 100;
+  return Number.isInteger(x) ? String(x) : String(Number(x.toFixed(d)));
+};
+const percentToRatio = (v) => n(v) / 100;
 const clamp = (x,a,b) => Math.max(a,Math.min(b,x));
 const monthOf = (d) => String(d || "").slice(0,7);
 
@@ -64,6 +69,7 @@ const DEFAULT_SETTINGS = {
   fxUsdKrw:0,
   fxAsOf:"",
   marketDataLastUpdated:"",
+  marketDataMode:"auto",
   autoUpdateMarketDataOnStart:false,
   autoTaxUpdateEnabled:true,
   taxUpdateLastChecked:"",
@@ -180,6 +186,7 @@ function migrateData(d) {
   x.settings.fxUsdKrw = n(x.settings.fxUsdKrw || 0);
   x.settings.fxAsOf = x.settings.fxAsOf || "";
   x.settings.marketDataLastUpdated = x.settings.marketDataLastUpdated || "";
+  x.settings.marketDataMode = x.settings.marketDataMode || "auto";
   x.settings.autoUpdateMarketDataOnStart = x.settings.autoUpdateMarketDataOnStart === true;
   x.settings.autoTaxUpdateEnabled = x.settings.autoTaxUpdateEnabled !== false;
   x.settings.taxUpdateLastChecked = x.settings.taxUpdateLastChecked || "";
@@ -5727,8 +5734,27 @@ function SimulationTab({ data, futureSim }) {
 
 function InvestmentTargetSettings({settings,set}){
   const rows=getInvestmentTargets(settings);
+  const totalWeight=rows.reduce((sum,r)=>sum+n(r.targetWeight),0);
+  const weightedReturn=getWeightedExpectedReturn(settings);
+  const totalWeightPct=totalWeight*100;
+  const isOverWeight=totalWeight>1.000001;
+  const isExactWeight=Math.abs(totalWeight-1)<=0.001;
+
+  const commitRows=(nextRows)=>{
+    const nextTotal=nextRows.reduce((sum,r)=>sum+n(r.targetWeight),0);
+    if(nextTotal>1.000001){
+      alert(`투자 목표 비중 합계는 100%를 초과할 수 없습니다.\n현재 입력 시 합계: ${fmtPct(nextTotal*100)}\n비중을 낮춘 뒤 다시 입력해주세요.`);
+      return false;
+    }
+    set("investmentTargets", nextRows);
+    return true;
+  };
+
   const updateRow=(id,patch)=>{
-    set("investmentTargets", rows.map(r=>r.id===id?{...r,...patch}:r));
+    const nextRows=rows.map(r=>r.id===id?{...r,...patch}:r);
+    if(Object.prototype.hasOwnProperty.call(patch,"targetWeight")) return commitRows(nextRows);
+    set("investmentTargets", nextRows);
+    return true;
   };
   const addRow=()=>{
     set("investmentTargets", [...rows,{id:uid(),name:"새 전략",expectedReturn:0.08,targetWeight:0,memo:""}]);
@@ -5736,27 +5762,53 @@ function InvestmentTargetSettings({settings,set}){
   const removeRow=(id)=>{
     set("investmentTargets", rows.filter(r=>r.id!==id));
   };
-  const totalWeight=rows.reduce((sum,r)=>sum+n(r.targetWeight),0);
-  const weightedReturn=getWeightedExpectedReturn(settings);
+  const remainingPctFor=(id)=>{
+    const others=rows.filter(r=>r.id!==id).reduce((sum,r)=>sum+n(r.targetWeight),0)*100;
+    return clamp(100-others,0,100);
+  };
+
   return (
     <div className="card">
       <div className="card-title">
         <h3>투자 수익률 / 목표 비중</h3>
         <div className="row">
-          <span className={`badge ${Math.abs(totalWeight-1)<=0.001?"badge-green":"badge-amber"}`}>합계 {fmtPct(totalWeight*100)}</span>
+          <span className={`badge ${isOverWeight?"badge-red":isExactWeight?"badge-green":"badge-amber"}`}>합계 {fmtPct(totalWeightPct)}</span>
           <span className="badge badge-accent">가중 기대수익률 {fmtPct(weightedReturn*100)}</span>
           <button className="btn btn-sm btn-ghost" onClick={addRow}>+ 전략 추가</button>
         </div>
       </div>
+
+      {isOverWeight && (
+        <div className="alert alert-danger" style={{marginBottom:12}}>
+          ⚠️ 투자 목표 비중 합계가 100%를 초과했습니다. 다른 화면으로 넘어가기 전에 반드시 100% 이하로 조정해주세요.
+        </div>
+      )}
+      {!isOverWeight && !isExactWeight && (
+        <div className="alert alert-warn" style={{marginBottom:12}}>
+          현재 목표 비중 합계는 {fmtPct(totalWeightPct)}입니다. 장기 시뮬레이션과 리밸런싱 정확도를 위해 100%로 맞추는 것을 권장합니다.
+        </div>
+      )}
+
       <div className="table-wrap">
         <table>
-          <thead><tr><th>전략/자산군명</th><th>연 기대수익률</th><th>목표비중</th><th>메모</th><th>작업</th></tr></thead>
+          <thead><tr><th>전략/자산군명</th><th>연 기대수익률(%)</th><th>목표비중(%)</th><th>메모</th><th>작업</th></tr></thead>
           <tbody>
             {rows.map(r=>(
               <tr key={r.id}>
                 <td><input value={r.name} onChange={e=>updateRow(r.id,{name:e.target.value})} placeholder="예: 나스닥, 배당, 현금"/></td>
-                <td><input type="number" step="0.001" value={r.expectedReturn} onChange={e=>updateRow(r.id,{expectedReturn:Number(e.target.value)})}/></td>
-                <td><input type="number" step="0.01" value={r.targetWeight} onChange={e=>updateRow(r.id,{targetWeight:Number(e.target.value)})}/></td>
+                <td><input type="number" step="0.1" min="-100" max="100" value={ratioToPercent(r.expectedReturn,2)} onChange={e=>updateRow(r.id,{expectedReturn:percentToRatio(e.target.value)})} placeholder="예: 10"/></td>
+                <td>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    max={remainingPctFor(r.id)}
+                    value={ratioToPercent(r.targetWeight,2)}
+                    onChange={e=>updateRow(r.id,{targetWeight:percentToRatio(e.target.value)})}
+                    placeholder="예: 90"
+                  />
+                  <div style={{fontSize:10,color:"var(--text3)",marginTop:4}}>입력 가능 최대 {fmtPct(remainingPctFor(r.id),0)}</div>
+                </td>
                 <td><input value={r.memo||""} onChange={e=>updateRow(r.id,{memo:e.target.value})} placeholder="설명"/></td>
                 <td><button className="btn btn-sm btn-danger" onClick={()=>removeRow(r.id)}>삭제</button></td>
               </tr>
@@ -5764,8 +5816,8 @@ function InvestmentTargetSettings({settings,set}){
           </tbody>
         </table>
       </div>
-      <div style={{marginTop:10,fontSize:12,color:Math.abs(totalWeight-1)<=0.001?"var(--text3)":"var(--amber)",lineHeight:1.5}}>
-        목표비중은 0~1로 입력합니다. 예: 90% = 0.90. 포트폴리오 종목의 자산군명과 이 표의 전략명이 같아야 리밸런싱에 반영됩니다.
+      <div style={{marginTop:10,fontSize:12,color:isExactWeight?"var(--text3)":"var(--amber)",lineHeight:1.5}}>
+        목표비중은 이제 소수점이 아니라 퍼센트로 입력합니다. 예: 나스닥 90, 배당 10. 합계가 100%를 초과하면 저장되지 않습니다. 포트폴리오 종목의 자산군명과 이 표의 전략명이 같아야 리밸런싱에 반영됩니다.
       </div>
     </div>
   );
@@ -5836,16 +5888,34 @@ function SettingsTab({ data, update }) {
       <div className="card">
         <div className="card-title">
           <h3>시장 데이터 / 환율 설정</h3>
-          <span className="badge badge-muted">1단계: 실제 가격·환율 반영</span>
+          <span className="badge badge-muted">자동 조회 기본 · 수동 입력은 비상용</span>
         </div>
         <div className="form-grid-3">
-          <Field label="USD/KRW 환율"><input value={s.fxUsdKrw||""} onChange={e=>set("fxUsdKrw",n(e.target.value))} placeholder="예: 1380"/></Field>
-          <Field label="환율 기준시각"><input value={s.fxAsOf?String(s.fxAsOf).replace("T"," ").slice(0,19):""} onChange={e=>set("fxAsOf",e.target.value)} placeholder="자동 갱신 시 입력"/></Field>
-          <Field label="마지막 시장데이터 갱신"><input value={s.marketDataLastUpdated?String(s.marketDataLastUpdated).replace("T"," ").slice(0,19):""} readOnly placeholder="자동 기록"/></Field>
+          <Field label="시장 데이터 모드">
+            <select value={s.marketDataMode || "auto"} onChange={e=>set("marketDataMode", e.target.value)}>
+              <option value="auto">자동 사용</option>
+              <option value="manual">수동 입력</option>
+            </select>
+          </Field>
+          <Field label="마지막 정상 USD/KRW">
+            <input value={n(s.fxUsdKrw)>0?fmt(s.fxUsdKrw):""} readOnly placeholder="자동 조회 전"/>
+          </Field>
+          <Field label="마지막 시장데이터 갱신">
+            <input value={s.marketDataLastUpdated?String(s.marketDataLastUpdated).replace("T"," ").slice(0,19):""} readOnly placeholder="자동 기록"/>
+          </Field>
         </div>
-        <div style={{marginTop:10,fontSize:12,color:"var(--text3)",lineHeight:1.5}}>
-          해외주식·해외 ETF처럼 통화가 USD인 종목은 현재가와 평단에 USD/KRW 환율을 곱해 원화 평가금액으로 계산합니다. 자동 조회가 실패하면 이 환율을 직접 입력해도 됩니다.
-        </div>
+
+        {(s.marketDataMode || "auto") === "manual" ? (
+          <div className="form-grid-3" style={{marginTop:12}}>
+            <Field label="수동 USD/KRW 환율"><input value={s.fxUsdKrw||""} onChange={e=>set("fxUsdKrw",n(e.target.value))} placeholder="예: 1380"/></Field>
+            <Field label="수동 환율 기준시각"><input value={s.fxAsOf?String(s.fxAsOf).replace("T"," ").slice(0,19):""} onChange={e=>set("fxAsOf",e.target.value)} placeholder="예: 2026-04-29 12:30"/></Field>
+            <div className="alert alert-warn" style={{alignSelf:"end"}}>수동 모드는 API 실패·오프라인 검증용입니다.</div>
+          </div>
+        ) : (
+          <div className="alert alert-info" style={{marginTop:12}}>
+            자동 모드에서는 환율과 기준시각을 직접 입력하지 않습니다. API가 실패하면 마지막 정상 환율 또는 캐시값을 사용하고, 실패 사실을 화면에 표시합니다.
+          </div>
+        )}
       </div>
       <InvestmentTargetSettings settings={s} set={set}/>
       <div className="g2">
@@ -6018,6 +6088,7 @@ function buildSampleVerificationData() {
     fxUsdKrw: 1350,
     fxAsOf: todayISO(),
     marketDataLastUpdated: new Date().toISOString(),
+    marketDataMode: "auto",
     retirementTargetAmount: 2000000000,
     retirementMonthlyExpense: 5000000,
     investmentTargets: [
