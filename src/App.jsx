@@ -3682,6 +3682,145 @@ function buildTaxActionRecommendations(calendar, settings, monthEvents = []) {
   return actions.slice(0, 6);
 }
 
+
+
+function extractTaxPolicySignals(settings) {
+  const summary = String(settings?.taxUpdateSummary || "").replace(/\s+/g," ").trim();
+  const signals = [];
+  const push = (topic, text, tone="info") => signals.push({ topic, text, tone });
+  if (!summary) {
+    push("업데이트", "아직 최신 정보 확인 전입니다. 접속 시 자동 확인 또는 수동 확인 버튼을 눌러 상태를 갱신하세요.", "amber");
+    return signals;
+  }
+  const has = (words) => words.some(w => summary.includes(w));
+  if (has(["ISA", "개인종합자산관리계좌"])) push("ISA", "ISA 관련 안내 신호가 감지되었습니다. 한도·만기·연금이전 전략에 영향이 있는지 확인하세요.", "green");
+  if (has(["종합소득세", "소득세", "신고"])) push("종합소득세", "종합소득세·신고 관련 안내 신호가 감지되었습니다. 5월 신고 전 금융소득·기타소득 자료를 정리하세요.", "amber");
+  if (has(["연금", "IRP", "연말정산", "세액공제"])) push("연금/IRP", "연금·IRP·세액공제 관련 안내 신호가 감지되었습니다. 잔여 공제한도와 납입 타이밍을 점검하세요.", "accent");
+  if (has(["재산세", "지방세", "위택스"])) push("재산세", "지방세·재산세 관련 안내 신호가 감지되었습니다. 7월·9월 납부 현금흐름을 별도로 확보하세요.", "info");
+  if (!signals.length && settings?.taxUpdateStatus === "checked") {
+    push("변경 신호", "공식 사이트 연결은 확인되었고, 앱 기준 세금 일정에 즉시 반영할 큰 변경 신호는 없습니다.", "green");
+  }
+  if (settings?.taxUpdateStatus === "failed") {
+    push("확인 실패", "자동 조회가 실패했습니다. 신고·납부 전에는 국세청·홈택스·위택스에서 직접 확인이 필요합니다.", "red");
+  }
+  return signals.slice(0, 4);
+}
+
+function buildTaxCfoCoach({ calendar, opt, settings, taxAnalysis, futureSim }) {
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const monthsLeft = Math.max(1, 12 - currentMonth + 1);
+  const isaGap = n(calendar?.isaGap || 0);
+  const pensionGap = n(calendar?.pensionGap || 0);
+  const taxableTax = n(opt?.taxableTaxNow || calendar?.taxableTax || 0);
+  const totalBenefit = n(opt?.totalImmediateBenefit || 0);
+  const nextEvent = calendar?.next;
+  const policySignals = extractTaxPolicySignals(settings);
+  const monthlyIsa = isaGap > 0 ? Math.ceil(isaGap / monthsLeft) : 0;
+  const monthlyPension = pensionGap > 0 ? Math.ceil(pensionGap / monthsLeft) : 0;
+  let score = 82;
+  if (isaGap > 0) score -= 7;
+  if (pensionGap > 0) score -= 9;
+  if (taxableTax > 0) score -= 8;
+  if (settings?.taxUpdateStatus === "failed") score -= 8;
+  if (settings?.taxUpdateStatus === "checked") score += 4;
+  score = clamp(score, 35, 98);
+  const grade = score >= 88 ? "매우 양호" : score >= 75 ? "양호" : score >= 60 ? "주의" : "점검 필요";
+  const tone = score >= 88 ? "green" : score >= 75 ? "accent" : score >= 60 ? "amber" : "red";
+  const headline = score >= 88
+    ? "세금 루틴은 안정적입니다. 이제 납입 타이밍만 정교하게 관리하면 됩니다."
+    : score >= 75
+      ? "큰 위험은 낮지만, ISA·연금 잔여 한도와 신고월 현금흐름을 함께 관리해야 합니다."
+      : "절세 여력과 신고 리스크가 남아 있습니다. 이번 달부터 자동 납입·자료 정리 루틴을 잡는 것이 좋습니다.";
+  const impact = [
+    { label:"예상 절세 여력", value:totalBenefit, text: totalBenefit > 0 ? `현재 입력값 기준 즉시 확인 가능한 절세 여력은 약 ${fmt(totalBenefit)}원입니다.` : "현재 입력값 기준 즉시 큰 절세 여력은 제한적입니다.", tone: totalBenefit > 0 ? "green" : "info" },
+    { label:"ISA 잔여 한도", value:isaGap, text: isaGap > 0 ? `연말까지 월 약 ${fmt(monthlyIsa)}원씩 납입하면 잔여 한도를 맞출 수 있습니다.` : "올해 ISA 납입 한도는 사용 완료 또는 추가 납입 여력이 낮습니다.", tone: isaGap > 0 ? "green" : "info" },
+    { label:"연금/IRP 잔여 한도", value:pensionGap, text: pensionGap > 0 ? `세액공제 한도까지 월 약 ${fmt(monthlyPension)}원씩 나누어 납입하는 전략이 안정적입니다.` : "연금/IRP 세액공제 한도 사용이 충분한 편입니다.", tone: pensionGap > 0 ? "accent" : "green" },
+    { label:"과세 노출", value:taxableTax, text: taxableTax > 0 ? `일반계좌 평가이익 기준 추정 과세 노출은 약 ${fmt(taxableTax)}원입니다.` : "일반계좌 기준 큰 과세 노출은 아직 제한적입니다.", tone: taxableTax > 0 ? "amber" : "green" },
+  ];
+  const actionPlan = [];
+  if (nextEvent) actionPlan.push({ step:"1", title:"가장 가까운 세금 일정 먼저 처리", text:`${nextEvent.date} · ${nextEvent.title}을 기준으로 필요한 증빙과 현금을 미리 준비하세요.`, tone:"amber" });
+  if (pensionGap > 0) actionPlan.push({ step:"2", title:"연금/IRP 세액공제 납입 루틴", text:`잔여 한도 ${fmt(pensionGap)}원을 ${monthsLeft}개월로 나누면 월 약 ${fmt(monthlyPension)}원입니다. 11~12월 몰입보다 현금흐름이 안정적입니다.`, tone:"accent" });
+  if (isaGap > 0) actionPlan.push({ step:"3", title:"ISA 잔여 한도 배분", text:`잔여 한도 ${fmt(isaGap)}원을 월 약 ${fmt(monthlyIsa)}원씩 납입해 절세계좌 우선순위를 유지하세요.`, tone:"green" });
+  if (taxableTax > 0) actionPlan.push({ step:"4", title:"일반계좌 과세 노출 관리", text:"배당·매매손익 자료를 월별로 저장하고, 신규 투자금은 ISA·연금계좌와 비교 후 투입하세요.", tone:"amber" });
+  if (!actionPlan.length) actionPlan.push({ step:"1", title:"유지 관리", text:"이번 달은 큰 세금 리스크가 낮습니다. 월말에 납입한도와 증빙자료만 10분 점검하세요.", tone:"green" });
+  const cashTiming = [
+    { title:"급여일 직후", text: isaGap > 0 ? `ISA ${fmt(monthlyIsa)}원 우선 배정` : "ISA 추가 납입보다 리밸런싱 점검", tone:"green" },
+    { title:"월말", text: pensionGap > 0 ? `연금/IRP ${fmt(monthlyPension)}원 납입 가능 여부 확인` : "연금/IRP 한도 완료 상태 확인", tone:"accent" },
+    { title:"신고·납부월", text: "카드값·투자금과 세금 납부 현금을 분리", tone:"amber" },
+  ];
+  return { score, grade, tone, headline, impact, policySignals, actionPlan:actionPlan.slice(0,4), cashTiming, monthlyIsa, monthlyPension, monthsLeft };
+}
+
+function TaxCfoCoach({ coach, settings }) {
+  const badge = (t) => t === "red" ? "badge-red" : t === "amber" ? "badge-amber" : t === "green" ? "badge-green" : t === "accent" ? "badge-accent" : "badge-muted";
+  const cls = (t) => t === "red" ? "danger" : t === "amber" ? "warn" : t === "green" ? "green" : "info";
+  return (
+    <div className="card tax-cfo-coach">
+      <div className="cfo-hero" style={{marginBottom:14}}>
+        <div>
+          <span className={`badge ${badge(coach.tone)}`}>세금 AI 코치 · CFO 종합판단</span>
+          <h2>세금 관리 점수 {coach.score}점</h2>
+          <p>{coach.headline}</p>
+          <div className="ai-chip-row">
+            <span className="ai-chip">등급: {coach.grade}</span>
+            <span className="ai-chip">남은 납입 관리 기간: {coach.monthsLeft}개월</span>
+            <span className="ai-chip">마지막 확인: {formatTaxUpdateDateTime(settings?.taxUpdateLastChecked)}</span>
+          </div>
+        </div>
+        <div className="cfo-score">{coach.score}<span>/100</span></div>
+      </div>
+
+      <div className="g4" style={{marginBottom:14}}>
+        {coach.impact.map((x) => (
+          <div className={`compact-insight ${cls(x.tone)}`} key={x.label}>
+            <span>{x.tone === "green" ? "✅" : x.tone === "amber" ? "⚠️" : x.tone === "accent" ? "💡" : "🧾"}</span>
+            <div><strong>{x.label}</strong><p>{x.text}</p></div>
+          </div>
+        ))}
+      </div>
+
+      <div className="g2">
+        <div className="card-sm">
+          <div className="card-title"><h3>변경 신호 요약</h3><span className="badge badge-muted">자동 참고</span></div>
+          <div className="stack">
+            {coach.policySignals.map((s, idx) => (
+              <div className={`compact-insight ${cls(s.tone)}`} key={`${s.topic}-${idx}`}>
+                <span>{s.tone === "red" ? "❗" : s.tone === "amber" ? "⚠️" : s.tone === "green" ? "✅" : "🔎"}</span>
+                <div><strong>{s.topic}</strong><p>{s.text}</p></div>
+              </div>
+            ))}
+          </div>
+          <div className="alert alert-warn" style={{marginTop:12}}>자동 요약은 공식 사이트 연결과 키워드 신호를 바탕으로 만든 참고용입니다. 실제 신고·납부 전에는 원문 공지 확인이 필요합니다.</div>
+        </div>
+        <div className="card-sm">
+          <div className="card-title"><h3>이번 달 실행 순서</h3><span className="badge badge-accent">자동 코칭</span></div>
+          <div className="stack">
+            {coach.actionPlan.map((a) => (
+              <div className={`cfo-step ${cls(a.tone)}`} key={a.step}>
+                <div className="cfo-step-no">{a.step}</div>
+                <div><strong>{a.title}</strong><p>{a.text}</p></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="card-sm" style={{marginTop:14}}>
+        <div className="card-title"><h3>납입·절세 타이밍</h3><span className="badge badge-green">현금흐름 연결</span></div>
+        <div className="g3">
+          {coach.cashTiming.map((x) => (
+            <div className={`compact-insight ${cls(x.tone)}`} key={x.title}>
+              <span>{x.tone === "green" ? "🌱" : x.tone === "amber" ? "🧾" : "💰"}</span>
+              <div><strong>{x.title}</strong><p>{x.text}</p></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TaxActionCoach({ actions, settings, onUpdateSettings }) {
   const status = settings?.autoTaxUpdateEnabled !== false;
   const cls = (t) => t === "red" ? "danger" : t === "amber" ? "warn" : t === "green" ? "green" : "info";
@@ -3838,6 +3977,7 @@ function TaxTab({ data, update, taxAnalysis, futureSim }) {
       <NaturalInsightCard icon={taxNLP.icon} title={taxNLP.title} message={taxNLP.message} tone={taxNLP.tone} actions={taxNLP.actions}/>
       <AICoachPanel coach={taxCoach}/>
       <TaxCalendarTimeline calendar={taxCalendar} settings={s} onUpdateSettings={(patch)=>update(d=>({ ...d, settings:{ ...d.settings, ...patch } }))}/>
+      <TaxCfoCoach coach={buildTaxCfoCoach({ calendar:taxCalendar, opt, settings:s, taxAnalysis, futureSim })} settings={s}/>
       <TaxActionCoach actions={buildTaxActionRecommendations(taxCalendar, s, taxCalendar.events.filter(e => e.month === new Date().getMonth()+1))} settings={s} onUpdateSettings={(patch)=>update(d=>({ ...d, settings:{ ...d.settings, ...patch } }))}/>
       <div className="kpi-grid">
         <KpiCard label="추가 세액공제 가능액" value={opt.pensionExtraCredit} unit="원" accent/>
