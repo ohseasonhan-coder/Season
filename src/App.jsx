@@ -1163,6 +1163,113 @@ function NaturalInsightCard({ icon, title, message, tone = "accent", actions = [
     </div>
   );
 }
+
+
+// ─── 공통: AI 코칭 패널 ──────────────────────────────────────────────────────
+function buildIntegratedCoach({ area="통합 분석", dashboard={}, dashboardDetail={}, financialAnalysis={}, budgetAnalysis=[], taxAnalysis=[], futureSim=[], eventAnalysis=[], monthlySeries=[], data={} }) {
+  const income=n(dashboard?.income), expense=n(dashboard?.expense), net=n(dashboard?.net);
+  const savingsRate=income>0?net/income*100:0;
+  const emergencyFund=n(dashboardDetail?.emergencyFund);
+  const emergencyMonths=expense>0?emergencyFund/expense:0;
+  const portfolioTotal=n(financialAnalysis?.total);
+  const rows=financialAnalysis?.rows||[];
+  const invested=rows.reduce((sum,r)=>sum+n(r.invested),0);
+  const profit=portfolioTotal-invested;
+  const returnRate=invested>0?profit/invested*100:0;
+  const concentrated=rows.filter(r=>r.state==="쏠림 경고"||n(r.weight)>0.5);
+  const overBudget=(budgetAnalysis||[]).filter(b=>b.status==="초과");
+  const warnBudget=(budgetAnalysis||[]).filter(b=>b.status==="주의");
+  const taxableTax=(taxAnalysis||[]).filter(t=>t.name==="일반계좌").reduce((sum,t)=>sum+n(t.estimatedTax),0);
+  const pensionValue=(taxAnalysis||[]).filter(t=>["연금저축","IRP"].includes(t.name)).reduce((sum,t)=>sum+n(t.value),0);
+  const events=eventAnalysis?.length?eventAnalysis:(data?.events||[]).map(e=>{
+    const shortage=Math.max(n(e.amountNeeded)-n(e.currentPrepared),0);
+    const months=Math.max(n(e.yearsFromNow)*12,1);
+    return {...e,shortage,monthlyNeed:shortage/months,progress:n(e.amountNeeded)>0?n(e.currentPrepared)/n(e.amountNeeded)*100:0};
+  });
+  const urgentGoals=events.filter(e=>n(e.yearsFromNow)<=1 && n(e.shortage)>0);
+  const totalGoalNeed=events.reduce((sum,e)=>sum+n(e.monthlyNeed),0);
+  const lastFuture=Array.isArray(futureSim)&&futureSim.length?futureSim[futureSim.length-1]:null;
+  const retireTarget=n(data?.settings?.retirementTargetAmount);
+  const retireAsset=n(lastFuture?.total || dashboardDetail?.retirementRow?.total || 0);
+  const retireRate=retireTarget>0?retireAsset/retireTarget*100:0;
+  const last6=(monthlySeries||[]).slice(-6);
+  const deficitMonths=last6.filter(r=>n(r.net)<0).length;
+  const avgNet=last6.length?last6.reduce((sum,r)=>sum+n(r.net),0)/last6.length:net;
+
+  let score=55;
+  if(income>0) score+=clamp(savingsRate,-30,60)*0.35;
+  score+=clamp(emergencyMonths,0,8)*3.0;
+  score+=retireRate>=100?12:retireRate>=70?7:retireRate>=40?3:0;
+  score+=returnRate>0?4:returnRate<0?-5:0;
+  score-=overBudget.length*5;
+  score-=concentrated.length*4;
+  score-=urgentGoals.length*5;
+  score-=taxableTax>0?3:0;
+  score-=deficitMonths>=2?6:0;
+  score=clamp(Math.round(score),0,100);
+
+  let tone=score>=80?"green":score>=65?"accent":score>=50?"amber":"red";
+  let icon=score>=80?"✅":score>=65?"🧠":score>=50?"⚠️":"🚨";
+  const title=`AI ${area} 코칭`;
+  let headline=score>=80?`${area} 기준으로 흐름이 안정적이에요.`:score>=65?`${area} 기준으로 방향은 좋지만, 조정하면 더 좋아질 부분이 있어요.`:score>=50?`${area} 기준으로 관리가 필요한 구간이에요.`:`${area} 기준으로 우선순위 재정리가 필요해요.`;
+
+  const signals=[];
+  if(income>0) signals.push({label:"저축률",value:fmtPct(savingsRate),tone:savingsRate>=30?"green":savingsRate>=10?"amber":"red"});
+  if(expense>0) signals.push({label:"비상금",value:`${emergencyMonths.toFixed(1)}개월`,tone:emergencyMonths>=6?"green":emergencyMonths>=3?"amber":"red"});
+  if(portfolioTotal>0) signals.push({label:"투자수익률",value:fmtPct(returnRate),tone:returnRate>=0?"green":"red"});
+  if(retireTarget>0) signals.push({label:"은퇴목표",value:fmtPct(retireRate),tone:retireRate>=100?"green":retireRate>=70?"amber":"red"});
+  if(events.length) signals.push({label:"목표 월필요액",value:fmt(totalGoalNeed),tone:totalGoalNeed<=Math.max(net,0)?"green":"amber"});
+  if(taxAnalysis?.length) signals.push({label:"과세노출",value:fmt(taxableTax),tone:taxableTax>0?"amber":"green"});
+
+  const actions=[];
+  if(net<0) actions.push({label:"이번 달 적자 원인을 먼저 분리",tag:"현금흐름"});
+  if(deficitMonths>=2) actions.push({label:`최근 6개월 중 적자 ${deficitMonths}개월 추세 점검`,tag:"추세"});
+  if(emergencyMonths<3 && expense>0) actions.push({label:"투자 증액보다 비상금 3개월치 확보",tag:"안전"});
+  else if(emergencyMonths<6 && expense>0) actions.push({label:"비상금 6개월치까지 단계 보강",tag:"안전"});
+  if(overBudget.length) actions.push({label:`${overBudget.slice(0,2).map(b=>b.cat1).join("·")} 예산 초과 조정`,tag:"예산"});
+  if(concentrated.length) actions.push({label:"포트폴리오 쏠림 리스크 확인",tag:"리스크"});
+  if(taxableTax>0) actions.push({label:"일반계좌 과세 노출을 ISA/연금과 비교",tag:"절세"});
+  if(urgentGoals.length) actions.push({label:`${urgentGoals[0].name} 부족분 우선 배정`,tag:"목표"});
+  if(retireTarget>0 && retireRate<70) actions.push({label:"월 투자금·수익률·은퇴나이 가정 재점검",tag:"시뮬레이션"});
+  if(!actions.length) actions.push({label:"현재 전략 유지, 월 1회 점검만 진행",tag:"유지"});
+
+  const summary=`${headline} 현재 순현금흐름은 ${fmt(net)}원, 최근 평균 현금흐름은 ${fmt(avgNet)}원입니다. 투자자산은 ${fmt(portfolioTotal)}원이고, 목표·세금·리스크까지 함께 보면 다음 행동은 “${actions[0]?.label}”입니다.`;
+  return {score,tone,icon,title,summary,signals:signals.slice(0,6),actions:actions.slice(0,5)};
+}
+
+function AICoachPanel({ coach }) {
+  if(!coach) return null;
+  const badgeClass=coach.tone==="green"?"badge-green":coach.tone==="amber"?"badge-amber":coach.tone==="red"?"badge-red":"badge-accent";
+  return (
+    <div className="card ai-coach-panel" style={{background:"linear-gradient(135deg,var(--surface),rgba(108,125,255,.085))",borderColor:"rgba(108,125,255,.24)"}}>
+      <div className="row-between" style={{alignItems:"flex-start",marginBottom:14}}>
+        <div className="row" style={{alignItems:"flex-start",gap:12}}>
+          <div style={{fontSize:28,lineHeight:1}}>{coach.icon}</div>
+          <div>
+            <div style={{fontSize:11,fontWeight:800,color:"var(--accent2)",letterSpacing:".08em",textTransform:"uppercase",marginBottom:5}}>AI COACH</div>
+            <h3 style={{fontSize:20,marginBottom:6,letterSpacing:"-.03em"}}>{coach.title}</h3>
+            <p style={{fontSize:13,color:"var(--text2)",lineHeight:1.6,whiteSpace:"pre-line"}}>{coach.summary}</p>
+          </div>
+        </div>
+        <div style={{textAlign:"right",minWidth:90}}>
+          <div style={{fontSize:34,fontWeight:900,letterSpacing:"-.05em",lineHeight:1}}>{coach.score}<span style={{fontSize:13,color:"var(--text3)",marginLeft:2}}>점</span></div>
+          <span className={`badge ${badgeClass}`} style={{marginTop:7}}>종합판단</span>
+        </div>
+      </div>
+      {coach.signals?.length>0&&(
+        <div className="g3" style={{marginBottom:12}}>
+          {coach.signals.map((s,i)=><div key={i} className="card-sm" style={{padding:12,background:"rgba(255,255,255,.035)"}}><div className="kpi-label" style={{marginBottom:6}}>{s.label}</div><div className={`fw7 ${s.tone==="green"?"text-green":s.tone==="red"?"text-red":"text-accent"}`}>{s.value}</div></div>)}
+        </div>
+      )}
+      {coach.actions?.length>0&&(
+        <div className="ai-chip-row">
+          {coach.actions.map((a,i)=><span key={i} className="ai-chip">{i+1}. {a.label}{a.tag?` · ${a.tag}`:""}</span>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── 대시보드 자연어 요약/결론/조언 생성 ────────────────────────────────────
 function buildDashboardNLP({ advanced, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, taxAnalysis, futureSim, data }) {
   const score = n(advanced?.score);
@@ -1715,6 +1822,7 @@ function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, fi
   return (
     <div className="stack dashboard-pro">
       <DashboardAdvicePanel nlp={dashboardNLP} />
+      <AICoachPanel coach={buildIntegratedCoach({ area:"대시보드", data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim, eventAnalysis, monthlySeries })}/>
 
       <div className="dashboard-hero">
         <div className="health-card">
@@ -3070,11 +3178,13 @@ function AnalysisTab({ data, monthlySeries, budgetAnalysis, financialAnalysis, d
 
   // 자연어 요약
   const analysisNLP = useMemo(() => buildAnalysisNLP(monthlySeries, dashboardDetail), [monthlySeries, dashboardDetail]);
+  const analysisCoach = useMemo(() => buildIntegratedCoach({ area:"재무분석", data, dashboard:dashboardDetail?.dashboard||{}, dashboardDetail, financialAnalysis, budgetAnalysis, monthlySeries }), [data, dashboardDetail, financialAnalysis, budgetAnalysis, monthlySeries]);
 
   return (
     <div className="stack">
       {/* ── 자연어 요약 카드 ── */}
       <NaturalInsightCard icon={analysisNLP.icon} title={analysisNLP.title} message={analysisNLP.message} tone={analysisNLP.tone} actions={analysisNLP.actions}/>
+      <AICoachPanel coach={analysisCoach}/>
       {/* 1행: 월별 수입·지출 + 저축률 */}
       <div className="g2">
         <div className="card">
@@ -3339,11 +3449,13 @@ function TaxTab({ data, update, taxAnalysis }) {
 
   // 자연어 요약
   const taxNLP = useMemo(() => buildTaxNLP(opt, taxAnalysis), [opt, taxAnalysis]);
+  const taxCoach = useMemo(() => buildIntegratedCoach({ area:"세금·절세", data, taxAnalysis }), [data, taxAnalysis]);
 
   return (
     <div className="stack">
       {/* ── 자연어 요약 카드 ── */}
       <NaturalInsightCard icon={taxNLP.icon} title={taxNLP.title} message={taxNLP.message} tone={taxNLP.tone} actions={taxNLP.actions}/>
+      <AICoachPanel coach={taxCoach}/>
       <div className="kpi-grid">
         <KpiCard label="추가 세액공제 가능액" value={opt.pensionExtraCredit} unit="원" accent/>
         <KpiCard label="ISA 예상 절세효과" value={opt.expectedIsaSaving} unit="원"/>
@@ -3458,6 +3570,7 @@ function PlanningTab({ data, update, eventAnalysis, dashboard }) {
 
   // 자연어 요약
   const planNLP = useMemo(() => buildPlanningNLP(eventAnalysis, dashboard), [eventAnalysis, dashboard]);
+  const planningCoach = useMemo(() => buildIntegratedCoach({ area:"목표·이벤트", data, dashboard, eventAnalysis }), [data, dashboard, eventAnalysis]);
 
   return (
     <div className="stack">
@@ -3613,6 +3726,7 @@ function AutomationSystemTab({ data, update, dashboard, dashboardDetail, financi
 
   return (
     <div className="stack automation-system">
+      <AICoachPanel coach={buildIntegratedCoach({ area:"자동화 시스템", data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim })}/>
       <div className="card automation-hero">
         <div>
           <div className="kpi-label">AUTOMATION SYSTEM</div>
@@ -3742,6 +3856,7 @@ function CFOCenterTab({ data, dashboard, dashboardDetail, financialAnalysis, bud
 
   return (
     <div className="stack cfo-center">
+      <AICoachPanel coach={buildIntegratedCoach({ area:"CFO 종합판단", data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim })}/>
       <div className="card cfo-hero">
         <div>
           <div className="kpi-label">PERSONAL CFO FINAL BOARD</div>
@@ -3840,6 +3955,7 @@ function GoalFundingTab({ data, update, dashboard, dashboardDetail, futureSim })
 
   return (
     <div className="stack goal-center">
+      <AICoachPanel coach={buildIntegratedCoach({ area:"목표 자금관리", data, dashboard, dashboardDetail, futureSim, eventAnalysis:analysis })}/>
       <div className="card goal-hero">
         <div>
           <div className="kpi-label">GOAL FUNDING</div>
@@ -4029,6 +4145,7 @@ function DecisionCenterTab({ data, dashboard, dashboardDetail, financialAnalysis
 
   return (
     <div className="stack decision-center">
+      <AICoachPanel coach={buildIntegratedCoach({ area:"의사결정 센터", data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim })}/>
       <div className="card decision-hero">
         <div>
           <div className="kpi-label">DECISION CENTER</div>
@@ -4532,6 +4649,7 @@ function SimulationTab({ data, futureSim }) {
         const nlp = buildSimulationNLP({ advanced, base, w, targetRate, scenario });
         return <NaturalInsightCard icon={nlp.icon} title={nlp.title} message={nlp.message} tone={nlp.tone} actions={nlp.actions}/>;
       })()}
+      <AICoachPanel coach={buildIntegratedCoach({ area:"미래 시뮬레이션", data, futureSim })}/>
       <div className="card retirement-hero">
         <div>
           <div className="kpi-label">ADVANCED RETIREMENT SIMULATION</div>
@@ -5057,6 +5175,7 @@ function ProfessionalTab({ data, dashboard, dashboardDetail, monthlySeries }) {
   const levelClass = (v) => v === "위험" ? "badge-red" : v === "주의" ? "badge-amber" : "badge-accent";
   return (
     <div className="stack">
+      <AICoachPanel coach={buildIntegratedCoach({ area:"전문진단", data, dashboard, dashboardDetail, monthlySeries })}/>
       <div className="kpi-grid">
         <KpiCard label="리밸런싱 상태" value={rebalance.alerts.length} unit="건" tone={rebalance.alerts.length ? "red" : "green"}/>
         <KpiCard label="위험 점수" value={risk.riskScore} unit="점" tone={risk.riskLevel === "높음" ? "red" : risk.riskLevel === "중간" ? undefined : "green"}/>
@@ -5402,12 +5521,14 @@ function Step2MddRiskPanel({ data, financialAnalysis }) {
     [data, financialAnalysis, scenarios]
   );
 
+  const riskCoach = useMemo(() => buildIntegratedCoach({ area:"리스크 분석", data, financialAnalysis }), [data, financialAnalysis]);
   const worstTone = Math.abs(risk.worst.lossPct) >= 0.45 ? "red" : Math.abs(risk.worst.lossPct) >= 0.3 ? "amber" : "green";
   const volTone = risk.vol >= 0.22 ? "red" : risk.vol >= 0.15 ? "amber" : "green";
   const concTone = risk.concentration.weight >= 0.7 ? "red" : risk.concentration.weight >= 0.5 ? "amber" : "green";
 
   return (
     <div className="stack">
+      <AICoachPanel coach={riskCoach}/>
       <div className="row-between">
         <div>
           <h2 style={{ fontSize: 22, letterSpacing: "-.03em", marginBottom: 6 }}>🛡️ 2단계 리스크 / MDD 분석</h2>
