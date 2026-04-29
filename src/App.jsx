@@ -1002,6 +1002,18 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 @media(max-width:900px){.tax-cal-grid{gap:6px}.tax-cal-day{min-height:92px;padding:7px}.tax-cal-event p{display:none}}
 @media(max-width:700px){.tax-cal-grid{grid-template-columns:repeat(2,1fr)}.tax-cal-weekday{display:none}.tax-cal-day.outside{display:none}}
 
+
+.tax-update-status-box{align-items:stretch}
+.tax-update-status-card{display:grid;grid-template-columns:38px 1fr;gap:12px;align-items:flex-start;width:100%;padding:13px;border-radius:14px;border:1px solid var(--border);background:var(--surface2)}
+.tax-update-status-card.green{background:var(--green-bg);border-color:rgba(52,213,138,.26)}
+.tax-update-status-card.amber{background:var(--amber-bg);border-color:rgba(240,180,41,.28)}
+.tax-update-status-card.accent,.tax-update-status-card.info{background:var(--accent-bg);border-color:rgba(108,125,255,.24)}
+.tax-update-status-icon{width:34px;height:34px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.07);font-size:17px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.tax-update-status-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px}
+.tax-update-status-top strong{font-size:13.5px;color:var(--text)}
+.tax-update-date{font-size:12px;font-weight:900;color:var(--text);letter-spacing:-.01em;margin:2px 0 5px}
+.tax-update-brief{font-size:12px;color:var(--text2);line-height:1.45;margin:0}
+
 /* Responsive */
 @media(max-width:900px){
   .sidebar{width:180px}
@@ -3592,6 +3604,33 @@ async function fetchTaxUpdateSnapshot() {
   };
 }
 
+
+function formatTaxUpdateDateTime(iso) {
+  if (!iso) return "아직 확인 전";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "확인일 정보 없음";
+  return d.toLocaleString("ko-KR", {
+    year:"numeric",
+    month:"2-digit",
+    day:"2-digit",
+    hour:"2-digit",
+    minute:"2-digit",
+  });
+}
+function summarizeTaxUpdateStatus(settings, localMsg) {
+  const status = settings?.taxUpdateStatus || "not_checked";
+  const raw = localMsg || settings?.taxUpdateSummary || "최신 세법 업데이트를 아직 확인하지 않았습니다.";
+  const clean = String(raw).replace(/\s+/g," ").trim();
+  let title = "업데이트 대기";
+  let tone = "info";
+  let icon = "🕘";
+  if (status === "checked") { title = "최신 정보 확인 완료"; tone = "green"; icon = "✅"; }
+  if (status === "failed") { title = "자동 확인 실패"; tone = "amber"; icon = "⚠️"; }
+  if (clean.includes("확인하는 중")) { title = "업데이트 확인 중"; tone = "accent"; icon = "🔎"; }
+  const brief = clean.length > 92 ? `${clean.slice(0,92)}…` : clean;
+  return { title, tone, icon, brief };
+}
+
 function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
   const initial = `${calendar.year}-${String(new Date().getMonth()+1).padStart(2,"0")}`;
   const [monthValue, setMonthValue] = useState(initial);
@@ -3672,14 +3711,21 @@ function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
           </div>
         ))}
       </div>
-      <div className="tax-update-box">
-        <div>
-          <strong>업데이트 상태</strong>
-          <p>{localMsg || settings?.taxUpdateSummary || "앱 실행 시 하루 1회 자동 확인하고, 버튼을 누르면 즉시 다시 확인합니다. 브라우저 보안 정책으로 실패할 경우 공식 사이트 직접 확인이 필요합니다."}</p>
-          <div className="ai-chip-row" style={{marginTop:8}}>
-            <span className="ai-chip">소스: {settings?.taxUpdateSource || "국세청 · 홈택스 · 위택스"}</span>
-            <span className="ai-chip">이번 달 일정 {monthEvents.length}건</span>
-            {calendar.actions.slice(0,2).map(a => <span className="ai-chip" key={a}>{a}</span>)}
+      <div className="tax-update-box tax-update-status-box">
+        <div className={`tax-update-status-card ${summarizeTaxUpdateStatus(settings, localMsg).tone}`}>
+          <div className="tax-update-status-icon">{summarizeTaxUpdateStatus(settings, localMsg).icon}</div>
+          <div>
+            <div className="tax-update-status-top">
+              <strong>{summarizeTaxUpdateStatus(settings, localMsg).title}</strong>
+              <span className="badge badge-muted">{settings?.taxUpdateStatus === "checked" ? "자동 확인" : settings?.taxUpdateStatus === "failed" ? "직접 확인 필요" : "대기"}</span>
+            </div>
+            <div className="tax-update-date">{formatTaxUpdateDateTime(settings?.taxUpdateLastChecked)}</div>
+            <p className="tax-update-brief">{summarizeTaxUpdateStatus(settings, localMsg).brief}</p>
+            <div className="ai-chip-row" style={{marginTop:8}}>
+              <span className="ai-chip">소스: {settings?.taxUpdateSource || "국세청 · 홈택스 · 위택스"}</span>
+              <span className="ai-chip">이번 달 일정 {monthEvents.length}건</span>
+              {calendar.actions.slice(0,2).map(a => <span className="ai-chip" key={a}>{a}</span>)}
+            </div>
           </div>
         </div>
         <div className="row" style={{flexShrink:0}}>
