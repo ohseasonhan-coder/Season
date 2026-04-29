@@ -829,6 +829,20 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .retirement-pro .compact-insight{min-height:76px}
 @media(max-width:900px){.retirement-hero{flex-direction:column;align-items:flex-start}}
 
+
+/* Dashboard linked cross-tab summary */
+.dashboard-linked-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
+.dashboard-linked-card{display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:13px;border:1px solid var(--border);background:var(--surface2)}
+.dashboard-linked-card span{font-size:18px;line-height:1;flex-shrink:0}
+.dashboard-linked-card strong{font-size:12.5px;color:var(--text);display:block;margin-bottom:3px}
+.dashboard-linked-card p{font-size:11.5px;color:var(--text3);line-height:1.45}
+.dashboard-linked-card.green{border-color:rgba(52,213,138,.22);background:var(--green-bg)}
+.dashboard-linked-card.amber{border-color:rgba(240,180,41,.24);background:var(--amber-bg)}
+.dashboard-linked-card.red{border-color:rgba(255,92,114,.24);background:var(--red-bg)}
+.dashboard-linked-card.info,.dashboard-linked-card.accent{border-color:rgba(108,125,255,.22);background:var(--accent-bg)}
+@media(max-width:1100px){.dashboard-linked-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.dashboard-linked-grid{grid-template-columns:1fr}}
+
 /* Dashboard Pro */
 .dashboard-hero{display:grid;grid-template-columns:1.1fr 1.4fr;gap:14px}
 .health-card{background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.08));border:1px solid rgba(108,125,255,.22);border-radius:var(--radius-lg);padding:22px;overflow:hidden}
@@ -1103,12 +1117,10 @@ function NaturalInsightCard({ icon, title, message, tone = "accent", actions = [
   );
 }
 // ─── 대시보드 자연어 요약/결론/조언 생성 ────────────────────────────────────
-function buildDashboardNLP({ advanced, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, data }) {
+function buildDashboardNLP({ advanced, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, taxAnalysis, futureSim, data }) {
   const score = n(advanced?.score);
   const savingsRate = n(advanced?.savingsRate);
-  const investRate = n(advanced?.investRate);
   const emergencyMonths = n(advanced?.emergencyMonths);
-  const debtRatio = n(advanced?.debtRatio);
   const targetRate = n(advanced?.targetRate);
   const net = n(dashboard?.net);
   const expense = n(dashboard?.expense);
@@ -1118,65 +1130,71 @@ function buildDashboardNLP({ advanced, dashboard, dashboardDetail, financialAnal
   const validationIssues = n(dashboardDetail?.totalValidationIssues);
   const overBudgets = (budgetAnalysis || []).filter(b => b.status === "초과");
   const warningBudgets = (budgetAnalysis || []).filter(b => b.status === "주의");
+  const rows = financialAnalysis?.rows || [];
+  const totalInvested = rows.reduce((sum, r) => sum + n(r.invested), 0);
+  const totalProfit = totalInvest - totalInvested;
+  const totalReturn = totalInvested > 0 ? totalProfit / totalInvested * 100 : 0;
+  const concentrated = rows.filter(r => r.state === "쏠림 경고");
+  const last6 = (monthlySeries || []).slice(-6);
+  const avgNet = last6.length ? last6.reduce((sum, r) => sum + n(r.net), 0) / last6.length : 0;
+  const deficitMonths = last6.filter(r => n(r.net) < 0).length;
+  const urgentEvents = (eventAnalysis || []).filter(e => n(e.yearsFromNow) <= 1 && n(e.shortage) > 0);
+  const eventNeed = (eventAnalysis || []).reduce((sum, e) => sum + n(e.monthlyNeed), 0);
+  const eventTarget = (eventAnalysis || []).reduce((sum, e) => sum + n(e.amountNeeded), 0);
+  const eventPrepared = (eventAnalysis || []).reduce((sum, e) => sum + n(e.currentPrepared), 0);
+  const eventRate = eventTarget > 0 ? eventPrepared / eventTarget * 100 : 0;
+  const pensionValue = (taxAnalysis || []).filter(t => ["연금저축", "IRP"].includes(t.name)).reduce((sum, t) => sum + n(t.value), 0);
+  const taxableTax = (taxAnalysis || []).filter(t => t.name === "일반계좌").reduce((sum, t) => sum + n(t.estimatedTax), 0);
+  const finalSim = Array.isArray(futureSim) && futureSim.length ? futureSim[futureSim.length - 1] : null;
+  const projectedRetirement = n(finalSim?.total || dashboardDetail?.retirementRow?.total || 0);
+  const targetAmount = n(data?.settings?.retirementTargetAmount || 0);
+  const projectedGap = targetAmount > 0 ? projectedRetirement - targetAmount : 0;
 
   let tone = "accent";
   let icon = "🧭";
-  let title = "이번 달 재무 결론";
-  let conclusion = "현재 재무 상태는 큰 흐름을 확인할 수 있는 단계입니다.";
+  let title = "통합 재무 결론";
+  let conclusion = "현재 재무 상태는 대시보드·가계부·포트폴리오·절세·목표·시뮬레이션을 함께 봐야 정확합니다.";
   const reasons = [];
   const actions = [];
+  const linked = [];
 
-  if (score >= 80) {
-    tone = "green";
-    icon = "✅";
-    conclusion = "현재 재무 흐름은 안정적입니다. 핵심은 지금의 저축·투자 루틴을 무리 없이 유지하는 것입니다.";
-  } else if (score >= 65) {
-    tone = "accent";
-    icon = "📊";
-    conclusion = "전체적으로는 양호하지만, 일부 항목을 조정하면 장기 목표 달성 가능성을 더 높일 수 있습니다.";
-  } else if (score >= 50) {
-    tone = "amber";
-    icon = "⚠️";
-    conclusion = "현재는 관리가 필요한 구간입니다. 투자 확대보다 현금흐름과 비상금 안정화가 먼저입니다.";
-  } else {
-    tone = "red";
-    icon = "🚨";
-    conclusion = "현재는 위험 신호가 있습니다. 지출·비상금·입력 오류를 먼저 정리한 뒤 투자 판단을 하는 것이 안전합니다.";
-  }
+  if (score >= 80) { tone = "green"; icon = "✅"; conclusion = "현재 재무 흐름은 안정적입니다. 현금흐름을 유지하면서 투자·절세·목표 적립을 정기 점검하는 단계입니다."; }
+  else if (score >= 65) { tone = "accent"; icon = "📊"; conclusion = "전체적으로는 양호하지만, 몇 가지 연결 지표를 조정하면 장기 목표 달성 가능성을 더 높일 수 있습니다."; }
+  else if (score >= 50) { tone = "amber"; icon = "⚠️"; conclusion = "현재는 관리가 필요한 구간입니다. 투자 확대보다 현금흐름·예산·비상금·목표 적립 순서를 먼저 정리하는 것이 좋습니다."; }
+  else { tone = "red"; icon = "🚨"; conclusion = "현재는 위험 신호가 있습니다. 지출·비상금·입력 오류를 먼저 정리한 뒤 투자와 은퇴 시뮬레이션을 다시 확인하는 것이 안전합니다."; }
 
   if (income <= 0 && expense <= 0) {
-    conclusion = "아직 이번 달 수입·지출 데이터가 부족합니다. 거래 입력이 쌓이면 대시보드가 자동으로 결론과 조언을 계산합니다.";
+    conclusion = "아직 이번 달 수입·지출 데이터가 부족합니다. 거래 입력이 쌓이면 다른 분석 탭까지 연결해 통합 결론을 계산합니다.";
     reasons.push("이번 달 거래내역이 부족하여 현금흐름 판단 정확도가 낮습니다.");
     actions.push({ tag: "입력", label: "이번 달 수입·지출 먼저 입력" });
   } else {
-    reasons.push(`이번 달 현금흐름은 ${fmt(net)}원이며, 저축률은 ${fmtPct(savingsRate)}입니다.`);
-    reasons.push(`비상금은 월 지출 기준 약 ${emergencyMonths.toFixed(1)}개월치입니다.`);
-    reasons.push(`투자 계획 기준 투자율은 ${fmtPct(investRate)}, 은퇴 목표 달성률은 ${fmtPct(targetRate)}입니다.`);
+    reasons.push(`현금흐름 ${fmt(net)}원, 저축률 ${fmtPct(savingsRate)}, 비상금 ${emergencyMonths.toFixed(1)}개월치입니다.`);
+    reasons.push(`투자자산 ${fmt(totalInvest)}원, 전체 투자수익률 ${fmtPct(totalReturn)}, 은퇴 목표 달성률 ${fmtPct(targetRate)}입니다.`);
+    reasons.push(`목표 준비율 ${fmtPct(eventRate)}, 예상 은퇴자산 ${fmt(projectedRetirement)}원입니다.`);
   }
 
+  linked.push({ icon: net >= 0 ? "💵" : "🔻", title: "현금흐름", text: net >= 0 ? `이번 달 ${fmt(net)}원 흑자입니다. 투자·목표 적립 재원으로 활용 가능합니다.` : `이번 달 ${fmt(Math.abs(net))}원 적자입니다. 투자 증액보다 지출 조정이 우선입니다.`, tone: net >= 0 ? "green" : "red" });
+  linked.push({ icon: overBudgets.length ? "💸" : warningBudgets.length ? "👀" : "📋", title: "가계부·예산", text: overBudgets.length ? `${overBudgets.length}개 예산 초과: ${overBudgets.slice(0,2).map(b=>b.cat1).join("·")} 우선 조정` : warningBudgets.length ? `${warningBudgets[0].cat1} 항목이 예산 80% 이상입니다.` : "예산 초과 항목이 크지 않습니다.", tone: overBudgets.length ? "red" : warningBudgets.length ? "amber" : "green" });
+  linked.push({ icon: totalReturn >= 0 ? "📈" : "📉", title: "포트폴리오", text: rows.length ? `투자수익률 ${fmtPct(totalReturn)}, 평가손익 ${fmt(totalProfit)}원${concentrated.length ? `, 쏠림 경고 ${concentrated.length}건` : ""}` : "보유 종목을 입력하면 수익률·비중·쏠림 리스크를 연결합니다.", tone: !rows.length ? "info" : concentrated.length ? "amber" : totalReturn >= 0 ? "green" : "red" });
+  linked.push({ icon: taxableTax > 0 ? "💡" : "🧾", title: "세금·절세", text: taxableTax > 0 ? `일반계좌 예상 세금 노출 ${fmt(taxableTax)}원입니다. ISA·연금계좌 활용을 검토하세요.` : `연금/IRP 평가액 ${fmt(pensionValue)}원, 큰 세금 노출은 제한적입니다.`, tone: taxableTax > 0 ? "amber" : "green" });
+  linked.push({ icon: urgentEvents.length ? "⏰" : "🎯", title: "목표·이벤트", text: urgentEvents.length ? `1년 이내 부족 목표 ${urgentEvents.length}개가 있습니다. 월 ${fmt(urgentEvents.reduce((sum,e)=>sum+n(e.monthlyNeed),0))}원 우선 배정이 필요합니다.` : `전체 목표 준비율 ${fmtPct(eventRate)}, 월 필요 적립액 ${fmt(eventNeed)}원입니다.`, tone: urgentEvents.length ? "red" : eventRate >= 70 ? "green" : "accent" });
+  linked.push({ icon: projectedGap >= 0 ? "🏁" : "🧮", title: "미래 시뮬레이션", text: targetAmount > 0 ? (projectedGap >= 0 ? `은퇴 목표 대비 ${fmt(projectedGap)}원 초과 예상입니다.` : `은퇴 목표 대비 ${fmt(Math.abs(projectedGap))}원 부족 예상입니다. 월 투자금·수익률·은퇴나이 가정 점검이 필요합니다.`) : "은퇴 목표금액을 설정하면 부족/초과 금액을 연결합니다.", tone: targetAmount <= 0 ? "info" : projectedGap >= 0 ? "green" : "amber" });
+
   if (net < 0) actions.push({ tag: "현금흐름", label: "이번 달 적자 원인부터 확인" });
+  if (deficitMonths >= 2) actions.push({ tag: "추세", label: `최근 6개월 중 적자 ${deficitMonths}개월 원인 점검` });
   if (savingsRate < 20 && income > 0) actions.push({ tag: "저축률", label: "고정비·변동비를 줄여 저축률 20% 이상 회복" });
   if (emergencyMonths < 3 && expense > 0) actions.push({ tag: "비상금", label: "투자 증액보다 비상금 3개월치 우선 확보" });
   else if (emergencyMonths < 6 && expense > 0) actions.push({ tag: "안전", label: "비상금 6개월치까지 단계적으로 보강" });
   if (overBudgets.length) actions.push({ tag: "예산", label: `${overBudgets.slice(0,2).map(b=>b.cat1).join("·")} 예산 초과 항목 조정` });
-  else if (warningBudgets.length) actions.push({ tag: "예산", label: `${warningBudgets[0].cat1} 지출 증가세 확인` });
-  if (debtRatio > 40) actions.push({ tag: "부채", label: "부채비율 40% 초과 여부 점검" });
-  if (targetRate < 70 && totalInvest > 0) actions.push({ tag: "투자", label: "월 투자금·기대수익률·은퇴나이 가정 재점검" });
+  if (concentrated.length) actions.push({ tag: "리밸런싱", label: `${concentrated[0].name} 비중 쏠림 점검` });
+  if (taxableTax > 100000) actions.push({ tag: "절세", label: "일반계좌 세금 노출을 절세계좌와 비교" });
+  if (urgentEvents.length) actions.push({ tag: "목표", label: `${urgentEvents[0].name} 우선 적립 계획 설정` });
+  if (targetRate < 70 && totalInvest > 0) actions.push({ tag: "은퇴", label: "월 투자금·기대수익률·은퇴나이 가정 재점검" });
   if (validationIssues > 0) actions.push({ tag: "데이터", label: `입력 점검 ${validationIssues}건 먼저 수정` });
-  if (!actions.length) actions.push({ tag: "유지", label: "현재 전략 유지, 월 1회 리밸런싱 점검" });
+  if (!actions.length) actions.push({ tag: "유지", label: "현재 전략 유지, 월 1회 리밸런싱·절세·목표 점검" });
 
-  const message =
-    `${conclusion}\n\n` +
-    `근거: ${reasons.slice(0,3).join(" ")} ` +
-    `현재 순자산은 ${fmt(netWorth)}원, 투자자산은 ${fmt(totalInvest)}원입니다.`;
-
-  return {
-    icon,
-    title,
-    tone,
-    message,
-    actions: actions.slice(0, 4),
-  };
+  const message = `${conclusion}\n\n근거: ${reasons.slice(0,3).join(" ")} 현재 순자산은 ${fmt(netWorth)}원이며, 최근 6개월 평균 현금흐름은 ${fmt(avgNet)}원입니다.`;
+  return { icon, title, tone, message, actions: actions.slice(0, 5), linked: linked.slice(0, 6) };
 }
 
 function DashboardAdvicePanel({ nlp }) {
@@ -1200,6 +1218,20 @@ function DashboardAdvicePanel({ nlp }) {
         actions={actionList}
         compact
       />
+
+      {Array.isArray(nlp.linked) && nlp.linked.length > 0 && (
+        <div className="dashboard-linked-grid">
+          {nlp.linked.map((x, i) => (
+            <div key={i} className={`dashboard-linked-card ${x.tone || "info"}`}>
+              <span>{x.icon}</span>
+              <div>
+                <strong>{x.title}</strong>
+                <p>{x.text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="dashboard-advice-list">
         {actionList.map((a, i) => (
@@ -1572,7 +1604,7 @@ function Field({ label, error, warn, children }) {
 
 
 // ─── Dashboard Tab ────────────────────────────────────────────────────────────
-function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, futureSim }) {
+function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, taxAnalysis, futureSim }) {
   const recentTx=dashboardDetail.recentTx||[];
   const topExp=dashboardDetail.topExpenseCats||[];
 
@@ -1626,8 +1658,8 @@ function DashboardTab({ data, dashboard, dashboardDetail, dashboardChartData, fi
   },[data,dashboard,dashboardDetail,dashboardChartData,budgetAnalysis]);
 
   const dashboardNLP = useMemo(
-    () => buildDashboardNLP({ advanced, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, data }),
-    [advanced, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, data]
+    () => buildDashboardNLP({ advanced, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, taxAnalysis, futureSim, data }),
+    [advanced, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, taxAnalysis, futureSim, data]
   );
 
   const healthColor=advanced.tone==="green"?"var(--green)":advanced.tone==="accent"?"var(--accent)":advanced.tone==="amber"?"var(--amber)":"var(--red)";
@@ -5629,7 +5661,7 @@ export default function App() {
           </div>
 
           <div className="page">
-            {tab==="dashboard"&&<DashboardTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} dashboardChartData={dashboardChartData} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} monthlySeries={monthlySeries} eventAnalysis={eventAnalysis} futureSim={futureSim}/>}
+            {tab==="dashboard"&&<DashboardTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} dashboardChartData={dashboardChartData} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} monthlySeries={monthlySeries} eventAnalysis={eventAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="goals"&&<GoalFundingTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} futureSim={futureSim}/>}
             {tab==="cfo"&&<CFOCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="automation"&&<AutomationSystemTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
