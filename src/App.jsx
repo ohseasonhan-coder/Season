@@ -326,6 +326,103 @@ function saveData(d) {
   }
 }
 
+
+function estimateJSONSizeBytes(value) {
+  try {
+    return new Blob([JSON.stringify(value)]).size;
+  } catch {
+    return 0;
+  }
+}
+
+function formatBytes(bytes) {
+  const size = n(bytes);
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function getStorageBackupList() {
+  try {
+    return Object.keys(localStorage)
+      .filter((key) => key.startsWith(STORAGE_BACKUP_PREFIX))
+      .sort()
+      .reverse()
+      .map((key) => {
+        const raw = localStorage.getItem(key);
+        const parsed = safeParseJSON(raw);
+        const migrated = parsed ? migrateData({ ...emptyData(), ...parsed }) : null;
+        const createdAt = key.replace(STORAGE_BACKUP_PREFIX, "");
+        return {
+          key,
+          createdAt,
+          sizeBytes: raw ? new Blob([raw]).size : 0,
+          valid: !!migrated && isValidAppData(migrated),
+          transactionCount: Array.isArray(migrated?.transactions) ? migrated.transactions.length : 0,
+          assetCount: Array.isArray(migrated?.assets) ? migrated.assets.length : 0,
+          portfolioCount: Array.isArray(migrated?.portfolio) ? migrated.portfolio.length : 0,
+          lastSavedAt: migrated?.lastSavedAt || parsed?.lastSavedAt || "",
+        };
+      });
+  } catch (error) {
+    console.warn("백업 목록 조회 실패:", error);
+    return [];
+  }
+}
+
+function createManualStorageBackup(data, label = "manual") {
+  try {
+    const nextData = migrateData({
+      ...emptyData(),
+      ...data,
+      lastManualBackupAt: new Date().toISOString(),
+    });
+    if (!isValidAppData(nextData)) throw new Error("백업할 데이터 구조가 올바르지 않습니다.");
+    const safeLabel = String(label || "manual").replace(/[^a-zA-Z0-9가-힣_-]/g, "").slice(0, 24) || "manual";
+    const backupKey = `${STORAGE_BACKUP_PREFIX}${new Date().toISOString()}:${safeLabel}`;
+    localStorage.setItem(backupKey, JSON.stringify(nextData));
+    cleanupOldBackups();
+    return { ok: true, key: backupKey, data: nextData };
+  } catch (error) {
+    console.error("수동 백업 생성 실패:", error);
+    return { ok: false, error: error.message || "백업 생성 실패" };
+  }
+}
+
+function restoreStorageBackup(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) throw new Error("선택한 백업을 찾을 수 없습니다.");
+    const parsed = safeParseJSON(raw);
+    if (!parsed) throw new Error("백업 파일이 JSON 형식이 아닙니다.");
+    const restored = migrateData({ ...emptyData(), ...parsed, lastRestoredAt: new Date().toISOString() });
+    if (!isValidAppData(restored)) throw new Error("백업 데이터 구조가 올바르지 않습니다.");
+    createStorageBackup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
+    return { ok: true, data: restored };
+  } catch (error) {
+    console.error("백업 복원 실패:", error);
+    return { ok: false, error: error.message || "백업 복원 실패" };
+  }
+}
+
+function deleteStorageBackup(key) {
+  try {
+    localStorage.removeItem(key);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message || "백업 삭제 실패" };
+  }
+}
+
+function validateImportedAppData(rawText) {
+  const parsed = safeParseJSON(rawText);
+  if (!parsed) return { ok: false, error: "JSON 형식이 올바르지 않습니다." };
+  const migrated = migrateData({ ...emptyData(), ...parsed });
+  if (!isValidAppData(migrated)) return { ok: false, error: "앱 데이터 구조가 올바르지 않습니다." };
+  return { ok: true, data: migrated };
+}
+
 // ─── Styles ──────────────────────────────────────────────────────────────────
 const STYLES = `
 @import url('https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.css');
@@ -1101,6 +1198,19 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 @media(max-width:700px){.dashboard-advice-list{grid-template-columns:1fr}}
 
 
+
+
+/* Backup / Restore Center */
+.backup-hero-card{background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.08));border-color:rgba(108,125,255,.22)}
+.backup-health-box{min-width:132px;padding:18px;border-radius:20px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.08);text-align:center}
+.backup-health-value{font-size:42px;font-weight:950;letter-spacing:-.06em;line-height:1;color:var(--accent2)}
+.backup-health-label{font-size:11px;font-weight:800;color:var(--text3);margin-top:7px;letter-spacing:.04em;text-transform:uppercase}
+.backup-summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px}
+.backup-summary-item{padding:14px;border-radius:15px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07)}
+.backup-summary-item span{display:block;font-size:11px;color:var(--text3);font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px}
+.backup-summary-item strong{display:block;font-size:18px;color:var(--text);font-weight:900;letter-spacing:-.03em;line-height:1.25}
+.backup-summary-item small{display:block;margin-top:6px;font-size:11px;color:var(--text3)}
+@media(max-width:900px){.backup-summary-grid{grid-template-columns:1fr}.backup-health-box{width:100%}}
 
 /* Net Worth Goal Timeline */
 .networth-timeline-card{border-color:rgba(108,125,255,.22);background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.055))}
@@ -5788,12 +5898,115 @@ function AccountsTab({ data, update }) {
 
 // ─── Data Tab ─────────────────────────────────────────────────────────────────
 function DataTab({ data, update, validations }) {
-  const fileRef=useRef();
-  const exportJSON=()=>{ const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`asset-backup-${todayISO()}.json`; a.click(); };
-  const importJSON=(file)=>{ const rd=new FileReader(); rd.onload=()=>{ try{setData(migrateData(JSON.parse(rd.result)));alert("복원 완료");}catch(e){alert("복원 실패: "+e.message);} }; rd.readAsText(file); };
-  const clearAll=()=>{ if(!window.confirm("전체 데이터를 초기화할까요?")) return; update(()=>emptyData()); };
+  const fileRef = useRef();
+  const [backupList, setBackupList] = useState(() => getStorageBackupList());
+  const [selectedBackupKey, setSelectedBackupKey] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
+
+  const refreshBackups = () => {
+    const list = getStorageBackupList();
+    setBackupList(list);
+    if (selectedBackupKey && !list.some((b) => b.key === selectedBackupKey)) setSelectedBackupKey("");
+    return list;
+  };
+
+  const exportJSON = () => {
+    const payload = migrateData({ ...emptyData(), ...data, exportedAt: new Date().toISOString() });
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `asset-backup-${todayISO()}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatusMessage("현재 데이터를 JSON 파일로 다운로드했습니다.");
+  };
+
+  const exportSelectedBackup = (key) => {
+    const raw = localStorage.getItem(key);
+    if (!raw) return alert("선택한 백업을 찾을 수 없습니다.");
+    const createdAt = key.replace(STORAGE_BACKUP_PREFIX, "").replace(/[:.]/g, "-");
+    const blob = new Blob([raw], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `asset-backup-restore-point-${createdAt}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const createManualBackup = () => {
+    const result = createManualStorageBackup(data, "manual");
+    if (!result.ok) return alert(`백업 실패: ${result.error}`);
+    refreshBackups();
+    setStatusMessage("수동 복원 지점을 생성했습니다.");
+    alert("수동 백업이 생성되었습니다.");
+  };
+
+  const restoreSelectedBackup = (key) => {
+    const targetKey = key || selectedBackupKey;
+    if (!targetKey) return alert("복원할 백업을 선택하세요.");
+    if (!window.confirm("현재 데이터는 자동 백업 후 선택한 시점으로 복원됩니다. 계속할까요?")) return;
+    const result = restoreStorageBackup(targetKey);
+    if (!result.ok) return alert(`복원 실패: ${result.error}`);
+    update(() => result.data);
+    refreshBackups();
+    setStatusMessage("선택한 백업으로 복원했습니다.");
+    alert("복원 완료");
+  };
+
+  const deleteSelectedBackup = (key) => {
+    const targetKey = key || selectedBackupKey;
+    if (!targetKey) return alert("삭제할 백업을 선택하세요.");
+    if (!window.confirm("선택한 백업을 삭제할까요?")) return;
+    const result = deleteStorageBackup(targetKey);
+    if (!result.ok) return alert(`삭제 실패: ${result.error}`);
+    refreshBackups();
+    setStatusMessage("선택한 백업을 삭제했습니다.");
+  };
+
+  const importJSON = (file) => {
+    const rd = new FileReader();
+    rd.onload = () => {
+      const result = validateImportedAppData(rd.result);
+      if (!result.ok) return alert(`복원 실패: ${result.error}`);
+      if (!window.confirm("현재 데이터를 자동 백업한 뒤 업로드한 JSON으로 복원할까요?")) return;
+      createManualStorageBackup(data, "before-import");
+      update(() => result.data);
+      refreshBackups();
+      setStatusMessage("외부 JSON 파일로 복원했습니다.");
+      alert("복원 완료");
+    };
+    rd.onerror = () => alert("파일을 읽지 못했습니다.");
+    rd.readAsText(file);
+  };
+
+  const currentDataSize = estimateJSONSizeBytes(data);
+  const validBackupCount = backupList.filter((b) => b.valid).length;
+  const selectedBackup = backupList.find((b) => b.key === selectedBackupKey);
+
   return (
     <div className="stack">
+      <div className="card backup-hero-card">
+        <div className="row-between" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div>
+            <span className="badge badge-accent">2단계 완료형</span>
+            <h2 style={{ marginTop: 10, fontSize: 24, letterSpacing: "-.04em" }}>백업 / 복원 센터</h2>
+            <p style={{ marginTop: 8, color: "var(--text3)", fontSize: 13, lineHeight: 1.6 }}>
+              현재 데이터의 복원 지점을 만들고, 저장 데이터 손상·외부 JSON 복원·이전 시점 복구를 한 화면에서 관리합니다.
+            </p>
+          </div>
+          <div className="backup-health-box">
+            <div className="backup-health-value">{validBackupCount}</div>
+            <div className="backup-health-label">정상 백업</div>
+          </div>
+        </div>
+        <div className="backup-summary-grid">
+          <div className="backup-summary-item"><span>현재 데이터</span><strong>{formatBytes(currentDataSize)}</strong><small>저장 크기</small></div>
+          <div className="backup-summary-item"><span>전체 백업</span><strong>{backupList.length}개</strong><small>최근 {MAX_BACKUPS}개 유지</small></div>
+          <div className="backup-summary-item"><span>마지막 저장</span><strong>{data.lastSavedAt ? new Date(data.lastSavedAt).toLocaleString() : "-"}</strong><small>자동 저장 기준</small></div>
+        </div>
+        {statusMessage && <div className="alert alert-info" style={{ marginTop: 14 }}>{statusMessage}</div>}
+      </div>
+
       <div className="card">
         <h3>자동 입력 점검</h3>
         <div className="table-wrap">
@@ -5813,15 +6026,78 @@ function DataTab({ data, update, validations }) {
           </table>
         </div>
       </div>
-      <div className="card">
-        <h3>백업 / 복원</h3>
-        <div className="row" style={{flexWrap:"wrap",gap:10}}>
-          <button className="btn btn-primary" onClick={exportJSON}>JSON 백업 다운로드</button>
-          <button className="btn btn-ghost" onClick={()=>fileRef.current?.click()}>JSON 복원</button>
-          <button className="btn btn-danger" onClick={clearAll}>전체 초기화</button>
-          <input ref={fileRef} type="file" accept=".json" style={{display:"none"}} onChange={e=>e.target.files?.[0]&&importJSON(e.target.files[0])}/>
+
+      <div className="g2">
+        <div className="card">
+          <div className="card-title">
+            <h3>현재 데이터 백업</h3>
+            <span className="badge badge-muted">수동 복원 지점</span>
+          </div>
+          <div className="stack">
+            <button className="btn btn-primary" onClick={createManualBackup}>현재 상태를 복원 지점으로 저장</button>
+            <button className="btn btn-ghost" onClick={exportJSON}>현재 데이터 JSON 다운로드</button>
+            <button className="btn btn-ghost" onClick={()=>fileRef.current?.click()}>외부 JSON 파일로 복원</button>
+            <input ref={fileRef} type="file" accept=".json,application/json" style={{display:"none"}} onChange={e=>{ const file=e.target.files?.[0]; if(file) importJSON(file); e.target.value=""; }}/>
+          </div>
+          <div className="alert alert-warn" style={{marginTop:14}}>
+            복원 전에는 현재 데이터가 자동으로 별도 백업됩니다. 그래도 중요한 데이터는 JSON 파일로 한 번 더 내려받아 보관하는 것을 권장합니다.
+          </div>
         </div>
-        <div style={{marginTop:12,fontSize:12,color:"var(--text3)"}}>마지막 저장: {data.lastSavedAt?new Date(data.lastSavedAt).toLocaleString():"-"}</div>
+
+        <div className="card">
+          <div className="card-title">
+            <h3>위험 작업</h3>
+            <span className="badge badge-red">주의</span>
+          </div>
+          <div className="stack">
+            <button className="btn btn-danger" onClick={()=>{ if(!window.confirm("현재 데이터를 수동 백업한 뒤 전체 초기화할까요?")) return; createManualStorageBackup(data,"before-clear"); update(()=>emptyData()); refreshBackups(); setStatusMessage("전체 데이터를 초기화했습니다. 초기화 직전 백업이 생성되었습니다."); }}>전체 초기화</button>
+            <button className="btn btn-ghost" onClick={refreshBackups}>백업 목록 새로고침</button>
+          </div>
+          <div style={{marginTop:12,fontSize:12,color:"var(--text3)",lineHeight:1.5}}>
+            전체 초기화는 거래내역, 자산, 포트폴리오, 설정값을 모두 기본값으로 되돌립니다. 실행 직전 복원 지점이 자동으로 생성됩니다.
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">
+          <h3>복원 지점 목록</h3>
+          <div className="row">
+            <button className="btn btn-sm btn-ghost" onClick={refreshBackups}>새로고침</button>
+            {selectedBackup && <button className="btn btn-sm btn-primary" onClick={()=>restoreSelectedBackup()}>선택 백업 복원</button>}
+          </div>
+        </div>
+        {backupList.length === 0 ? (
+          <div className="empty">아직 생성된 백업이 없습니다. 먼저 “현재 상태를 복원 지점으로 저장”을 눌러주세요.</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr><th>선택</th><th>생성 시각</th><th>상태</th><th className="td-right">크기</th><th className="td-right">거래</th><th className="td-right">자산</th><th className="td-right">투자</th><th>작업</th></tr>
+              </thead>
+              <tbody>
+                {backupList.map((b) => (
+                  <tr key={b.key}>
+                    <td><input type="radio" name="backupKey" checked={selectedBackupKey===b.key} onChange={()=>setSelectedBackupKey(b.key)}/></td>
+                    <td className="td-name">{b.createdAt ? new Date(b.createdAt.split(":manual")[0].split(":before")[0]).toLocaleString() : "-"}</td>
+                    <td>{b.valid ? <span className="badge badge-green">정상</span> : <span className="badge badge-red">손상</span>}</td>
+                    <td className="td-right td-mono">{formatBytes(b.sizeBytes)}</td>
+                    <td className="td-right td-mono">{fmt(b.transactionCount)}</td>
+                    <td className="td-right td-mono">{fmt(b.assetCount)}</td>
+                    <td className="td-right td-mono">{fmt(b.portfolioCount)}</td>
+                    <td>
+                      <div className="row" style={{gap:6, flexWrap:"wrap"}}>
+                        <button className="btn btn-sm btn-primary" disabled={!b.valid} onClick={()=>restoreSelectedBackup(b.key)}>복원</button>
+                        <button className="btn btn-sm btn-ghost" onClick={()=>exportSelectedBackup(b.key)}>다운로드</button>
+                        <button className="btn btn-sm btn-danger" onClick={()=>deleteSelectedBackup(b.key)}>삭제</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
