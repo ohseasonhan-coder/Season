@@ -3827,6 +3827,7 @@ function buildCFOScoreSimulation({ data={}, dashboard={}, dashboardDetail={}, fi
 function modelSafeScore(v){ return clamp(Math.round(n(v)),0,100); }
 
 function buildCFODecisionModel({ data={}, dashboard={}, dashboardDetail={}, financialAnalysis={}, budgetAnalysis=[], futureSim=[] }) {
+  const settings = data.settings || {};
   const income = n(dashboard.income);
   const expense = n(dashboard.expense);
   const net = n(dashboard.net);
@@ -3878,7 +3879,85 @@ function buildCFODecisionModel({ data={}, dashboard={}, dashboardDetail={}, fina
   const problems = [];
   const actions = [];
   const pushProblem = (title, desc, priority="mid", impact=0) => problems.push({ title, desc, priority, impact });
-  const pushAction = (title, desc, priority="mid", expectedScore=0) => actions.push({ title, desc, priority, expectedScore });
+  const pushAction = (title, desc, priority="mid", expectedScore=0, meta={}) => actions.push({ title, desc, priority, expectedScore, ...meta });
+
+  // ─── Season 개인 재무 구조 기준 CFO 행동 지시 룰셋 ────────────────────────────
+  // 기준: 비상금 1차 1,500만원 → 최종 3,000만원, 월 투자 100/150/200만원 단계 전환,
+  // ISA 연 2,000만원, 포트폴리오 나스닥100 90%(H 45% + 비H 45%) / 배당다우존스 10%.
+  const PERSONAL_CFO_RULESET = {
+    emergencyFloor: 15000000,
+    emergencyTarget: 30000000,
+    stage1EmergencyMonthly: 2000000,
+    stage1InvestMonthly: 1000000,
+    stage2EmergencyMonthly: 500000,
+    stage2InvestMonthly: 1500000,
+    stage3InvestMonthly: 2000000,
+    isaAnnualLimit: n(settings.isaAnnualLimit || 20000000),
+    nasdaqTarget: 0.90,
+    nasdaqHSubTarget: 0.45,
+    nasdaqUnhedgedSubTarget: 0.45,
+    dividendTarget: 0.10,
+    rebalanceBand: n(settings.rebalanceBandPct || 5) / 100,
+  };
+  const currentYear = new Date().getFullYear();
+  const txThisYear = (data.transactions || []).filter(t => String(t.date || "").startsWith(String(currentYear)));
+  const isaContributed = txThisYear
+    .filter(t => `${t.account || ""} ${t.fromAccount || ""} ${t.toAccount || ""} ${t.memo || ""}`.includes("ISA"))
+    .reduce((sum, t) => sum + n(t.amount), 0);
+  const isaRemaining = Math.max(PERSONAL_CFO_RULESET.isaAnnualLimit - isaContributed, 0);
+  const monthsLeft = Math.max(12 - new Date().getMonth(), 1);
+  const isaMonthlyNeed = Math.ceil(isaRemaining / monthsLeft / 10000) * 10000;
+  const portfolioRows = data.portfolio || [];
+  const positionValue = (p) => n(p.qty) * n(p.currentPrice || p.price || p.avgPrice);
+  const portfolioMarketValue = portfolioRows.reduce((sum, p) => sum + positionValue(p), 0);
+  const classValue = (keyword) => portfolioRows.filter(p => `${p.name || ""} ${p.assetClass || ""}`.includes(keyword)).reduce((sum, p) => sum + positionValue(p), 0);
+  const nasdaqValue = portfolioRows.filter(p => `${p.name || ""} ${p.assetClass || ""}`.includes("나스닥")).reduce((sum, p) => sum + positionValue(p), 0);
+  const nasdaqHValue = portfolioRows.filter(p => `${p.name || ""}`.includes("나스닥100(H)") || `${p.name || ""}`.includes("Nasdaq100(H)")).reduce((sum, p) => sum + positionValue(p), 0);
+  const nasdaqUnhedgedValue = Math.max(nasdaqValue - nasdaqHValue, 0);
+  const dividendValue = classValue("배당");
+  const investBase = Math.max(portfolioMarketValue, investmentAssets, 1);
+  const nasdaqWeight = nasdaqValue / investBase;
+  const dividendWeight = dividendValue / investBase;
+  const nasdaqHWeight = nasdaqHValue / investBase;
+  const nasdaqUnhedgedWeight = nasdaqUnhedgedValue / investBase;
+
+  if (emergencyFund < PERSONAL_CFO_RULESET.emergencyFloor) {
+    const needToFloor = Math.max(PERSONAL_CFO_RULESET.emergencyFloor - emergencyFund, 0);
+    const emergencyNow = Math.min(PERSONAL_CFO_RULESET.stage1EmergencyMonthly, needToFloor);
+    pushProblem("비상금 1차 기준 미달", `현재 비상금 ${fmt(emergencyFund)}원 / 1차 기준 1,500만원입니다. 1차 기준까지 ${fmt(needToFloor)}원이 부족합니다.`, "high", 10);
+    pushAction("이번 달 비상금 200만원 우선 이체", `최소 ${fmt(emergencyNow)}원을 비상금으로 먼저 분리하고, 투자금은 월 ${fmt(PERSONAL_CFO_RULESET.stage1InvestMonthly)}원 수준으로 제한하세요.`, "high", 9, { recommendedAmount: emergencyNow, ruleId:"season-emergency-stage1" });
+  } else if (emergencyFund < PERSONAL_CFO_RULESET.emergencyTarget) {
+    const needToTarget = Math.max(PERSONAL_CFO_RULESET.emergencyTarget - emergencyFund, 0);
+    pushProblem("비상금 최종 목표 미달", `현재 비상금 ${fmt(emergencyFund)}원 / 최종 목표 3,000만원입니다. 목표까지 ${fmt(needToTarget)}원이 남았습니다.`, "mid", 6);
+    pushAction("비상금 50만원 + 투자 150만원 실행", `비상금은 월 ${fmt(PERSONAL_CFO_RULESET.stage2EmergencyMonthly)}원만 보강하고, 나머지 ${fmt(PERSONAL_CFO_RULESET.stage2InvestMonthly)}원은 ISA/ETF 투자로 전환하세요.`, "mid", 7, { recommendedAmount: PERSONAL_CFO_RULESET.stage2InvestMonthly, ruleId:"season-stage2-invest" });
+  } else {
+    pushAction("월 200만원 전액 투자 실행", `비상금 3,000만원 기준을 충족했으므로 신규 여유자금은 월 ${fmt(PERSONAL_CFO_RULESET.stage3InvestMonthly)}원 기준으로 투자하세요.`, "high", 6, { recommendedAmount: PERSONAL_CFO_RULESET.stage3InvestMonthly, ruleId:"season-full-invest" });
+  }
+  if (PERSONAL_CFO_RULESET.isaAnnualLimit > 0 && isaRemaining > 0) {
+    const priority = isaMonthlyNeed > PERSONAL_CFO_RULESET.stage3InvestMonthly ? "high" : "mid";
+    pushAction("ISA 잔여 한도 월별 납입", `${currentYear}년 ISA 추정 납입액은 ${fmt(isaContributed)}원, 잔여 한도는 ${fmt(isaRemaining)}원입니다. 남은 ${monthsLeft}개월 기준 월 ${fmt(isaMonthlyNeed)}원 납입이 필요합니다.`, priority, 5, { recommendedAmount: isaMonthlyNeed, ruleId:"season-isa-limit" });
+  }
+  if (portfolioMarketValue > 0) {
+    if (nasdaqWeight < PERSONAL_CFO_RULESET.nasdaqTarget - PERSONAL_CFO_RULESET.rebalanceBand) {
+      const need = Math.round((PERSONAL_CFO_RULESET.nasdaqTarget * investBase - nasdaqValue) / 10000) * 10000;
+      pushAction("나스닥100 부족분 우선 매수", `현재 나스닥 비중은 ${fmtPct(nasdaqWeight * 100)}입니다. 목표 90%까지 약 ${fmt(Math.max(need, 0))}원 부족하므로 이번 매수금은 나스닥100 ETF에 우선 배정하세요.`, "high", 6, { recommendedAmount: Math.max(need, 0), ruleId:"season-nasdaq-under" });
+    } else if (nasdaqWeight > PERSONAL_CFO_RULESET.nasdaqTarget + PERSONAL_CFO_RULESET.rebalanceBand) {
+      const excess = Math.round((nasdaqValue - PERSONAL_CFO_RULESET.nasdaqTarget * investBase) / 10000) * 10000;
+      pushAction("나스닥100 초과분 리밸런싱", `현재 나스닥 비중은 ${fmtPct(nasdaqWeight * 100)}로 목표 90%보다 높습니다. 약 ${fmt(Math.max(excess, 0))}원은 신규매수 중단 또는 배당ETF 보강으로 조정하세요.`, "mid", 5, { recommendedAmount: Math.max(excess, 0), ruleId:"season-nasdaq-over" });
+    }
+    if (dividendWeight < PERSONAL_CFO_RULESET.dividendTarget - PERSONAL_CFO_RULESET.rebalanceBand) {
+      const need = Math.round((PERSONAL_CFO_RULESET.dividendTarget * investBase - dividendValue) / 10000) * 10000;
+      pushAction("배당ETF 10% 비중 보강", `현재 배당 비중은 ${fmtPct(dividendWeight * 100)}입니다. 목표 10%까지 약 ${fmt(Math.max(need, 0))}원 부족하므로 TIGER 미국배당다우존스 계열을 우선 보강하세요.`, "mid", 5, { recommendedAmount: Math.max(need, 0), ruleId:"season-dividend-under" });
+    }
+    const hedgeGap = nasdaqHWeight - PERSONAL_CFO_RULESET.nasdaqHSubTarget;
+    const unhedgedGap = nasdaqUnhedgedWeight - PERSONAL_CFO_RULESET.nasdaqUnhedgedSubTarget;
+    if (Math.abs(hedgeGap) > PERSONAL_CFO_RULESET.rebalanceBand || Math.abs(unhedgedGap) > PERSONAL_CFO_RULESET.rebalanceBand) {
+      const buyTarget = nasdaqHWeight < nasdaqUnhedgedWeight ? "환헤지형 나스닥100(H)" : "비환헤지형 나스닥100";
+      pushAction("환헤지/비헤지 45:45 균형 조정", `나스닥 내부 비중은 H ${fmtPct(nasdaqHWeight * 100)} / 비H ${fmtPct(nasdaqUnhedgedWeight * 100)}입니다. 다음 매수는 ${buyTarget} 중심으로 배정하세요.`, "mid", 4, { recommendedAmount: n(settings.triggerMonthlyInvestAmount || 2000000), ruleId:"season-hedge-balance" });
+    }
+  } else {
+    pushAction("초기 포트폴리오 기준금액 입력", "보유수량과 현재가를 입력해야 나스닥 90% / 배당 10% 리밸런싱 지시가 정확해집니다.", "high", 4, { ruleId:"season-portfolio-data" });
+  }
 
   if (net < 0) {
     pushProblem("월 현금흐름 적자", `이번 달 순수입이 ${fmt(net)}원입니다. 지출 구조를 먼저 확인해야 합니다.`, "high", 25-scoreConsumption);
@@ -4232,7 +4311,10 @@ function defaultCFOActionForm({ action, model, data }) {
   const defaultTo = accounts.find(a=>String(a.type||"").includes("증권"))?.name || accounts.find(a=>String(a.name||"").includes("ISA"))?.name || accounts[1]?.name || "";
   const emergencyAccount = accounts.find(a=>String(a.name||"").includes("비상") || String(a.name||"").includes("파킹") || String(a.name||"").includes("카카오"))?.name || defaultTo || defaultFrom;
   const monthlyExpense = Math.max(n(model?.detailedDiagnosis?.[0]?.expense), n(data?.settings?.retirementMonthlyExpense), 0);
-  const baseAmount = kind === "budget" ? 100000 : kind === "investment" ? n(data?.settings?.monthlyInvestDefault || data?.settings?.triggerMonthlyInvestAmount || 100000) : kind === "emergency" ? Math.max(Math.round(monthlyExpense || 3000000), 100000) : 0;
+  const actionAmount = n(action?.recommendedAmount || action?.amount || 0);
+  const baseAmount = actionAmount > 0
+    ? actionAmount
+    : kind === "budget" ? 100000 : kind === "investment" ? n(data?.settings?.monthlyInvestDefault || data?.settings?.triggerMonthlyInvestAmount || 100000) : kind === "emergency" ? Math.max(Math.round(monthlyExpense || 3000000), 100000) : 0;
 
   return {
     kind,
