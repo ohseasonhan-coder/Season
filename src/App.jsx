@@ -1193,6 +1193,14 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 
 
 
+
+/* CFO live score preview v21 */
+.cfo-input-preview-live{grid-template-columns:1fr 1fr}
+.cfo-live-wide{grid-column:1/-1}
+.cfo-live-wide em{display:block;margin-top:6px;font-style:normal;color:var(--green);font-size:11px;font-weight:900}
+.cfo-input-preview b{transition:color .18s ease, transform .18s ease}
+.cfo-input-preview-live div:nth-child(2) b{color:var(--green);font-size:16px}
+
 /* CFO input execution modal v20 */
 .cfo-input-modal{width:min(620px,100%)}
 .cfo-input-preview{
@@ -3465,38 +3473,65 @@ function buildCFODecisionModel({ data={}, dashboard={}, dashboardDetail={}, fina
 }
 
 
-function buildCFOActionPreview(model, action) {
+function buildCFOActionPreview(model, action, form=null) {
   const currentScore = n(model?.totalScore);
-  const expected = n(action?.expectedScore);
-  const nextScore = clamp(currentScore + expected, 0, 100);
+  const baseExpected = n(action?.expectedScore);
   const title = String(action?.title || "");
   const desc = String(action?.desc || "");
   const text = `${title} ${desc}`;
+  const kind = form?.kind || detectCFOActionKind(action);
+  const amount = Math.max(n(form?.amount), 0);
+  const data = model?.sourceData || {};
+
+  let amountFactor = 1;
+  if (amount > 0) {
+    if (kind === "emergency") {
+      const monthlyExpense = Math.max(
+        (data.transactions || [])
+          .filter(t=>monthOf(t.date)===thisMonthISO() && t.type==="지출")
+          .reduce((sum,t)=>sum+n(t.amount),0),
+        n(data.settings?.retirementMonthlyExpense),
+        1
+      );
+      const target = monthlyExpense * 3;
+      amountFactor = clamp(amount / Math.max(target, 1), 0.2, 1.5);
+    } else if (kind === "budget") {
+      const selectedBudget = (data.budgets || []).find(b=>b.cat1 === form?.budgetCategory);
+      const target = Math.max(n(selectedBudget?.budget) * 0.1, 100000);
+      amountFactor = clamp(amount / target, 0.2, 1.5);
+    } else if (kind === "investment" || kind === "retirement") {
+      const monthlyInvest = Math.max(n(data.settings?.monthlyInvestDefault), n(data.settings?.triggerMonthlyInvestAmount), 100000);
+      amountFactor = clamp(amount / monthlyInvest, 0.2, 1.5);
+    }
+  }
+
+  const expected = Math.max(0, Math.round(baseExpected * amountFactor));
+  const nextScore = clamp(currentScore + expected, 0, 100);
 
   let target = "재무 구조";
   let before = "현재 상태 유지";
   let after = "개선안 반영";
-  let effect = expected > 0 ? `CFO 점수 +${expected}점 예상` : "점수 변동은 작지만 관리 기준이 정리됩니다.";
+  let effect = expected > 0 ? `입력 금액 기준 CFO 점수 +${expected}점 예상` : "점수 변동은 작지만 관리 기준이 정리됩니다.";
 
-  if (text.includes("비상금")) {
+  if (kind === "emergency" || text.includes("비상금")) {
     target = "비상금 목표";
     before = "비상금 부족/보강 필요";
-    after = "비상금 목표를 자동 생성하고 현금 우선 배분 기준을 설정";
-  } else if (text.includes("지출") || text.includes("예산")) {
+    after = amount > 0 ? `${fmt(amount)}원을 비상금 이체 거래로 반영` : "비상금 목표를 생성하고 현금 우선 배분 기준을 설정";
+  } else if (kind === "budget" || text.includes("지출") || text.includes("예산")) {
     target = "월 예산";
     before = "현재 예산 유지";
-    after = "각 예산을 3% 절감 기준으로 자동 조정";
-  } else if (text.includes("자동투자") || text.includes("투자금") || text.includes("투자")) {
+    after = amount > 0 ? `${form?.budgetCategory || "선택 항목"} 예산을 ${fmt(amount)}원 절감` : "예산 절감 기준을 설정";
+  } else if (kind === "investment" || text.includes("자동투자") || text.includes("투자금") || text.includes("투자")) {
     target = "투자 루틴";
     before = "투자 실행 기준 미정";
-    after = "자동 투자 트리거와 월 투자 기준값 활성화";
-  } else if (text.includes("은퇴")) {
+    after = amount > 0 ? `${fmt(amount)}원을 투자 거래/월 투자 기준으로 반영` : "자동 투자 트리거와 월 투자 기준값 활성화";
+  } else if (kind === "retirement" || text.includes("은퇴")) {
     target = "은퇴 계획";
     before = "기존 은퇴 가정 유지";
-    after = "월 투자금 기준을 보강하고 은퇴 시뮬레이션 재점검";
+    after = amount > 0 ? `월 투자 기준을 ${fmt(amount)}원 이상으로 보강` : "월 투자금 기준을 보강하고 은퇴 시뮬레이션 재점검";
   }
 
-  return { currentScore, expected, nextScore, target, before, after, effect };
+  return { currentScore, expected, nextScore, target, before, after, effect, amountFactor };
 }
 
 
@@ -3513,7 +3548,7 @@ function CFODecisionDashboard({ model, onExecuteAction, onUndoAction, undoState 
 
   const handleConfirmExecute = (action, form) => {
     if (!action) return;
-    const preview = buildCFOActionPreview(model, action);
+    const preview = buildCFOActionPreview(model, action, form);
     onExecuteAction?.(action, form);
     setExecutedAction({
       id: uid(),
@@ -3737,8 +3772,8 @@ function defaultCFOActionForm({ action, model, data }) {
 }
 
 function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
-  const preview = buildCFOActionPreview(model, action);
   const [form, setForm] = useState(()=>defaultCFOActionForm({ action, model, data }));
+  const preview = buildCFOActionPreview(model, action, form);
   const accounts = (data?.accounts || []).filter(a=>a.active);
   const updateForm = (patch) => setForm(prev=>({ ...prev, ...patch }));
   const amountLabel = form.kind === "budget" ? "절감 목표 금액" : form.kind === "investment" ? "투자 금액" : form.kind === "emergency" ? "비상금 이체 금액" : "금액";
@@ -3760,7 +3795,7 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
 
         <p className="apple-cfo-modal-desc">{action.desc}</p>
 
-        <div className="cfo-input-preview">
+        <div className="cfo-input-preview cfo-input-preview-live">
           <div>
             <small>반영 위치</small>
             <b>{form.kind === "budget" ? "예산/지출 관리" : form.kind === "investment" ? "거래내역 + 투자 루틴" : form.kind === "emergency" ? "거래내역 + 비상금 목표" : "CFO 실행 기록"}</b>
@@ -3768,6 +3803,11 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
           <div>
             <small>예상 점수</small>
             <b>{preview.currentScore} → {preview.nextScore}</b>
+          </div>
+          <div className="cfo-live-wide">
+            <small>입력값 반영 결과</small>
+            <b>{preview.after}</b>
+            <em>{preview.effect}</em>
           </div>
         </div>
 
