@@ -4334,7 +4334,7 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
   const accounts = (data?.accounts || []).filter(a=>a.active);
   const updateForm = (patch) => setForm(prev=>({ ...prev, ...patch }));
   const amountLabel = form.kind === "budget" ? "절감 목표 금액" : form.kind === "investment" ? "투자 금액" : form.kind === "emergency" ? "비상금 이체 금액" : "금액";
-  const confirmLabel = form.kind === "budget" ? "예산에 반영" : form.kind === "investment" ? "거래내역에 투자 반영" : form.kind === "emergency" ? "거래내역에 비상금 반영" : "실행 반영";
+  const confirmLabel = form.kind === "budget" ? "예산에 반영" : form.kind === "investment" ? "자산까지 자동 반영" : form.kind === "emergency" ? "거래내역에 비상금 반영" : "실행 반영";
   const amountError = form.kind !== "memo" && n(form.amount) <= 0;
   const accountError = ["emergency","investment"].includes(form.kind) && (!form.fromAccount || !form.toAccount);
 
@@ -4355,7 +4355,7 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
         <div className="cfo-input-preview cfo-input-preview-live">
           <div>
             <small>반영 위치</small>
-            <b>{form.kind === "budget" ? "예산/지출 관리" : form.kind === "investment" ? "거래내역 + 투자 루틴" : form.kind === "emergency" ? "거래내역 + 비상금 목표" : "CFO 실행 기록"}</b>
+            <b>{form.kind === "budget" ? "예산/지출 관리" : form.kind === "investment" ? "거래내역 + 포트폴리오 + 현금자산" : form.kind === "emergency" ? "거래내역 + 비상금 목표" : "CFO 실행 기록"}</b>
           </div>
           <div>
             <small>예상 점수</small>
@@ -4366,6 +4366,14 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
             <b>{preview.after}</b>
             <em>{preview.effect}</em>
           </div>
+          {form.kind === "investment" && n(form.amount) > 0 && (
+            <div className="cfo-live-wide">
+              <small>자동 매수 배분</small>
+              <b>{buildCFOInvestmentAllocation(form.amount).map(a=>`${a.name} ${fmt(a.buyAmount)}원`).join(" / ")}</b>
+              <em>현금성 자산 차감 → 포트폴리오 수량/평균단가 자동 증가 → 거래내역 기록</em>
+            </div>
+          )}
+
         </div>
 
         <div className="cfo-input-grid">
@@ -4431,7 +4439,7 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
         )}
 
         <div className="apple-cfo-modal-note">
-          입력한 값으로 거래내역·예산·목표가 반영됩니다. 실행 후 <b>되돌리기</b>로 바로 복구할 수 있습니다.
+          입력한 값으로 거래내역·포트폴리오·현금성 자산·예산이 동시에 반영됩니다. 실행 후 <b>되돌리기</b>로 바로 복구할 수 있습니다.
         </div>
 
         <div className="apple-cfo-modal-actions">
@@ -4460,6 +4468,86 @@ function CFOUndoToast({ title, onUndo }) {
 }
 
 
+function findAssetIndexByAccountName(assets=[], accountName="") {
+  const key = String(accountName || "").trim();
+  if (!key) return -1;
+  let idx = assets.findIndex(a => String(a.name || "").trim() === key);
+  if (idx >= 0) return idx;
+  idx = assets.findIndex(a => key.includes(String(a.name || "").trim()) || String(a.name || "").trim().includes(key));
+  return idx;
+}
+
+function ensureAssetRow(next, { name, category="은행예금", includeInEmergency=false }) {
+  const key = String(name || "").trim();
+  if (!key) return -1;
+  let idx = findAssetIndexByAccountName(next.assets || [], key);
+  if (idx >= 0) return idx;
+  next.assets = [
+    ...(next.assets || []),
+    { id: uid(), kind:"자산", category, name:key, current:0, previous:0, includeInEmergency, note:"CFO 자동 실행으로 생성" },
+  ];
+  return next.assets.length - 1;
+}
+
+function addToAssetCurrent(next, accountName, delta, options={}) {
+  const idx = ensureAssetRow(next, { name: accountName, category: options.category || "은행예금", includeInEmergency: options.includeInEmergency === true });
+  if (idx < 0) return;
+  const prev = n(next.assets[idx].current);
+  next.assets[idx] = { ...next.assets[idx], current: Math.max(prev + n(delta), 0) };
+}
+
+function buildCFOInvestmentAllocation(amount=0) {
+  const total = Math.max(n(amount), 0);
+  const rows = [
+    { name:"TIGER 나스닥100", assetClass:"나스닥", weight:0.45, code:"133690", symbol:"133690.KS", market:"KRX ETF", currency:"KRW" },
+    { name:"TIGER 나스닥100(H)", assetClass:"나스닥", weight:0.45, code:"448300", symbol:"448300.KS", market:"KRX ETF", currency:"KRW" },
+    { name:"TIGER 배당다우존스", assetClass:"배당", weight:0.10, code:"458730", symbol:"458730.KS", market:"KRX ETF", currency:"KRW" },
+  ];
+  let used = 0;
+  return rows.map((r, idx) => {
+    const buyAmount = idx === rows.length - 1 ? total - used : Math.round(total * r.weight / 1000) * 1000;
+    used += buyAmount;
+    return { ...r, buyAmount: Math.max(buyAmount, 0) };
+  }).filter(r => r.buyAmount > 0);
+}
+
+function applyPortfolioBuy(next, { accountName="ISA", allocation=[], memo="" }) {
+  const rows = Array.isArray(allocation) ? allocation : [];
+  rows.forEach(item => {
+    const buyAmount = n(item.buyAmount);
+    if (buyAmount <= 0) return;
+    let idx = (next.portfolio || []).findIndex(p => String(p.name || "").trim() === item.name);
+    if (idx < 0) {
+      next.portfolio = [
+        ...(next.portfolio || []),
+        { id: uid(), account: accountName || "ISA", name:item.name, code:item.code || "", symbol:item.symbol || "", ticker:item.code || "", market:item.market || "KRX ETF", currency:item.currency || "KRW", qty:0, avgPrice:0, currentPrice:0, targetAmount:0, riskSigma:item.assetClass === "배당" ? 0.15 : 0.22, assetClass:item.assetClass || "기타", memo:"CFO 자동 매수로 생성" },
+      ];
+      idx = next.portfolio.length - 1;
+    }
+    const row = next.portfolio[idx];
+    const price = n(row.currentPrice || row.avgPrice);
+    const effectivePrice = price > 0 ? price : 1;
+    const prevQty = n(row.qty);
+    const prevAvg = n(row.avgPrice || row.currentPrice || effectivePrice);
+    const addQty = buyAmount / effectivePrice;
+    const nextQty = prevQty + addQty;
+    const investedBefore = prevQty * prevAvg;
+    const nextAvg = nextQty > 0 ? (investedBefore + buyAmount) / nextQty : prevAvg;
+    next.portfolio[idx] = {
+      ...row,
+      account: accountName || row.account || "ISA",
+      qty: Number(nextQty.toFixed(6)),
+      avgPrice: Math.round(nextAvg),
+      currentPrice: price > 0 ? row.currentPrice : 1,
+      targetAmount: n(row.targetAmount) + buyAmount,
+      assetClass: row.assetClass || item.assetClass || "기타",
+      memo: [row.memo, memo ? `CFO 자동매수 ${fmt(buyAmount)}원` : ""].filter(Boolean).join(" / "),
+      lastCfoBuyAt: new Date().toISOString(),
+    };
+  });
+}
+
+
 function applyCFOActionToData(data, action, form={}) {
   if (!action) return data;
   const now = form.date || todayISO();
@@ -4469,140 +4557,49 @@ function applyCFOActionToData(data, action, form={}) {
   const kind = form.kind || detectCFOActionKind(action);
   const amount = Math.max(n(form.amount), 0);
   const next = migrateData({ ...data });
+  const allocation = kind === "investment" || kind === "retirement" ? buildCFOInvestmentAllocation(amount) : [];
 
   next.cfoActionHistory = [
-    {
-      id: uid(),
-      title,
-      desc,
-      executedAt,
-      expectedScore: n(action.expectedScore),
-      priority: action.priority || "mid",
-      kind,
-      amount,
-      memo: form.memo || "",
-    },
+    { id: uid(), title, desc, executedAt, expectedScore: n(action.expectedScore), priority: action.priority || "mid", kind, amount, fromAccount: form.fromAccount || "", toAccount: form.toAccount || "", allocation, memo: form.memo || "" },
     ...((next.cfoActionHistory || []).slice(0, 19)),
   ];
 
   const addSystemEvent = (name, amountNeeded=0, priority="중간") => {
     const exists = (next.events || []).some(e => String(e.name || "").includes(name));
-    if (!exists) {
-      next.events = [
-        ...(next.events || []),
-        {
-          id: uid(),
-          name,
-          yearsFromNow: 1,
-          amountNeeded,
-          currentPrepared: 0,
-          priority,
-        },
-      ];
-    }
+    if (!exists) next.events = [...(next.events || []), { id: uid(), name, yearsFromNow: 1, amountNeeded, currentPrepared: 0, priority }];
   };
+  const addTx = (tx) => { next.transactions = [{ id: uid(), date: now, ...tx }, ...(next.transactions || [])]; };
 
   if (kind === "emergency") {
     addSystemEvent("🛡️ 비상금 3개월치 확보", amount || 3000000, "높음");
+    addToAssetCurrent(next, form.fromAccount, -amount, { category:"은행예금" });
+    addToAssetCurrent(next, form.toAccount, amount, { category:"현금성", includeInEmergency:true });
+    next.settings = { ...next.settings, triggerCashAvailable: Math.max(n(next.settings?.triggerCashAvailable), amount) };
+    addTx({ type:"자산이동", cat1:"계좌이체", cat2:"내계좌간이체", amount, fromAccount:form.fromAccount || "", toAccount:form.toAccount || "", memo:form.memo || `CFO 자동실행 - 비상금 ${fmt(amount)}원 이체` });
+  } else if (kind === "investment" || kind === "retirement") {
+    addToAssetCurrent(next, form.fromAccount, -amount, { category:"은행예금" });
+    applyPortfolioBuy(next, { accountName: form.toAccount || "ISA", allocation, memo: form.memo || `CFO 자동실행 - ETF 자동매수` });
     next.settings = {
       ...next.settings,
-      triggerCashAvailable: Math.max(n(next.settings?.triggerCashAvailable), amount),
-    };
-    next.transactions = [
-      {
-        id: uid(),
-        date: now,
-        type: "자산이동",
-        cat1: "계좌이체",
-        cat2: "내계좌간이체",
-        amount,
-        fromAccount: form.fromAccount || "",
-        toAccount: form.toAccount || "",
-        memo: form.memo || `CFO 실행 - 비상금 확보`,
-      },
-      ...(next.transactions || []),
-    ];
-  } else if (kind === "investment") {
-    next.settings = {
-      ...next.settings,
-      autoTriggerEnabled: true,
-      autoBuyTriggerEnabled: true,
+      autoTriggerEnabled:true,
+      autoBuyTriggerEnabled:true,
       triggerMonthlyInvestAmount: Math.max(n(next.settings?.triggerMonthlyInvestAmount), amount, n(next.settings?.monthlyInvestDefault)),
       monthlyInvestDefault: Math.max(n(next.settings?.monthlyInvestDefault), amount),
+      annualIsaContributionCurrent: String(form.toAccount || "").includes("ISA") ? Math.min(n(next.settings?.isaAnnualLimit || 20000000), n(next.settings?.annualIsaContributionCurrent) + amount) : n(next.settings?.annualIsaContributionCurrent),
     };
-    next.transactions = [
-      {
-        id: uid(),
-        date: now,
-        type: "자산이동",
-        cat1: "투자",
-        cat2: "ETF매수",
-        amount,
-        fromAccount: form.fromAccount || "",
-        toAccount: form.toAccount || "",
-        memo: form.memo || `CFO 실행 - 투자 반영`,
-      },
-      ...(next.transactions || []),
-    ];
+    addTx({ type:"자산이동", cat1:"투자", cat2:"ETF매수", amount, fromAccount:form.fromAccount || "", toAccount:form.toAccount || "", memo:form.memo || `CFO 자동실행 - ETF 매수 ${allocation.map(a=>`${a.name} ${fmt(a.buyAmount)}원`).join(" / ")}` });
   } else if (kind === "budget") {
     const targetCat = form.budgetCategory || "";
-    next.budgets = (next.budgets || []).map(b => {
-      if (targetCat && b.cat1 !== targetCat) return b;
-      return { ...b, budget: Math.max(n(b.budget) - amount, 0) };
-    });
-    next.transactions = [
-      {
-        id: uid(),
-        date: now,
-        type: "지출",
-        cat1: targetCat || "기타지출",
-        cat2: "기타",
-        amount: 0,
-        fromAccount: "",
-        toAccount: "",
-        memo: form.memo || `CFO 실행 - ${targetCat || "예산"} ${fmt(amount)}원 절감 목표`,
-      },
-      ...(next.transactions || []),
-    ];
-  } else if (kind === "retirement") {
-    next.settings = {
-      ...next.settings,
-      monthlyInvestDefault: Math.max(n(next.settings?.monthlyInvestDefault), amount, n(next.settings?.triggerMonthlyInvestAmount)),
-    };
-    next.transactions = [
-      {
-        id: uid(),
-        date: now,
-        type: "자산이동",
-        cat1: "투자",
-        cat2: "ETF매수",
-        amount,
-        fromAccount: form.fromAccount || "",
-        toAccount: form.toAccount || "",
-        memo: form.memo || `CFO 실행 - 은퇴 계획 반영`,
-      },
-      ...(next.transactions || []),
-    ];
+    next.budgets = (next.budgets || []).map(b => targetCat && b.cat1 !== targetCat ? b : { ...b, budget: Math.max(n(b.budget) - amount, 0) });
+    addTx({ type:"지출", cat1:targetCat || "기타지출", cat2:"기타", amount:0, fromAccount:"", toAccount:"", memo:form.memo || `CFO 자동실행 - ${targetCat || "예산"} ${fmt(amount)}원 절감 목표` });
   } else {
-    next.transactions = [
-      {
-        id: uid(),
-        date: now,
-        type: "자산이동",
-        cat1: "계좌이체",
-        cat2: "내계좌간이체",
-        amount: 0,
-        fromAccount: "",
-        toAccount: "",
-        memo: form.memo || `CFO 실행 반영 완료: ${title}`,
-      },
-      ...(next.transactions || []),
-    ];
+    addTx({ type:"자산이동", cat1:"계좌이체", cat2:"내계좌간이체", amount:0, fromAccount:"", toAccount:"", memo:form.memo || `CFO 실행 반영 완료: ${title}` });
   }
 
   next.lastCfoActionAt = executedAt;
   return next;
 }
+
 
 // ─── Dashboard Tab ────────────────────────────────────────────────────────────
 function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChartData, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, taxAnalysis, futureSim }) {
