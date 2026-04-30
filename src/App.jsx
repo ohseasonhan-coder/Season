@@ -1195,199 +1195,6 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 
 
 
-
-/* Responsive PC/Mobile layout + mobile bottom nav v23 */
-.mobile-bottom-nav,
-.mobile-floating-action{
-  display:none;
-}
-
-@media(max-width:768px){
-  body{overflow:hidden}
-  .shell{
-    height:100vh;
-    overflow:hidden;
-  }
-  .sidebar{
-    display:none!important;
-  }
-  .main,
-  .main.expanded{
-    margin-left:0!important;
-    width:100%;
-    height:100vh;
-    padding-bottom:86px;
-  }
-  .auth-bar{
-    display:none;
-  }
-  .topbar{
-    padding:12px 16px;
-    border-bottom:1px solid rgba(255,255,255,.07);
-    background:rgba(13,15,20,.72);
-    backdrop-filter:blur(18px) saturate(160%);
-    -webkit-backdrop-filter:blur(18px) saturate(160%);
-  }
-  .topbar-title{
-    font-size:16px;
-  }
-  .topbar-right span:not(.badge){
-    display:none;
-  }
-  .topbar-right .badge{
-    display:none;
-  }
-  .page{
-    padding:16px 14px 112px;
-    max-width:none;
-  }
-
-  .kpi-grid,
-  .g2,
-  .g3,
-  .g4,
-  .form-grid,
-  .form-grid-3{
-    grid-template-columns:1fr!important;
-  }
-
-  .card,
-  .card-sm{
-    border-radius:20px;
-    padding:16px;
-  }
-
-  .table-wrap{
-    border-radius:18px;
-  }
-  .table-wrap table{
-    min-width:720px;
-  }
-
-  .cfo-app-status-card{
-    grid-template-columns:1fr!important;
-    padding:18px!important;
-    border-radius:24px!important;
-    min-height:auto!important;
-  }
-  .cfo-app-score-card{
-    padding:16px!important;
-  }
-  .cfo-app-score{
-    font-size:42px!important;
-  }
-  .cfo-app-action-card{
-    padding:18px!important;
-    border-radius:24px!important;
-  }
-  .cfo-app-primary-btn{
-    position:sticky;
-    bottom:92px;
-    z-index:40;
-    min-height:58px;
-    border-radius:18px;
-  }
-
-  .apple-cfo-modal-overlay{
-    align-items:flex-end!important;
-    padding:0!important;
-  }
-  .apple-cfo-modal{
-    width:100%!important;
-    max-height:88vh;
-    overflow:auto;
-    border-radius:28px 28px 0 0!important;
-    padding:18px!important;
-  }
-
-  .mobile-bottom-nav{
-    position:fixed;
-    left:10px;
-    right:10px;
-    bottom:10px;
-    z-index:9000;
-    display:grid;
-    grid-template-columns:repeat(5,1fr);
-    gap:4px;
-    padding:8px;
-    border-radius:26px;
-    background:rgba(22,25,32,.86);
-    border:1px solid rgba(255,255,255,.10);
-    box-shadow:0 18px 48px rgba(0,0,0,.46), inset 0 1px 0 rgba(255,255,255,.05);
-    backdrop-filter:blur(22px) saturate(170%);
-    -webkit-backdrop-filter:blur(22px) saturate(170%);
-  }
-  .mobile-nav-item{
-    position:relative;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    gap:3px;
-    min-height:54px;
-    border:0;
-    border-radius:18px;
-    background:transparent;
-    color:var(--text3);
-    font-size:10.5px;
-    font-weight:900;
-    transition:background .16s ease,color .16s ease,transform .16s ease;
-  }
-  .mobile-nav-item.active{
-    background:rgba(108,125,255,.16);
-    color:var(--accent2);
-    box-shadow:inset 0 0 0 1px rgba(108,125,255,.14);
-  }
-  .mobile-nav-item:active{
-    transform:scale(.96);
-  }
-  .mobile-nav-icon{
-    font-size:18px;
-    line-height:1;
-  }
-  .mobile-nav-item em{
-    position:absolute;
-    right:18px;
-    top:9px;
-    width:7px;
-    height:7px;
-    border-radius:999px;
-    background:var(--red);
-    box-shadow:0 0 0 3px rgba(255,92,114,.13);
-  }
-
-  .mobile-floating-action{
-    position:fixed;
-    right:20px;
-    bottom:86px;
-    z-index:8999;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    width:58px;
-    height:58px;
-    border:0;
-    border-radius:22px;
-    background:linear-gradient(135deg,#6c7dff,#8b9aff);
-    color:white;
-    font-size:30px;
-    font-weight:900;
-    box-shadow:0 16px 40px rgba(108,125,255,.38);
-    transition:transform .16s ease, filter .16s ease;
-  }
-  .mobile-floating-action:active{
-    transform:scale(.94);
-    filter:brightness(.95);
-  }
-}
-
-@media(min-width:769px){
-  .mobile-bottom-nav,
-  .mobile-floating-action{
-    display:none!important;
-  }
-}
-
 /* CFO actual app UX v22 */
 .cfo-app-screen{position:relative;display:flex;flex-direction:column;gap:14px;animation:cfoScreenIn .42s cubic-bezier(.2,.8,.2,1)}
 @keyframes cfoScreenIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
@@ -2383,7 +2190,149 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .ob-skip{font-size:12px;color:var(--text3,#5a6278);cursor:pointer;background:none;border:none;font-family:inherit;text-decoration:underline}
 .ob-skip:hover{color:var(--text2,#9ba3b5)}
 @media(max-width:580px){.ob-card{padding:24px 20px;border-radius:18px}.ob-row2{grid-template-columns:1fr}.ob-h{font-size:19px}}
+
+/* ── 모바일 반응형 레이아웃 ────────────────────────────────────────────── */
+/* 모바일: 사이드바 숨기고 하단 탭바 표시 */
+.mobile-tabbar{
+  display:none;
+  position:fixed;
+  bottom:0;
+  left:0;
+  right:0;
+  z-index:60;
+  background:rgba(22,25,32,.96);
+  backdrop-filter:blur(20px) saturate(160%);
+  -webkit-backdrop-filter:blur(20px) saturate(160%);
+  border-top:1px solid rgba(255,255,255,.08);
+  padding:8px 4px max(12px, env(safe-area-inset-bottom));
+  gap:0;
+}
+.mobile-tabbar-inner{
+  display:flex;
+  align-items:center;
+  justify-content:space-around;
+  width:100%;
+  max-width:480px;
+  margin:0 auto;
+}
+.mobile-tab-btn{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:3px;
+  flex:1;
+  min-width:0;
+  padding:4px 2px 2px;
+  border:none;
+  background:none;
+  color:var(--text3);
+  font-size:9px;
+  font-weight:700;
+  letter-spacing:.02em;
+  transition:.15s ease;
+  position:relative;
+  border-radius:12px;
+}
+.mobile-tab-btn.active{color:var(--accent2)}
+.mobile-tab-btn:hover{color:var(--text2)}
+.mobile-tab-icon{font-size:20px;line-height:1;margin-bottom:1px}
+.mobile-tab-label{font-size:9.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52px}
+.mobile-tab-dot{position:absolute;top:2px;right:8px;width:6px;height:6px;border-radius:99px;background:var(--red)}
+
+/* 모바일 더보기 버튼 */
+.mobile-more-sheet-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.65);backdrop-filter:blur(6px)}
+.mobile-more-sheet{
+  position:fixed;
+  bottom:0;left:0;right:0;
+  z-index:201;
+  background:var(--surface);
+  border-radius:28px 28px 0 0;
+  border-top:1px solid var(--border2);
+  padding:16px 16px max(24px, env(safe-area-inset-bottom));
+  animation:mobileSheetIn .22s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes mobileSheetIn{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.mobile-more-handle{width:36px;height:4px;border-radius:99px;background:var(--border2);margin:0 auto 16px}
+.mobile-more-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.mobile-more-item{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:5px;padding:12px 4px;
+  border-radius:16px;border:1px solid var(--border);
+  background:var(--surface2);
+  font-size:10px;font-weight:700;color:var(--text2);
+  cursor:pointer;transition:.15s ease;
+}
+.mobile-more-item:active{background:var(--surface3);transform:scale(.96)}
+.mobile-more-item.active{background:var(--accent-bg);border-color:rgba(108,125,255,.3);color:var(--accent2)}
+.mobile-more-icon{font-size:22px;line-height:1}
+
+@media(max-width:768px){
+  /* 사이드바 완전히 숨김 */
+  .sidebar{display:none!important}
+  /* main 영역 전체 너비 사용 */
+  .main{margin-left:0!important}
+  /* 하단 탭바 표시 */
+  .mobile-tabbar{display:flex}
+  /* 하단 탭바 영역만큼 페이지 하단 패딩 */
+  .page{
+    padding:16px 14px 96px;
+    max-width:100%;
+  }
+  /* 상단바 조정 */
+  .topbar{padding:10px 14px;position:sticky;top:0;z-index:40}
+  .topbar-title{font-size:15px}
+  /* auth bar 최소화 */
+  .auth-bar{padding:6px 14px;font-size:11px;flex-wrap:wrap;gap:6px}
+  /* KPI 그리드 2열 */
+  .kpi-grid{grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+  .kpi-value{font-size:20px}
+  /* 그리드 */
+  .g2{grid-template-columns:1fr}
+  .g3{grid-template-columns:1fr}
+  .g4{grid-template-columns:repeat(2,1fr)}
+  /* 폼 */
+  .form-grid{grid-template-columns:1fr}
+  .form-grid-3{grid-template-columns:1fr}
+  /* 도넛 차트 */
+  .donut-wrap{grid-template-columns:1fr}
+  /* 카드 패딩 */
+  .card{padding:14px}
+  .card-sm{padding:11px}
+  /* 테이블 */
+  .table-wrap{font-size:12px}
+  th,td{padding:8px 10px}
+  /* 배지/버튼 */
+  .badge{font-size:10px;padding:2px 7px}
+  .btn{padding:8px 13px;font-size:12px}
+  /* FAB 위치 조정 (탭바 위) */
+  .fab{bottom:76px;right:16px;width:48px;height:48px;font-size:20px}
+  /* 탭칩 */
+  .tab-row{gap:5px}
+  .tab-chip{padding:6px 11px;font-size:11px}
+}
+
+@media(max-width:480px){
+  .kpi-grid{grid-template-columns:1fr}
+  .kpi-card{padding:14px}
+  .kpi-value{font-size:22px}
+  .page{padding:12px 12px 90px}
+  .topbar{padding:10px 12px}
+  .card{padding:12px}
+  .g4{grid-template-columns:1fr}
+  .mobile-more-grid{grid-template-columns:repeat(3,1fr)}
+}
+
+/* 라이트 모드 모바일 탭바 */
+:root[data-theme='light'] .mobile-tabbar{
+  background:rgba(255,255,255,.96);
+  border-top-color:rgba(0,0,0,.10);
+}
+:root[data-theme='light'] .mobile-more-sheet{
+  background:var(--surface);
+}
 `;
+
 
 // ─── 온보딩 위자드 ────────────────────────────────────────────────────────────
 const OB_KEY = "season-onboarding-done-v1";
@@ -9297,49 +9246,6 @@ const NAV = [
 
 const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", risk:"리스크 분석", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", monthlyReport:"월간 리포트", decision:"의사결정 센터", goals:"목표 자금관리", cfo:"CFO 종합판단", automation:"자동화 시스템", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
 
-
-function MobileBottomNav({ tab, setTab, issueCount=0 }) {
-  const items = [
-    { id:"dashboard", icon:"⌂", label:"홈" },
-    { id:"transactions", icon:"＋", label:"입력" },
-    { id:"cfo", icon:"◆", label:"CFO" },
-    { id:"portfolio", icon:"↗", label:"투자" },
-    { id:"data", icon:"⚙", label:"관리", dot: issueCount > 0 },
-  ];
-
-  return (
-    <nav className="mobile-bottom-nav" aria-label="모바일 하단 메뉴">
-      {items.map((item)=>(
-        <button
-          key={item.id}
-          type="button"
-          className={`mobile-nav-item ${tab===item.id ? "active" : ""}`}
-          onClick={()=>setTab(item.id)}
-        >
-          <span className="mobile-nav-icon">{item.icon}</span>
-          <span>{item.label}</span>
-          {item.dot && <em />}
-        </button>
-      ))}
-    </nav>
-  );
-}
-
-function MobileFloatingAction({ tab, setTab }) {
-  if (tab === "transactions") return null;
-  return (
-    <button
-      type="button"
-      className="mobile-floating-action"
-      onClick={()=>setTab("transactions")}
-      aria-label="거래 입력으로 이동"
-    >
-      ＋
-    </button>
-  );
-}
-
-
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [data,setData]=useState(loadData);
@@ -9362,6 +9268,7 @@ export default function App() {
   const [syncState,setSyncState]=useState("");
   const [cloudReady,setCloudReady]=useState(false);
   const [showFab,setShowFab]=useState(false);
+  const [showMobileMore,setShowMobileMore]=useState(false);
   const skipCloudSaveRef=useRef(false);
 
   useEffect(()=>{ saveData(data); },[data]);
@@ -9602,6 +9509,52 @@ export default function App() {
         <OnboardingWizard onComplete={handleOnboardingComplete}/>
       )}
 
+      {/* ── 모바일 하단 탭바 ── */}
+      <div className="mobile-tabbar">
+        <div className="mobile-tabbar-inner">
+          <button className={`mobile-tab-btn ${tab==="dashboard"?"active":""}`} onClick={()=>setTab("dashboard")}>
+            <span className="mobile-tab-icon">◈</span>
+            <span className="mobile-tab-label">홈</span>
+          </button>
+          <button className={`mobile-tab-btn ${tab==="transactions"?"active":""}`} onClick={()=>setTab("transactions")}>
+            <span className="mobile-tab-icon">↔</span>
+            <span className="mobile-tab-label">거래</span>
+          </button>
+          <button className={`mobile-tab-btn ${tab==="cfo"?"active":""}`} onClick={()=>setTab("cfo")}>
+            <span className="mobile-tab-icon">🏛️</span>
+            <span className="mobile-tab-label">CFO</span>
+          </button>
+          <button className={`mobile-tab-btn ${tab==="assets"?"active":""}`} onClick={()=>setTab("assets")}>
+            <span className="mobile-tab-icon">🏦</span>
+            <span className="mobile-tab-label">자산</span>
+          </button>
+          <button className={`mobile-tab-btn ${["dashboard","transactions","cfo","assets"].includes(tab)?"":"active"}`} onClick={()=>setShowMobileMore(true)}>
+            <span className="mobile-tab-icon">☰</span>
+            <span className="mobile-tab-label">더보기</span>
+            {totalIssues>0&&<span className="mobile-tab-dot"/>}
+          </button>
+        </div>
+      </div>
+
+      {/* ── 모바일 더보기 시트 ── */}
+      {showMobileMore&&(
+        <>
+          <div className="mobile-more-sheet-overlay" onClick={()=>setShowMobileMore(false)}/>
+          <div className="mobile-more-sheet">
+            <div className="mobile-more-handle"/>
+            <div className="mobile-more-grid">
+              {NAV.filter(i=>i.id&&!["dashboard","transactions","cfo","assets"].includes(i.id)).map(item=>(
+                <button key={item.id} className={`mobile-more-item ${tab===item.id?"active":""}`} onClick={()=>{setTab(item.id);setShowMobileMore(false);}}>
+                  <span className="mobile-more-icon">{item.icon}</span>
+                  <span>{item.label}</span>
+                  {item.id==="data"&&totalIssues>0&&<span className="mobile-tab-dot" style={{position:"static",display:"inline-block",marginLeft:2}}/>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
       <div className="shell">
         {/* Sidebar */}
         <nav className={`sidebar ${sidebarOpen ? "" : "collapsed"}`}>
@@ -9673,9 +9626,6 @@ export default function App() {
           </div>
         </div>
       </div>
-
-      <MobileFloatingAction tab={tab} setTab={setTab} />
-      <MobileBottomNav tab={tab} setTab={setTab} issueCount={totalIssues} />
     </div>
   );
 }
