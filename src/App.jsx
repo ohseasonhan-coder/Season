@@ -1192,6 +1192,52 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 
 
 
+
+/* CFO input execution modal v20 */
+.cfo-input-modal{width:min(620px,100%)}
+.cfo-input-preview{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-bottom:14px;
+}
+.cfo-input-preview div{
+  padding:12px;
+  border-radius:16px;
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(255,255,255,.07);
+}
+.cfo-input-preview small{
+  display:block;
+  font-size:10.5px;
+  color:var(--text3);
+  font-weight:900;
+  margin-bottom:5px;
+}
+.cfo-input-preview b{
+  font-size:13px;
+  color:var(--text);
+}
+.cfo-input-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+}
+.cfo-input-grid .field input,
+.cfo-input-grid .field select{
+  background:rgba(255,255,255,.055);
+  border-color:rgba(255,255,255,.10);
+}
+.cfo-input-full{grid-column:1/-1}
+.apple-cfo-confirm-btn:disabled{
+  cursor:not-allowed;
+  box-shadow:none;
+}
+@media(max-width:680px){
+  .cfo-input-preview{grid-template-columns:1fr}
+  .cfo-input-grid{grid-template-columns:1fr}
+}
+
 /* Apple CFO modal + undo v19 integrated */
 .apple-cfo-modal-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.58);backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%)}
 .apple-cfo-modal{width:min(520px,100%);border-radius:28px;padding:22px;background:rgba(28,31,39,.92);border:1px solid rgba(255,255,255,.12);box-shadow:0 30px 90px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06);animation:appleModalIn .22s cubic-bezier(.2,.8,.2,1)}
@@ -3415,7 +3461,7 @@ function buildCFODecisionModel({ data={}, dashboard={}, dashboardDetail={}, fina
     legacyWeightSum:n(data.settings?.targetNasdaqWeight)+n(data.settings?.targetNasdaqHWeight)+n(data.settings?.targetDividendWeight),
     usdHoldingsNeedFx:(data.portfolio||[]).some(p=>normalizeCurrency(p.currency)==="USD") && n(data.settings?.fxUsdKrw)<=0,
   };
-  return { totalScore, status, tone, toneColor, toneBg, message, scoreItems, scoreLosses, problems: problems.slice(0, 4), actions: actions.slice(0, 4), simulation, detailedDiagnosis, nextPlan, guardSummary };
+  return { totalScore, status, tone, toneColor, toneBg, message, scoreItems, scoreLosses, problems: problems.slice(0, 4), actions: actions.slice(0, 4), simulation, detailedDiagnosis, nextPlan, guardSummary, sourceData:data };
 }
 
 
@@ -3465,10 +3511,10 @@ function CFODecisionDashboard({ model, onExecuteAction, onUndoAction, undoState 
 
   const toneClass = model.tone === "green" ? "ok" : model.tone === "accent" ? "info" : model.tone === "amber" ? "warn" : "danger";
 
-  const handleConfirmExecute = (action) => {
+  const handleConfirmExecute = (action, form) => {
     if (!action) return;
     const preview = buildCFOActionPreview(model, action);
-    onExecuteAction?.(action);
+    onExecuteAction?.(action, form);
     setExecutedAction({
       id: uid(),
       title: action.title,
@@ -3640,11 +3686,12 @@ function CFODecisionDashboard({ model, onExecuteAction, onUndoAction, undoState 
       </div>
 
       {pendingAction && (
-        <CFOActionConfirmModal
+        <CFOActionInputModal
           action={pendingAction}
           model={model}
+          data={model.sourceData}
           onClose={()=>setPendingAction(null)}
-          onConfirm={()=>handleConfirmExecute(pendingAction)}
+          onConfirm={(form)=>handleConfirmExecute(pendingAction, form)}
         />
       )}
 
@@ -3659,15 +3706,53 @@ function CFODecisionDashboard({ model, onExecuteAction, onUndoAction, undoState 
 }
 
 
-function CFOActionConfirmModal({ action, model, onClose, onConfirm }) {
+function detectCFOActionKind(action) {
+  const text = `${action?.title || ""} ${action?.desc || ""}`;
+  if (text.includes("비상금")) return "emergency";
+  if (text.includes("지출") || text.includes("예산")) return "budget";
+  if (text.includes("투자") || text.includes("자동투자") || text.includes("투자금")) return "investment";
+  if (text.includes("은퇴")) return "retirement";
+  return "memo";
+}
+
+function defaultCFOActionForm({ action, model, data }) {
+  const kind = detectCFOActionKind(action);
+  const accounts = (data?.accounts || []).filter(a=>a.active);
+  const defaultFrom = accounts.find(a=>a.defaultIn)?.name || accounts[0]?.name || "";
+  const defaultTo = accounts.find(a=>String(a.type||"").includes("증권"))?.name || accounts.find(a=>String(a.name||"").includes("ISA"))?.name || accounts[1]?.name || "";
+  const emergencyAccount = accounts.find(a=>String(a.name||"").includes("비상") || String(a.name||"").includes("파킹") || String(a.name||"").includes("카카오"))?.name || defaultTo || defaultFrom;
+  const monthlyExpense = Math.max(n(model?.detailedDiagnosis?.[0]?.expense), n(data?.settings?.retirementMonthlyExpense), 0);
+  const baseAmount = kind === "budget" ? 100000 : kind === "investment" ? n(data?.settings?.monthlyInvestDefault || data?.settings?.triggerMonthlyInvestAmount || 100000) : kind === "emergency" ? Math.max(Math.round(monthlyExpense || 3000000), 100000) : 0;
+
+  return {
+    kind,
+    date: todayISO(),
+    amount: baseAmount,
+    fromAccount: defaultFrom,
+    toAccount: kind === "emergency" ? emergencyAccount : defaultTo,
+    budgetCategory: "식비",
+    applyScope: "이번 달",
+    memo: `CFO 실행 - ${action?.title || ""}`,
+  };
+}
+
+function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
   const preview = buildCFOActionPreview(model, action);
+  const [form, setForm] = useState(()=>defaultCFOActionForm({ action, model, data }));
+  const accounts = (data?.accounts || []).filter(a=>a.active);
+  const updateForm = (patch) => setForm(prev=>({ ...prev, ...patch }));
+  const amountLabel = form.kind === "budget" ? "절감 목표 금액" : form.kind === "investment" ? "투자 금액" : form.kind === "emergency" ? "비상금 이체 금액" : "금액";
+  const confirmLabel = form.kind === "budget" ? "예산에 반영" : form.kind === "investment" ? "거래내역에 투자 반영" : form.kind === "emergency" ? "거래내역에 비상금 반영" : "실행 반영";
+  const amountError = form.kind !== "memo" && n(form.amount) <= 0;
+  const accountError = ["emergency","investment"].includes(form.kind) && (!form.fromAccount || !form.toAccount);
+
   return (
     <div className="apple-cfo-modal-overlay" role="dialog" aria-modal="true">
-      <div className="apple-cfo-modal">
+      <div className="apple-cfo-modal cfo-input-modal">
         <div className="apple-cfo-modal-handle" />
         <div className="apple-cfo-modal-head">
           <div>
-            <span>실행 전 확인</span>
+            <span>실행 전 입력</span>
             <h3>{action.title}</h3>
           </div>
           <button className="apple-cfo-close" onClick={onClose}>×</button>
@@ -3675,40 +3760,93 @@ function CFOActionConfirmModal({ action, model, onClose, onConfirm }) {
 
         <p className="apple-cfo-modal-desc">{action.desc}</p>
 
-        <div className="apple-cfo-preview-score">
+        <div className="cfo-input-preview">
           <div>
-            <span>현재 점수</span>
-            <strong>{preview.currentScore}</strong>
+            <small>반영 위치</small>
+            <b>{form.kind === "budget" ? "예산/지출 관리" : form.kind === "investment" ? "거래내역 + 투자 루틴" : form.kind === "emergency" ? "거래내역 + 비상금 목표" : "CFO 실행 기록"}</b>
           </div>
-          <em>→</em>
           <div>
-            <span>실행 후 예상</span>
-            <strong className="after">{preview.nextScore}</strong>
+            <small>예상 점수</small>
+            <b>{preview.currentScore} → {preview.nextScore}</b>
           </div>
         </div>
 
-        <div className="apple-cfo-preview-grid">
-          <div>
-            <small>변경 항목</small>
-            <b>{preview.target}</b>
+        <div className="cfo-input-grid">
+          <div className="field">
+            <label>날짜</label>
+            <input type="date" value={form.date} onChange={(e)=>updateForm({date:e.target.value})} />
           </div>
-          <div>
-            <small>적용 전</small>
-            <b>{preview.before}</b>
-          </div>
-          <div>
-            <small>적용 후</small>
-            <b>{preview.after}</b>
+
+          {form.kind !== "memo" && (
+            <div className={`field ${amountError ? "field-has-error" : ""}`}>
+              <label>{amountLabel}</label>
+              <input type="number" value={form.amount} onChange={(e)=>updateForm({amount:e.target.value})} placeholder="금액 입력" />
+            </div>
+          )}
+
+          {["emergency","investment"].includes(form.kind) && (
+            <>
+              <div className={`field ${accountError ? "field-has-error" : ""}`}>
+                <label>출금계좌</label>
+                <select value={form.fromAccount} onChange={(e)=>updateForm({fromAccount:e.target.value})}>
+                  <option value="">선택</option>
+                  {accounts.map(a=><option key={a.id} value={a.name}>{a.name}</option>)}
+                </select>
+              </div>
+              <div className={`field ${accountError ? "field-has-error" : ""}`}>
+                <label>{form.kind === "investment" ? "투자계좌" : "입금계좌"}</label>
+                <select value={form.toAccount} onChange={(e)=>updateForm({toAccount:e.target.value})}>
+                  <option value="">선택</option>
+                  {accounts.map(a=><option key={a.id} value={a.name}>{a.name}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+
+          {form.kind === "budget" && (
+            <>
+              <div className="field">
+                <label>절감 항목</label>
+                <select value={form.budgetCategory} onChange={(e)=>updateForm({budgetCategory:e.target.value})}>
+                  {(data?.budgets || []).map(b=><option key={b.id} value={b.cat1}>{b.cat1}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label>적용 방식</label>
+                <select value={form.applyScope} onChange={(e)=>updateForm({applyScope:e.target.value})}>
+                  <option value="이번 달">이번 달 예산만 줄이기</option>
+                  <option value="다음 달부터">다음 달부터 기준 예산 줄이기</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          <div className="field cfo-input-full">
+            <label>메모</label>
+            <input value={form.memo} onChange={(e)=>updateForm({memo:e.target.value})} placeholder="메모 입력" />
           </div>
         </div>
+
+        {(amountError || accountError) && (
+          <div className="alert alert-danger" style={{marginTop:12}}>
+            금액과 계좌를 확인해야 실행할 수 있습니다.
+          </div>
+        )}
 
         <div className="apple-cfo-modal-note">
-          실행 후에도 하단의 <b>되돌리기</b> 버튼으로 바로 이전 상태로 복구할 수 있습니다.
+          입력한 값으로 거래내역·예산·목표가 반영됩니다. 실행 후 <b>되돌리기</b>로 바로 복구할 수 있습니다.
         </div>
 
         <div className="apple-cfo-modal-actions">
           <button className="btn btn-ghost" onClick={onClose}>취소</button>
-          <button className="apple-cfo-confirm-btn" onClick={onConfirm}>실행 반영</button>
+          <button
+            className="apple-cfo-confirm-btn"
+            disabled={amountError || accountError}
+            onClick={()=>onConfirm(form)}
+            style={{opacity:(amountError || accountError)?0.45:1}}
+          >
+            {confirmLabel}
+          </button>
         </div>
       </div>
     </div>
@@ -3725,12 +3863,14 @@ function CFOUndoToast({ title, onUndo }) {
 }
 
 
-function applyCFOActionToData(data, action) {
+function applyCFOActionToData(data, action, form={}) {
   if (!action) return data;
-  const now = todayISO();
+  const now = form.date || todayISO();
   const title = String(action.title || "");
   const desc = String(action.desc || "");
   const executedAt = new Date().toISOString();
+  const kind = form.kind || detectCFOActionKind(action);
+  const amount = Math.max(n(form.amount), 0);
   const next = migrateData({ ...data });
 
   next.cfoActionHistory = [
@@ -3741,6 +3881,9 @@ function applyCFOActionToData(data, action) {
       executedAt,
       expectedScore: n(action.expectedScore),
       priority: action.priority || "mid",
+      kind,
+      amount,
+      memo: form.memo || "",
     },
     ...((next.cfoActionHistory || []).slice(0, 19)),
   ];
@@ -3762,59 +3905,105 @@ function applyCFOActionToData(data, action) {
     }
   };
 
-  if (title.includes("비상금") || desc.includes("비상금")) {
-    const monthlyExpense = Math.max(
-      (next.transactions || [])
-        .filter(t => monthOf(t.date) === thisMonthISO() && t.type === "지출")
-        .reduce((sum,t)=>sum+n(t.amount),0),
-      n(next.settings?.retirementMonthlyExpense),
-      0
-    );
-    const emergencyTarget = monthlyExpense > 0 ? monthlyExpense * 3 : 3000000;
-    addSystemEvent("🛡️ 비상금 3개월치 확보", emergencyTarget, "높음");
+  if (kind === "emergency") {
+    addSystemEvent("🛡️ 비상금 3개월치 확보", amount || 3000000, "높음");
     next.settings = {
       ...next.settings,
-      triggerCashAvailable: Math.max(n(next.settings?.triggerCashAvailable), Math.round(emergencyTarget)),
+      triggerCashAvailable: Math.max(n(next.settings?.triggerCashAvailable), amount),
     };
-  }
-
-  if (title.includes("지출") || desc.includes("지출") || title.includes("예산")) {
-    next.budgets = (next.budgets || []).map(b => ({
-      ...b,
-      budget: Math.max(Math.round(n(b.budget) * 0.97), 0),
-    }));
-  }
-
-  if (title.includes("자동투자") || title.includes("투자금") || desc.includes("월 투자금")) {
+    next.transactions = [
+      {
+        id: uid(),
+        date: now,
+        type: "자산이동",
+        cat1: "계좌이체",
+        cat2: "내계좌간이체",
+        amount,
+        fromAccount: form.fromAccount || "",
+        toAccount: form.toAccount || "",
+        memo: form.memo || `CFO 실행 - 비상금 확보`,
+      },
+      ...(next.transactions || []),
+    ];
+  } else if (kind === "investment") {
     next.settings = {
       ...next.settings,
       autoTriggerEnabled: true,
       autoBuyTriggerEnabled: true,
-      triggerMonthlyInvestAmount: Math.max(n(next.settings?.triggerMonthlyInvestAmount), n(next.settings?.monthlyInvestDefault), 100000),
+      triggerMonthlyInvestAmount: Math.max(n(next.settings?.triggerMonthlyInvestAmount), amount, n(next.settings?.monthlyInvestDefault)),
+      monthlyInvestDefault: Math.max(n(next.settings?.monthlyInvestDefault), amount),
     };
-  }
-
-  if (title.includes("은퇴") || desc.includes("은퇴")) {
+    next.transactions = [
+      {
+        id: uid(),
+        date: now,
+        type: "자산이동",
+        cat1: "투자",
+        cat2: "ETF매수",
+        amount,
+        fromAccount: form.fromAccount || "",
+        toAccount: form.toAccount || "",
+        memo: form.memo || `CFO 실행 - 투자 반영`,
+      },
+      ...(next.transactions || []),
+    ];
+  } else if (kind === "budget") {
+    const targetCat = form.budgetCategory || "";
+    next.budgets = (next.budgets || []).map(b => {
+      if (targetCat && b.cat1 !== targetCat) return b;
+      return { ...b, budget: Math.max(n(b.budget) - amount, 0) };
+    });
+    next.transactions = [
+      {
+        id: uid(),
+        date: now,
+        type: "지출",
+        cat1: targetCat || "기타지출",
+        cat2: "기타",
+        amount: 0,
+        fromAccount: "",
+        toAccount: "",
+        memo: form.memo || `CFO 실행 - ${targetCat || "예산"} ${fmt(amount)}원 절감 목표`,
+      },
+      ...(next.transactions || []),
+    ];
+  } else if (kind === "retirement") {
     next.settings = {
       ...next.settings,
-      monthlyInvestDefault: Math.max(n(next.settings?.monthlyInvestDefault), n(next.settings?.triggerMonthlyInvestAmount), 100000),
+      monthlyInvestDefault: Math.max(n(next.settings?.monthlyInvestDefault), amount, n(next.settings?.triggerMonthlyInvestAmount)),
     };
+    next.transactions = [
+      {
+        id: uid(),
+        date: now,
+        type: "자산이동",
+        cat1: "투자",
+        cat2: "ETF매수",
+        amount,
+        fromAccount: form.fromAccount || "",
+        toAccount: form.toAccount || "",
+        memo: form.memo || `CFO 실행 - 은퇴 계획 반영`,
+      },
+      ...(next.transactions || []),
+    ];
+  } else {
+    next.transactions = [
+      {
+        id: uid(),
+        date: now,
+        type: "자산이동",
+        cat1: "계좌이체",
+        cat2: "내계좌간이체",
+        amount: 0,
+        fromAccount: "",
+        toAccount: "",
+        memo: form.memo || `CFO 실행 반영 완료: ${title}`,
+      },
+      ...(next.transactions || []),
+    ];
   }
 
-  const memoTx = {
-    id: uid(),
-    date: now,
-    type: "자산이동",
-    cat1: "계좌이체",
-    cat2: "내계좌간이체",
-    amount: 0,
-    fromAccount: "",
-    toAccount: "",
-    memo: `CFO 실행 반영 완료: ${title}`,
-  };
-
-  next.transactions = [memoTx, ...(next.transactions || [])];
-  next.lastCfoActionAt = new Date().toISOString();
+  next.lastCfoActionAt = executedAt;
   return next;
 }
 
@@ -3883,10 +4072,10 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
   );
 
   const [cfoUndoState, setCfoUndoState] = useState(null);
-  const handleCFOExecuteAction = (action) => {
+  const handleCFOExecuteAction = (action, form) => {
     if (!action || !update) return;
     const previousData = JSON.parse(JSON.stringify(data));
-    update(d=>applyCFOActionToData(d, action));
+    update(d=>applyCFOActionToData(d, action, form));
     setCfoUndoState({
       available: true,
       title: action.title,
