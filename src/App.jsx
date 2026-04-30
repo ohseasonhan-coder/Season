@@ -2191,146 +2191,352 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .ob-skip:hover{color:var(--text2,#9ba3b5)}
 @media(max-width:580px){.ob-card{padding:24px 20px;border-radius:18px}.ob-row2{grid-template-columns:1fr}.ob-h{font-size:19px}}
 
-/* ── 모바일 반응형 레이아웃 ────────────────────────────────────────────── */
-/* 모바일: 사이드바 숨기고 하단 탭바 표시 */
-.mobile-tabbar{
-  display:none;
-  position:fixed;
-  bottom:0;
-  left:0;
-  right:0;
-  z-index:60;
-  background:rgba(22,25,32,.96);
+/* ═══════════════════════════════════════════════════════════
+   SEASON FINANCE — 모바일 UX/UI v24
+   타겟: 20~40대 / iOS·Android 최적화
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Auth Bar 리디자인 (PC 전용) ── */
+.auth-bar{
+  background:rgba(13,15,20,.72);
+  backdrop-filter:blur(16px) saturate(150%);
+  -webkit-backdrop-filter:blur(16px) saturate(150%);
+  border-bottom:1px solid rgba(255,255,255,.06);
+  padding:10px 28px;
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  font-size:12px;color:var(--text3);
+}
+.auth-bar-logo-row{display:flex;align-items:center;gap:8px}
+.auth-bar-logo{width:22px;height:22px;border-radius:7px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#fff}
+.auth-bar-brand{font-size:12px;font-weight:700;color:var(--text2);letter-spacing:-.01em}
+.auth-bar-sync{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:rgba(52,213,138,.09);border:1px solid rgba(52,213,138,.18);font-size:11px;font-weight:700;color:var(--green)}
+.auth-bar-sync.syncing{background:rgba(108,125,255,.09);border-color:rgba(108,125,255,.18);color:var(--accent2)}
+.auth-bar-sync.error{background:rgba(255,92,114,.09);border-color:rgba(255,92,114,.18);color:var(--red)}
+.auth-input{padding:8px 13px;border:1px solid rgba(255,255,255,.10);border-radius:10px;background:rgba(255,255,255,.055);color:var(--text);font-size:12px;outline:none;min-width:160px;transition:.15s ease}
+.auth-input:focus{border-color:var(--accent);background:rgba(108,125,255,.08);box-shadow:0 0 0 3px rgba(108,125,255,.12)}
+.auth-input::placeholder{color:var(--text3)}
+
+/* ── 모바일 로그인 모달 ── */
+.mobile-login-modal-overlay{
+  position:fixed;inset:0;z-index:500;
+  background:rgba(0,0,0,.75);
   backdrop-filter:blur(20px) saturate(160%);
   -webkit-backdrop-filter:blur(20px) saturate(160%);
-  border-top:1px solid rgba(255,255,255,.08);
-  padding:8px 4px max(12px, env(safe-area-inset-bottom));
-  gap:0;
+  display:flex;align-items:flex-end;justify-content:center;
+  animation:mloOverlayIn .22s ease;
+}
+@keyframes mloOverlayIn{from{opacity:0}to{opacity:1}}
+.mobile-login-sheet{
+  width:100%;max-width:520px;
+  background:var(--surface);
+  border-radius:32px 32px 0 0;
+  border-top:1px solid rgba(255,255,255,.10);
+  padding:0 0 max(32px, env(safe-area-inset-bottom));
+  box-shadow:0 -24px 80px rgba(0,0,0,.55);
+  animation:mloSheetIn .3s cubic-bezier(.2,.8,.2,1);
+  overflow:hidden;
+}
+@keyframes mloSheetIn{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.mlo-header{
+  position:relative;
+  padding:32px 28px 24px;
+  background:linear-gradient(135deg,rgba(108,125,255,.18),rgba(52,213,138,.07));
+  border-bottom:1px solid rgba(255,255,255,.07);
+}
+.mlo-glow{
+  position:absolute;right:-60px;top:-80px;
+  width:220px;height:220px;
+  background:radial-gradient(circle,rgba(108,125,255,.22),transparent 68%);
+  pointer-events:none;
+}
+.mlo-handle{width:36px;height:4px;border-radius:99px;background:rgba(255,255,255,.20);margin:0 auto 20px}
+.mlo-logo-row{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.mlo-logo-mark{width:38px;height:38px;border-radius:14px;background:linear-gradient(135deg,#6c7dff,#8b9aff);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:900;color:#fff;box-shadow:0 8px 22px rgba(108,125,255,.35)}
+.mlo-logo-text{font-size:16px;font-weight:800;color:var(--text);letter-spacing:-.02em}
+.mlo-logo-sub{font-size:11px;color:var(--text3);margin-top:1px}
+.mlo-headline{font-size:22px;font-weight:900;letter-spacing:-.04em;color:var(--text);line-height:1.25}
+.mlo-sub{font-size:13px;color:var(--text3);margin-top:6px;line-height:1.5}
+.mlo-body{padding:24px 28px 0}
+.mlo-field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.mlo-field label{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.05em;text-transform:uppercase}
+.mlo-input-wrap{position:relative}
+.mlo-input-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:16px;pointer-events:none;opacity:.6}
+.mlo-input{
+  width:100%;padding:14px 14px 14px 42px;
+  border:1.5px solid var(--border2);border-radius:14px;
+  background:var(--surface2);color:var(--text);
+  font-size:15px;outline:none;
+  transition:.18s ease;font-family:inherit;
+}
+.mlo-input:focus{border-color:var(--accent);background:rgba(108,125,255,.07);box-shadow:0 0 0 4px rgba(108,125,255,.13)}
+.mlo-input::placeholder{color:var(--text3)}
+.mlo-btn-row{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.mlo-btn-primary{
+  width:100%;padding:16px;border:none;border-radius:16px;
+  background:linear-gradient(135deg,#6c7dff,#8b9aff);
+  color:#fff;font-size:16px;font-weight:800;
+  box-shadow:0 14px 36px rgba(108,125,255,.35);
+  transition:.18s ease;font-family:inherit;cursor:pointer;
+}
+.mlo-btn-primary:hover{transform:translateY(-1px);box-shadow:0 18px 44px rgba(108,125,255,.42)}
+.mlo-btn-primary:active{transform:translateY(1px)}
+.mlo-btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.mlo-btn-secondary{
+  width:100%;padding:14px;border:1.5px solid var(--border2);border-radius:16px;
+  background:transparent;color:var(--text2);
+  font-size:14px;font-weight:700;
+  transition:.15s ease;font-family:inherit;cursor:pointer;
+}
+.mlo-btn-secondary:hover{background:var(--surface2);border-color:var(--border2);color:var(--text)}
+.mlo-msg{font-size:12px;color:var(--red);margin-top:6px;padding:8px 12px;border-radius:10px;background:var(--red-bg);border:1px solid rgba(255,92,114,.2)}
+.mlo-msg.ok{color:var(--green);background:var(--green-bg);border-color:rgba(52,213,138,.2)}
+.mlo-divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--text3);font-size:11px;font-weight:700}
+.mlo-divider::before,.mlo-divider::after{content:"";flex:1;height:1px;background:var(--border)}
+.mlo-local-chip{
+  display:flex;align-items:center;gap:8px;
+  padding:12px 14px;border-radius:14px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
+  font-size:12px;font-weight:700;color:var(--text3);
+  cursor:pointer;transition:.15s ease;width:100%;text-align:left;
+}
+.mlo-local-chip:hover{background:var(--surface2);color:var(--text2)}
+.mlo-local-icon{width:30px;height:30px;border-radius:10px;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.mlo-session-bar{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 14px;border-radius:14px;
+  background:rgba(52,213,138,.08);border:1px solid rgba(52,213,138,.18);
+  margin-bottom:14px;
+}
+.mlo-session-avatar{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#6c7dff,#34d58a);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#fff;flex-shrink:0}
+.mlo-session-email{font-size:12px;font-weight:700;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mlo-session-status{font-size:11px;color:var(--green);font-weight:700}
+.mlo-action-row{display:flex;gap:8px;flex-wrap:wrap}
+.mlo-action-btn{flex:1;min-width:0;padding:11px 8px;border:1px solid var(--border2);border-radius:12px;background:var(--surface2);color:var(--text2);font-size:12px;font-weight:700;transition:.15s ease;font-family:inherit;cursor:pointer;white-space:nowrap}
+.mlo-action-btn:hover{background:var(--surface3);color:var(--text)}
+.mlo-action-btn.danger{color:var(--red);border-color:rgba(255,92,114,.2);background:var(--red-bg)}
+
+/* ── 모바일 상단바 ── */
+.mobile-header{
+  display:none;
+  position:sticky;top:0;z-index:50;
+  background:rgba(13,15,20,.88);
+  backdrop-filter:blur(20px) saturate(160%);
+  -webkit-backdrop-filter:blur(20px) saturate(160%);
+  border-bottom:1px solid rgba(255,255,255,.07);
+  padding:0 16px;
+  height:56px;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.mobile-header-left{display:flex;align-items:center;gap:8px}
+.mobile-header-logo{width:28px;height:28px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#fff;flex-shrink:0}
+.mobile-header-title{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.02em}
+.mobile-header-right{display:flex;align-items:center;gap:6px}
+.mobile-header-sync{
+  display:flex;align-items:center;gap:4px;
+  padding:5px 9px;border-radius:99px;
+  font-size:10px;font-weight:800;
+  border:1px solid rgba(52,213,138,.25);
+  background:rgba(52,213,138,.09);
+  color:var(--green);cursor:pointer;
+}
+.mobile-header-sync.offline{border-color:rgba(90,98,120,.3);background:rgba(90,98,120,.09);color:var(--text3)}
+.mobile-header-theme{width:34px;height:34px;border-radius:10px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.05);color:var(--text2);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s ease}
+.mobile-header-theme:hover{background:rgba(255,255,255,.10);color:var(--text)}
+.mobile-header-badge{
+  display:flex;align-items:center;
+  padding:3px 8px;border-radius:99px;font-size:10px;font-weight:800;
+}
+.mobile-header-badge.surplus{background:rgba(52,213,138,.12);color:var(--green)}
+.mobile-header-badge.deficit{background:rgba(255,92,114,.12);color:var(--red)}
+
+/* ── 모바일 하단 탭바 ── */
+.mobile-tabbar{
+  display:none;
+  position:fixed;bottom:0;left:0;right:0;
+  z-index:60;
+  background:rgba(16,18,24,.94);
+  backdrop-filter:blur(24px) saturate(180%);
+  -webkit-backdrop-filter:blur(24px) saturate(180%);
+  border-top:1px solid rgba(255,255,255,.07);
+  padding:10px 8px max(16px, env(safe-area-inset-bottom));
 }
 .mobile-tabbar-inner{
-  display:flex;
-  align-items:center;
-  justify-content:space-around;
-  width:100%;
-  max-width:480px;
-  margin:0 auto;
+  display:flex;align-items:center;justify-content:space-around;
+  max-width:460px;margin:0 auto;gap:4px;
 }
 .mobile-tab-btn{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  gap:3px;
-  flex:1;
-  min-width:0;
-  padding:4px 2px 2px;
-  border:none;
-  background:none;
-  color:var(--text3);
-  font-size:9px;
-  font-weight:700;
-  letter-spacing:.02em;
-  transition:.15s ease;
-  position:relative;
-  border-radius:12px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;flex:1;min-width:0;
+  padding:6px 4px 4px;border:none;background:none;
+  color:var(--text3);font-family:inherit;
+  transition:all .18s cubic-bezier(.2,.8,.2,1);
+  position:relative;border-radius:14px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
 }
 .mobile-tab-btn.active{color:var(--accent2)}
-.mobile-tab-btn:hover{color:var(--text2)}
-.mobile-tab-icon{font-size:20px;line-height:1;margin-bottom:1px}
-.mobile-tab-label{font-size:9.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52px}
-.mobile-tab-dot{position:absolute;top:2px;right:8px;width:6px;height:6px;border-radius:99px;background:var(--red)}
+.mobile-tab-btn.active .mobile-tab-icon-wrap{
+  background:rgba(108,125,255,.18);
+  border:1px solid rgba(108,125,255,.25);
+  transform:scale(1.04);
+}
+.mobile-tab-btn:active{transform:scale(.93)}
+.mobile-tab-icon-wrap{
+  width:40px;height:30px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  background:transparent;border:1px solid transparent;
+  transition:all .18s cubic-bezier(.2,.8,.2,1);
+}
+.mobile-tab-icon{font-size:18px;line-height:1}
+.mobile-tab-label{font-size:9.5px;font-weight:700;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:54px}
+.mobile-tab-dot{
+  position:absolute;top:4px;right:calc(50% - 24px);
+  width:7px;height:7px;border-radius:99px;background:var(--red);
+  border:2px solid rgba(16,18,24,.94);
+}
 
-/* 모바일 더보기 버튼 */
-.mobile-more-sheet-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.65);backdrop-filter:blur(6px)}
+/* ── 모바일 더보기 시트 ── */
+.mobile-more-sheet-overlay{
+  position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,.6);backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  animation:mmoOverlayIn .18s ease;
+}
+@keyframes mmoOverlayIn{from{opacity:0}to{opacity:1}}
 .mobile-more-sheet{
-  position:fixed;
-  bottom:0;left:0;right:0;
-  z-index:201;
+  position:fixed;bottom:0;left:0;right:0;z-index:201;
   background:var(--surface);
   border-radius:28px 28px 0 0;
-  border-top:1px solid var(--border2);
-  padding:16px 16px max(24px, env(safe-area-inset-bottom));
-  animation:mobileSheetIn .22s cubic-bezier(.2,.8,.2,1);
+  border-top:1px solid rgba(255,255,255,.09);
+  padding:12px 16px max(28px, env(safe-area-inset-bottom));
+  box-shadow:0 -20px 60px rgba(0,0,0,.45);
+  animation:mmoSheetIn .28s cubic-bezier(.2,.8,.2,1);
 }
-@keyframes mobileSheetIn{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes mmoSheetIn{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .mobile-more-handle{width:36px;height:4px;border-radius:99px;background:var(--border2);margin:0 auto 16px}
-.mobile-more-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.mobile-more-section{font-size:10px;font-weight:800;color:var(--text3);letter-spacing:.07em;text-transform:uppercase;padding:0 4px;margin-bottom:8px}
+.mobile-more-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
 .mobile-more-item{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:5px;padding:12px 4px;
-  border-radius:16px;border:1px solid var(--border);
+  gap:5px;padding:13px 6px 11px;
+  border-radius:18px;border:1px solid var(--border);
   background:var(--surface2);
   font-size:10px;font-weight:700;color:var(--text2);
-  cursor:pointer;transition:.15s ease;
+  cursor:pointer;transition:.15s cubic-bezier(.2,.8,.2,1);
+  -webkit-tap-highlight-color:transparent;
 }
-.mobile-more-item:active{background:var(--surface3);transform:scale(.96)}
-.mobile-more-item.active{background:var(--accent-bg);border-color:rgba(108,125,255,.3);color:var(--accent2)}
-.mobile-more-icon{font-size:22px;line-height:1}
+.mobile-more-item:active{transform:scale(.93);background:var(--surface3)}
+.mobile-more-item.active{
+  background:rgba(108,125,255,.14);
+  border-color:rgba(108,125,255,.32);
+  color:var(--accent2);
+}
+.mobile-more-icon{
+  width:36px;height:36px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.07);
+  margin-bottom:2px;
+}
+.mobile-more-item.active .mobile-more-icon{
+  background:rgba(108,125,255,.18);
+  border-color:rgba(108,125,255,.28);
+}
 
+/* ── 전체 레이아웃 반응형 ── */
 @media(max-width:768px){
-  /* 사이드바 완전히 숨김 */
+  /* PC 사이드바·탑바·오스바 숨김 */
   .sidebar{display:none!important}
-  /* main 영역 전체 너비 사용 */
-  .main{margin-left:0!important}
-  /* 하단 탭바 표시 */
+  .auth-bar{display:none!important}
+  .topbar{display:none!important}
+  /* 하단 탭바·모바일 헤더 표시 */
   .mobile-tabbar{display:flex}
-  /* 하단 탭바 영역만큼 페이지 하단 패딩 */
+  .mobile-header{display:flex}
+  /* main 전체 너비 */
+  .main{margin-left:0!important;height:auto;min-height:100vh;overflow:visible}
+  .shell{height:auto;overflow:visible;flex-direction:column}
+  .app{overflow-x:hidden}
+  /* 페이지 패딩 (탭바+헤더 고려) */
   .page{
-    padding:16px 14px 96px;
+    padding:16px 14px 104px;
     max-width:100%;
+    overflow-x:hidden;
   }
-  /* 상단바 조정 */
-  .topbar{padding:10px 14px;position:sticky;top:0;z-index:40}
-  .topbar-title{font-size:15px}
-  /* auth bar 최소화 */
-  .auth-bar{padding:6px 14px;font-size:11px;flex-wrap:wrap;gap:6px}
-  /* KPI 그리드 2열 */
+  /* 모든 child가 화면 너비를 벗어나지 않도록 */
+  .page>*{max-width:100%;overflow-x:hidden}
+  /* KPI 2열 */
   .kpi-grid{grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
-  .kpi-value{font-size:20px}
+  .kpi-card{padding:14px}
+  .kpi-value{font-size:21px;letter-spacing:-.03em}
+  .kpi-label{font-size:10px}
   /* 그리드 */
-  .g2{grid-template-columns:1fr}
-  .g3{grid-template-columns:1fr}
+  .g2,.g3{grid-template-columns:1fr!important}
   .g4{grid-template-columns:repeat(2,1fr)}
   /* 폼 */
-  .form-grid{grid-template-columns:1fr}
-  .form-grid-3{grid-template-columns:1fr}
-  /* 도넛 차트 */
+  .form-grid,.form-grid-3{grid-template-columns:1fr!important}
+  /* 도넛 */
   .donut-wrap{grid-template-columns:1fr}
-  /* 카드 패딩 */
-  .card{padding:14px}
-  .card-sm{padding:11px}
-  /* 테이블 */
-  .table-wrap{font-size:12px}
-  th,td{padding:8px 10px}
-  /* 배지/버튼 */
+  /* 카드 */
+  .card{padding:16px;border-radius:16px}
+  .card-sm{padding:13px;border-radius:14px}
+  /* 테이블 — 가로 스크롤 허용, 바깥만 clip */
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px}
+  table{min-width:560px;font-size:12px}
+  th,td{padding:8px 10px;white-space:nowrap}
+  /* 배지·버튼 */
   .badge{font-size:10px;padding:2px 7px}
-  .btn{padding:8px 13px;font-size:12px}
-  /* FAB 위치 조정 (탭바 위) */
-  .fab{bottom:76px;right:16px;width:48px;height:48px;font-size:20px}
-  /* 탭칩 */
-  .tab-row{gap:5px}
-  .tab-chip{padding:6px 11px;font-size:11px}
+  .btn{padding:9px 14px;font-size:12.5px}
+  .btn-sm{padding:7px 11px;font-size:11.5px}
+  /* FAB */
+  .fab{bottom:80px;right:16px;width:50px;height:50px;font-size:21px;box-shadow:0 8px 28px rgba(108,125,255,.42)}
+  /* 탭칩 스크롤 */
+  .tab-row{overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;padding-bottom:4px;gap:6px;margin-bottom:16px}
+  .tab-row::-webkit-scrollbar{display:none}
+  .tab-chip{flex-shrink:0;padding:7px 13px;font-size:11.5px}
+  /* 모달 */
+  .modal-sheet{border-radius:24px 24px 0 0}
+  /* CFO·Hero 요소들 */
+  .cfo-hero,.goal-hero,.decision-hero,.automation-hero,.report-hero,.retirement-hero{flex-direction:column;align-items:flex-start}
+  .cfo-hero h2,.goal-hero h2{font-size:20px}
+  /* 헤드 그리드 */
+  .dashboard-hero,.cfo-decision-head,.cfo-detail-panel{grid-template-columns:1fr!important}
+  .dashboard-summary-grid{grid-template-columns:repeat(2,1fr)}
+  /* 점수박스 */
+  .health-score{font-size:44px}
+  /* 탭 행 내 스크롤 */
+  .stat-row{font-size:12.5px}
+  /* 텍스트 오버플로 방지 */
+  h2,h3{word-break:keep-all}
 }
 
-@media(max-width:480px){
+@media(max-width:430px){
   .kpi-grid{grid-template-columns:1fr}
-  .kpi-card{padding:14px}
-  .kpi-value{font-size:22px}
-  .page{padding:12px 12px 90px}
-  .topbar{padding:10px 12px}
-  .card{padding:12px}
-  .g4{grid-template-columns:1fr}
+  .kpi-card{padding:14px 13px}
+  .page{padding:14px 12px 100px}
+  .card{padding:14px;border-radius:14px}
+  .g4{grid-template-columns:1fr!important}
   .mobile-more-grid{grid-template-columns:repeat(3,1fr)}
+  .dashboard-summary-grid{grid-template-columns:1fr}
+  .health-score{font-size:38px}
 }
 
-/* 라이트 모드 모바일 탭바 */
+/* ── 라이트 테마 모바일 ── */
 :root[data-theme='light'] .mobile-tabbar{
-  background:rgba(255,255,255,.96);
-  border-top-color:rgba(0,0,0,.10);
+  background:rgba(248,249,252,.95);
+  border-top-color:rgba(0,0,0,.09);
 }
-:root[data-theme='light'] .mobile-more-sheet{
-  background:var(--surface);
+:root[data-theme='light'] .mobile-header{
+  background:rgba(248,249,252,.92);
+  border-bottom-color:rgba(0,0,0,.08);
 }
+:root[data-theme='light'] .mobile-more-sheet{background:var(--surface)}
+:root[data-theme='light'] .mobile-login-sheet{background:var(--surface)}
+:root[data-theme='light'] .mobile-tab-btn.active{color:var(--accent)}
+:root[data-theme='light'] .mobile-tab-btn.active .mobile-tab-icon-wrap{background:rgba(80,96,232,.12);border-color:rgba(80,96,232,.22)}
+:root[data-theme='light'] .mlo-header{background:linear-gradient(135deg,rgba(80,96,232,.14),rgba(23,158,94,.06))}
+:root[data-theme='light'] .mlo-logo-mark{background:linear-gradient(135deg,#5060e8,#6070ff)}
 `;
 
 
@@ -3345,42 +3551,130 @@ function buildAnalysisNLP(monthlySeries, dashboardDetail) {
 
 // ─── Auth Panel ───────────────────────────────────────────────────────────────
 function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
-  const [email,setEmail]=useState(""),  [pw,setPw]=useState(""), [busy,setBusy]=useState(false), [msg,setMsg]=useState("");
+  const [email,setEmail]=useState(""),  [pw,setPw]=useState(""), [busy,setBusy]=useState(false), [msg,setMsg]=useState(""), [msgOk,setMsgOk]=useState(false);
+  const [showMobileLogin, setShowMobileLogin]=useState(false);
+
   const runAuth=async(mode)=>{
-    if(!supabase){setMsg("Supabase 미설정");return}
-    if(!email||!pw){setMsg("이메일·비밀번호 입력 필요");return}
+    if(!supabase){setMsg("Supabase 미설정");setMsgOk(false);return}
+    if(!email||!pw){setMsg("이메일과 비밀번호를 입력해주세요");setMsgOk(false);return}
     setBusy(true);setMsg("");
     try{
       const r=mode==="signup"?await supabase.auth.signUp({email,password:pw}):await supabase.auth.signInWithPassword({email,password:pw});
       if(r.error)throw r.error;
-      setMsg(mode==="signup"?"가입 완료":"로그인 완료");
-    }catch(e){setMsg(e.message||"오류")}finally{setBusy(false)}
+      setMsg(mode==="signup"?"🎉 가입 완료! 이메일을 확인해주세요":"✓ 로그인 완료");setMsgOk(true);
+      if(mode==="signin")setTimeout(()=>setShowMobileLogin(false),800);
+    }catch(e){setMsg(e.message||"오류가 발생했습니다");setMsgOk(false)}finally{setBusy(false)}
   };
-  if(!supabase) return (
-    <div className="auth-bar"><span>로컬 전용 모드 (Supabase 미연결)</span><span style={{color:"var(--text2)"}}>{syncState||""}</span></div>
-  );
-  if(session?.user) return (
-    <div className="auth-bar">
-      <span>{session.user.email}</span>
-      <div className="row">
-        <span style={{color:"var(--text3)"}}>{syncState}</span>
-        <button className="btn btn-sm btn-ghost" onClick={onLoadCloud}>불러오기</button>
-        <button className="btn btn-sm btn-ghost" onClick={onSaveCloud}>저장</button>
-        <button className="btn btn-sm btn-ghost" onClick={()=>supabase.auth.signOut()}>로그아웃</button>
+
+  const syncLabel = syncState || "";
+  const syncClass = syncLabel.includes("완료")?"":"syncing";
+
+  /* ── PC 전용 auth-bar (768px 초과) ── */
+  const PcBar = () => {
+    if(!supabase) return (
+      <div className="auth-bar">
+        <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">Season Finance</span></div>
+        <span style={{fontSize:11,color:"var(--text3)"}}>로컬 전용 모드</span>
       </div>
-    </div>
+    );
+    if(session?.user) return (
+      <div className="auth-bar">
+        <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">Season Finance</span></div>
+        <div className="row" style={{gap:8}}>
+          {syncLabel&&<span className={`auth-bar-sync ${syncClass}`}>⟳ {syncLabel}</span>}
+          <span style={{fontSize:11,color:"var(--text3)"}}>{session.user.email}</span>
+          <button className="btn btn-sm btn-ghost" onClick={onLoadCloud}>불러오기</button>
+          <button className="btn btn-sm btn-ghost" onClick={onSaveCloud}>저장</button>
+          <button className="btn btn-sm btn-ghost" onClick={()=>supabase.auth.signOut()}>로그아웃</button>
+        </div>
+      </div>
+    );
+    return (
+      <div className="auth-bar">
+        <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">클라우드 동기화</span></div>
+        <div className="row" style={{gap:8}}>
+          <input className="auth-input" type="email" placeholder="이메일" value={email} onChange={e=>setEmail(e.target.value)}/>
+          <input className="auth-input" type="password" placeholder="비밀번호" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&runAuth("signin")}/>
+          <button className="btn btn-sm btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>로그인</button>
+          <button className="btn btn-sm btn-ghost" onClick={()=>runAuth("signup")} disabled={busy}>가입</button>
+          {msg&&<span style={{fontSize:11,color:msgOk?"var(--green)":"var(--red)"}}>{msg}</span>}
+        </div>
+      </div>
+    );
+  };
+
+  /* ── 모바일 로그인 시트 ── */
+  const MobileLoginSheet = () => (
+    <>
+      <div className="mobile-login-modal-overlay" onClick={()=>setShowMobileLogin(false)}/>
+      <div className="mobile-login-sheet" onClick={e=>e.stopPropagation()}>
+        <div className="mlo-header">
+          <div className="mlo-glow"/>
+          <div className="mlo-handle"/>
+          <div className="mlo-logo-row">
+            <div className="mlo-logo-mark">S</div>
+            <div><div className="mlo-logo-text">Season Finance</div><div className="mlo-logo-sub">통합 자산관리</div></div>
+          </div>
+          {!session?.user&&<><div className="mlo-headline">클라우드에<br/>연결하세요 ☁️</div><div className="mlo-sub">여러 기기에서 데이터를 동기화하고<br/>안전하게 보관하세요.</div></>}
+          {session?.user&&<><div className="mlo-headline">연결되었어요 ✓</div><div className="mlo-sub">클라우드에 자동으로 동기화 중입니다.</div></>}
+        </div>
+        <div className="mlo-body">
+          {session?.user ? (
+            <>
+              <div className="mlo-session-bar">
+                <div className="mlo-session-avatar">{session.user.email[0].toUpperCase()}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div className="mlo-session-email">{session.user.email}</div>
+                  <div className="mlo-session-status">● 연결됨 {syncLabel&&`· ${syncLabel}`}</div>
+                </div>
+              </div>
+              <div className="mlo-action-row">
+                <button className="mlo-action-btn" onClick={()=>{onLoadCloud();setShowMobileLogin(false)}}>📥 불러오기</button>
+                <button className="mlo-action-btn" onClick={()=>{onSaveCloud();setShowMobileLogin(false)}}>☁️ 저장</button>
+                <button className="mlo-action-btn danger" onClick={()=>{supabase.auth.signOut();setShowMobileLogin(false)}}>로그아웃</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mlo-field">
+                <label>이메일</label>
+                <div className="mlo-input-wrap">
+                  <span className="mlo-input-icon">✉️</span>
+                  <input className="mlo-input" type="email" placeholder="your@email.com" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email"/>
+                </div>
+              </div>
+              <div className="mlo-field">
+                <label>비밀번호</label>
+                <div className="mlo-input-wrap">
+                  <span className="mlo-input-icon">🔒</span>
+                  <input className="mlo-input" type="password" placeholder="••••••••" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&runAuth("signin")} autoComplete="current-password"/>
+                </div>
+              </div>
+              {msg&&<div className={`mlo-msg ${msgOk?"ok":""}`}>{msg}</div>}
+              <div className="mlo-btn-row">
+                <button className="mlo-btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>{busy?"로그인 중...":"로그인"}</button>
+                <button className="mlo-btn-secondary" onClick={()=>runAuth("signup")} disabled={busy}>{busy?"처리 중...":"처음이에요, 계정 만들기"}</button>
+              </div>
+              <div className="mlo-divider">또는</div>
+              <button className="mlo-local-chip" onClick={()=>setShowMobileLogin(false)}>
+                <div className="mlo-local-icon">📱</div>
+                <div><div style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>로컬 모드로 계속하기</div><div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>기기에만 저장 · 동기화 없음</div></div>
+              </button>
+            </>
+          )}
+        </div>
+        <div style={{height:16}}/>
+      </div>
+    </>
   );
+
   return (
-    <div className="auth-bar">
-      <span>클라우드 동기화</span>
-      <div className="row">
-        <input className="auth-input" type="email" placeholder="이메일" value={email} onChange={e=>setEmail(e.target.value)}/>
-        <input className="auth-input" type="password" placeholder="비밀번호" value={pw} onChange={e=>setPw(e.target.value)}/>
-        <button className="btn btn-sm btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>로그인</button>
-        <button className="btn btn-sm btn-ghost" onClick={()=>runAuth("signup")} disabled={busy}>가입</button>
-        {msg&&<span style={{fontSize:11}}>{msg}</span>}
-      </div>
-    </div>
+    <>
+      <PcBar/>
+      {showMobileLogin&&<MobileLoginSheet/>}
+      {/* 모바일 동기화 버튼은 mobile-header에 주입 (데이터만 노출) */}
+      <div id="__authbar_mobile_state" data-session={session?.user?.email||""} data-sync={syncLabel} data-show-login={String(showMobileLogin)} style={{display:"none"}} onClick={()=>setShowMobileLogin(v=>!v)}/>
+    </>
   );
 }
 
@@ -9509,32 +9803,51 @@ export default function App() {
         <OnboardingWizard onComplete={handleOnboardingComplete}/>
       )}
 
-      {/* ── 모바일 하단 탭바 ── */}
-      <div className="mobile-tabbar">
-        <div className="mobile-tabbar-inner">
-          <button className={`mobile-tab-btn ${tab==="dashboard"?"active":""}`} onClick={()=>setTab("dashboard")}>
-            <span className="mobile-tab-icon">◈</span>
-            <span className="mobile-tab-label">홈</span>
+      {/* ── 모바일 전용 헤더 ── */}
+      <header className="mobile-header">
+        <div className="mobile-header-left">
+          <div className="mobile-header-logo">S</div>
+          <span className="mobile-header-title">{PAGE_TITLES[tab]||"Season Finance"}</span>
+        </div>
+        <div className="mobile-header-right">
+          {dashboard.net!==0&&(
+            <span className={`mobile-header-badge ${dashboard.net>=0?"surplus":"deficit"}`}>
+              {dashboard.net>=0?"▲":"▼"} {fmt(Math.abs(dashboard.net)/10000)}만
+            </span>
+          )}
+          <button className="mobile-header-sync" onClick={()=>{const el=document.getElementById("__authbar_mobile_state");if(el)el.click();}}>
+            ☁️ <span>{session?.user?"연결됨":"로그인"}</span>
           </button>
-          <button className={`mobile-tab-btn ${tab==="transactions"?"active":""}`} onClick={()=>setTab("transactions")}>
-            <span className="mobile-tab-icon">↔</span>
-            <span className="mobile-tab-label">거래</span>
-          </button>
-          <button className={`mobile-tab-btn ${tab==="cfo"?"active":""}`} onClick={()=>setTab("cfo")}>
-            <span className="mobile-tab-icon">🏛️</span>
-            <span className="mobile-tab-label">CFO</span>
-          </button>
-          <button className={`mobile-tab-btn ${tab==="assets"?"active":""}`} onClick={()=>setTab("assets")}>
-            <span className="mobile-tab-icon">🏦</span>
-            <span className="mobile-tab-label">자산</span>
-          </button>
-          <button className={`mobile-tab-btn ${["dashboard","transactions","cfo","assets"].includes(tab)?"":"active"}`} onClick={()=>setShowMobileMore(true)}>
-            <span className="mobile-tab-icon">☰</span>
-            <span className="mobile-tab-label">더보기</span>
-            {totalIssues>0&&<span className="mobile-tab-dot"/>}
+          <button className="mobile-header-theme" onClick={toggleTheme} aria-label="테마 전환">
+            {theme==="dark"?"☀️":"🌙"}
           </button>
         </div>
-      </div>
+      </header>
+
+      {/* ── 모바일 하단 탭바 ── */}
+      <nav className="mobile-tabbar">
+        <div className="mobile-tabbar-inner">
+          {[
+            {id:"dashboard", icon:"◈", label:"홈"},
+            {id:"transactions", icon:"↔", label:"거래"},
+            {id:"cfo", icon:"🏛️", label:"CFO"},
+            {id:"assets", icon:"🏦", label:"자산"},
+            {id:"__more__", icon:"☰", label:"더보기"},
+          ].map(item=>(
+            <button
+              key={item.id}
+              className={`mobile-tab-btn ${item.id==="__more__"?(["dashboard","transactions","cfo","assets"].includes(tab)?"":"active"):tab===item.id?"active":""}`}
+              onClick={item.id==="__more__"?()=>setShowMobileMore(true):()=>setTab(item.id)}
+            >
+              <div className="mobile-tab-icon-wrap">
+                <span className="mobile-tab-icon">{item.icon}</span>
+              </div>
+              <span className="mobile-tab-label">{item.label}</span>
+              {item.id==="__more__"&&totalIssues>0&&<span className="mobile-tab-dot"/>}
+            </button>
+          ))}
+        </div>
+      </nav>
 
       {/* ── 모바일 더보기 시트 ── */}
       {showMobileMore&&(
@@ -9542,15 +9855,28 @@ export default function App() {
           <div className="mobile-more-sheet-overlay" onClick={()=>setShowMobileMore(false)}/>
           <div className="mobile-more-sheet">
             <div className="mobile-more-handle"/>
-            <div className="mobile-more-grid">
-              {NAV.filter(i=>i.id&&!["dashboard","transactions","cfo","assets"].includes(i.id)).map(item=>(
-                <button key={item.id} className={`mobile-more-item ${tab===item.id?"active":""}`} onClick={()=>{setTab(item.id);setShowMobileMore(false);}}>
-                  <span className="mobile-more-icon">{item.icon}</span>
-                  <span>{item.label}</span>
-                  {item.id==="data"&&totalIssues>0&&<span className="mobile-tab-dot" style={{position:"static",display:"inline-block",marginLeft:2}}/>}
-                </button>
-              ))}
-            </div>
+            {[
+              {section:"분석·인사이트", ids:["portfolio","budget","planning","professional","risk","analysis"]},
+              {section:"세금·미래", ids:["tax","simulation","monthlyReport","decision","goals","automation"]},
+              {section:"관리", ids:["settings","accounts","data"]},
+            ].map(group=>{
+              const items=NAV.filter(i=>i.id&&group.ids.includes(i.id));
+              if(!items.length) return null;
+              return (
+                <div key={group.section} style={{marginBottom:14}}>
+                  <div className="mobile-more-section">{group.section}</div>
+                  <div className="mobile-more-grid">
+                    {items.map(item=>(
+                      <button key={item.id} className={`mobile-more-item ${tab===item.id?"active":""}`} onClick={()=>{setTab(item.id);setShowMobileMore(false);}}>
+                        <div className="mobile-more-icon">{item.icon}</div>
+                        <span>{item.label}</span>
+                        {item.id==="data"&&totalIssues>0&&<span style={{fontSize:9,color:"var(--red)",fontWeight:900}}>●</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </>
       )}
