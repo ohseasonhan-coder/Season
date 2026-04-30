@@ -880,6 +880,19 @@ input,select,textarea{font-family:inherit}
 .input-status-left,.input-status-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .input-status-caption{font-size:11px;color:var(--text3)}
 
+
+.cfo-verification-panel{margin-top:14px;padding:14px;border-radius:16px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08)}
+.cfo-verification-panel strong{font-size:13px;color:var(--text)}
+.cfo-verification-panel p{font-size:11.5px;color:var(--text3);margin-top:3px}
+.cfo-verification-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:12px}
+.cfo-verification-row{display:grid;grid-template-columns:1fr auto auto auto;gap:7px;align-items:center;padding:9px 10px;border-radius:12px;background:var(--surface2);border:1px solid var(--border);font-size:11.5px}
+.cfo-verification-row span{color:var(--text3);font-weight:800}
+.cfo-verification-row b{color:var(--text);font-variant-numeric:tabular-nums;font-size:11.5px}
+.cfo-verification-row em{color:var(--accent2);font-style:normal;font-weight:900}
+.cfo-force-run{display:flex;align-items:center;gap:7px;margin-top:10px;font-size:12px;font-weight:800;color:var(--text);cursor:pointer}
+.cfo-force-run input{width:auto;accent-color:var(--accent)}
+@media(max-width:760px){.cfo-verification-grid{grid-template-columns:1fr}.cfo-verification-row{grid-template-columns:1fr;align-items:flex-start}.cfo-verification-row em{display:none}}
+
 /* Table */
 .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
 table{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -4328,9 +4341,87 @@ function defaultCFOActionForm({ action, model, data }) {
   };
 }
 
+
+function getCFOActionRuleKey(action, form={}) {
+  const raw = action?.ruleId || action?.id || action?.title || "cfo-action";
+  return String(raw).toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9가-힣_-]/g,"").slice(0,80) || "cfo-action";
+}
+
+function getCFOExecutionKey(action, form={}) {
+  const month = monthOf(form.date || todayISO());
+  const kind = form.kind || detectCFOActionKind(action);
+  const ruleKey = getCFOActionRuleKey(action, form);
+  const to = String(form.toAccount || "").trim();
+  return `${month}:${kind}:${ruleKey}:${to}`;
+}
+
+function getCFOExecutionDuplicateInfo(data, action, form={}) {
+  const executionKey = getCFOExecutionKey(action, form);
+  const executionMonth = monthOf(form.date || todayISO());
+  const kind = form.kind || detectCFOActionKind(action);
+  const ruleKey = getCFOActionRuleKey(action, form);
+  const history = Array.isArray(data?.cfoActionHistory) ? data.cfoActionHistory : [];
+  const matched = history.find((h)=>{
+    if (h.executionKey && h.executionKey === executionKey) return true;
+    return monthOf(h.executedDate || h.executedAt) === executionMonth && (h.kind || "") === kind && (h.ruleKey || getCFOActionRuleKey({ title:h.title }, h)) === ruleKey;
+  });
+  return {
+    isDuplicate: !!matched,
+    executionKey,
+    executionMonth,
+    ruleKey,
+    matched,
+    message: matched ? `${executionMonth}에 같은 CFO 실행이 이미 반영되었습니다. 중복 반영하면 현금·포트폴리오·ISA 납입액이 한 번 더 바뀝니다.` : "",
+  };
+}
+
+function getAccountAssetCurrent(data, accountName="") {
+  const idx = findAssetIndexByAccountName(data?.assets || [], accountName);
+  return idx >= 0 ? n(data.assets[idx].current) : 0;
+}
+
+function getPortfolioMarketValue(data) {
+  return (data?.portfolio || []).reduce((sum,p)=>{
+    const qty = n(p.qty);
+    const price = n(p.currentPrice || p.avgPrice);
+    const fallback = n(p.targetAmount);
+    return sum + (qty > 0 && price > 0 ? qty * price : fallback);
+  },0);
+}
+
+function buildCFOExecutionVerification(data, action, form={}) {
+  const before = migrateData({ ...data });
+  const after = applyCFOActionToData(before, action, { ...form, forceRun:true, __previewOnly:true });
+  const kind = form.kind || detectCFOActionKind(action);
+  const from = form.fromAccount || "출금계좌";
+  const to = form.toAccount || "입금계좌";
+  const rows = [];
+  const add = (label, beforeValue, afterValue) => rows.push({ label, before: beforeValue, after: afterValue });
+
+  if (["investment","retirement","emergency"].includes(kind)) {
+    add(`${from} 현금`, `${fmt(getAccountAssetCurrent(before, from))}원`, `${fmt(getAccountAssetCurrent(after, from))}원`);
+    if (kind === "emergency") add(`${to} 비상금`, `${fmt(getAccountAssetCurrent(before, to))}원`, `${fmt(getAccountAssetCurrent(after, to))}원`);
+  }
+  if (["investment","retirement"].includes(kind)) {
+    add("포트폴리오 반영액", `${fmt(getPortfolioMarketValue(before))}원`, `${fmt(getPortfolioMarketValue(after))}원`);
+    add("ISA 연간 납입액", `${fmt(before.settings?.annualIsaContributionCurrent)}원`, `${fmt(after.settings?.annualIsaContributionCurrent)}원`);
+  }
+  if (kind === "budget") {
+    const cat = form.budgetCategory || "예산";
+    const b0 = (before.budgets || []).find(b=>b.cat1===cat);
+    const b1 = (after.budgets || []).find(b=>b.cat1===cat);
+    add(`${cat} 예산`, `${fmt(b0?.budget)}원`, `${fmt(b1?.budget)}원`);
+  }
+  add("거래내역", `${(before.transactions || []).length}건`, `${(after.transactions || []).length}건`);
+  add("CFO 실행기록", `${(before.cfoActionHistory || []).length}건`, `${(after.cfoActionHistory || []).length}건`);
+  return { rows, before, after };
+}
+
 function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
   const [form, setForm] = useState(()=>defaultCFOActionForm({ action, model, data }));
   const preview = buildCFOActionPreview(model, action, form);
+  const duplicateInfo = getCFOExecutionDuplicateInfo(data, action, form);
+  const verification = buildCFOExecutionVerification(data, action, form);
   const accounts = (data?.accounts || []).filter(a=>a.active);
   const updateForm = (patch) => setForm(prev=>({ ...prev, ...patch }));
   const amountLabel = form.kind === "budget" ? "절감 목표 금액" : form.kind === "investment" ? "투자 금액" : form.kind === "emergency" ? "비상금 이체 금액" : "금액";
@@ -4432,6 +4523,35 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
           </div>
         </div>
 
+        <div className="cfo-verification-panel">
+          <div className="row-between">
+            <div>
+              <strong>실행 검증</strong>
+              <p>버튼을 누르면 아래 항목이 동시에 바뀝니다.</p>
+            </div>
+            <span className={`badge ${duplicateInfo.isDuplicate ? "badge-amber" : "badge-green"}`}>{duplicateInfo.isDuplicate ? "중복 감지" : "실행 가능"}</span>
+          </div>
+          <div className="cfo-verification-grid">
+            {verification.rows.map((row)=> (
+              <div className="cfo-verification-row" key={row.label}>
+                <span>{row.label}</span>
+                <b>{row.before}</b>
+                <em>→</em>
+                <b>{row.after}</b>
+              </div>
+            ))}
+          </div>
+          {duplicateInfo.isDuplicate && (
+            <div className="alert alert-warn" style={{marginTop:12}}>
+              {duplicateInfo.message}
+              <label className="cfo-force-run">
+                <input type="checkbox" checked={!!form.forceRun} onChange={(e)=>updateForm({forceRun:e.target.checked})} />
+                그래도 이번 달에 한 번 더 반영하기
+              </label>
+            </div>
+          )}
+        </div>
+
         {(amountError || accountError) && (
           <div className="alert alert-danger" style={{marginTop:12}}>
             금액과 계좌를 확인해야 실행할 수 있습니다.
@@ -4439,16 +4559,16 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
         )}
 
         <div className="apple-cfo-modal-note">
-          입력한 값으로 거래내역·포트폴리오·현금성 자산·예산이 동시에 반영됩니다. 실행 후 <b>되돌리기</b>로 바로 복구할 수 있습니다.
+          입력한 값으로 거래내역·포트폴리오·현금성 자산·예산이 동시에 반영됩니다. 같은 달 동일 실행은 기본 차단되며, 실행 후 <b>되돌리기</b>로 바로 복구할 수 있습니다.
         </div>
 
         <div className="apple-cfo-modal-actions">
           <button className="btn btn-ghost" onClick={onClose}>취소</button>
           <button
             className="apple-cfo-confirm-btn"
-            disabled={amountError || accountError}
-            onClick={()=>onConfirm(form)}
-            style={{opacity:(amountError || accountError)?0.45:1}}
+            disabled={amountError || accountError || (duplicateInfo.isDuplicate && !form.forceRun)}
+            onClick={()=>onConfirm({ ...form, duplicateInfo, verification })}
+            style={{opacity:(amountError || accountError || (duplicateInfo.isDuplicate && !form.forceRun))?0.45:1}}
           >
             {confirmLabel}
           </button>
@@ -4559,9 +4679,14 @@ function applyCFOActionToData(data, action, form={}) {
   const next = migrateData({ ...data });
   const allocation = kind === "investment" || kind === "retirement" ? buildCFOInvestmentAllocation(amount) : [];
 
+  const duplicateInfo = getCFOExecutionDuplicateInfo(data, action, form);
+  if (duplicateInfo.isDuplicate && !form.forceRun && !form.__previewOnly) {
+    return data;
+  }
+
   next.cfoActionHistory = [
-    { id: uid(), title, desc, executedAt, expectedScore: n(action.expectedScore), priority: action.priority || "mid", kind, amount, fromAccount: form.fromAccount || "", toAccount: form.toAccount || "", allocation, memo: form.memo || "" },
-    ...((next.cfoActionHistory || []).slice(0, 19)),
+    { id: uid(), title, desc, executedAt, executedDate: now, executionMonth: duplicateInfo.executionMonth, executionKey: duplicateInfo.executionKey, ruleKey: duplicateInfo.ruleKey, forcedDuplicate: !!form.forceRun, expectedScore: n(action.expectedScore), priority: action.priority || "mid", kind, amount, fromAccount: form.fromAccount || "", toAccount: form.toAccount || "", allocation, memo: form.memo || "", verificationRows: form.verification?.rows || [] },
+    ...((next.cfoActionHistory || []).slice(0, 29)),
   ];
 
   const addSystemEvent = (name, amountNeeded=0, priority="중간") => {
