@@ -1194,6 +1194,60 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 
 
 
+
+/* CFO actual app UX v22 */
+.cfo-app-screen{position:relative;display:flex;flex-direction:column;gap:14px;animation:cfoScreenIn .42s cubic-bezier(.2,.8,.2,1)}
+@keyframes cfoScreenIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.cfo-app-status-card{position:relative;overflow:hidden;min-height:132px;display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:center;padding:24px;border-radius:30px;border:1px solid rgba(255,255,255,.085);background:linear-gradient(135deg,rgba(22,25,32,.98),rgba(30,33,41,.86));box-shadow:0 18px 50px rgba(0,0,0,.28)}
+.cfo-app-status-card:after{content:"";position:absolute;right:-140px;top:-160px;width:360px;height:360px;background:radial-gradient(circle,rgba(108,125,255,.16),transparent 68%);pointer-events:none}
+.cfo-app-screen.danger .cfo-app-status-card:after{background:radial-gradient(circle,rgba(255,92,114,.17),transparent 68%)}
+.cfo-app-screen.warn .cfo-app-status-card:after{background:radial-gradient(circle,rgba(240,180,41,.16),transparent 68%)}
+.cfo-app-screen.ok .cfo-app-status-card:after{background:radial-gradient(circle,rgba(52,213,138,.16),transparent 68%)}
+.cfo-app-status-left,.cfo-app-score-card{position:relative;z-index:1}
+.cfo-app-kicker,.cfo-app-section-label{display:block;font-size:11px;font-weight:950;letter-spacing:.12em;color:var(--accent2);margin-bottom:8px}
+.cfo-app-status-left h2{font-size:30px;line-height:1.15;letter-spacing:-.055em;font-weight:950;margin-bottom:8px}
+.cfo-app-status-left p{color:var(--text2);font-size:14px;line-height:1.6}
+.cfo-app-score-card{display:flex;flex-direction:column;justify-content:center;gap:10px;padding:18px;border-radius:24px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.085)}
+.cfo-app-score{display:flex;align-items:baseline;gap:4px;font-size:54px;font-weight:950;letter-spacing:-.07em;line-height:.95}
+.cfo-app-score span:last-child{font-size:18px;color:var(--text3);font-weight:900}
+.cfo-app-conclusion{padding:18px 20px;border-radius:24px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.075);animation:cfoCardIn .46s cubic-bezier(.2,.8,.2,1) both;animation-delay:.06s}
+.cfo-app-conclusion span{display:block;font-size:11px;font-weight:950;color:var(--text3);margin-bottom:7px}
+.cfo-app-conclusion strong{display:block;font-size:24px;line-height:1.25;letter-spacing:-.045em;margin-bottom:8px}
+.cfo-app-conclusion p{color:var(--text2);font-size:13px;line-height:1.55}
+.cfo-app-action-card{padding:20px;border-radius:28px;background:linear-gradient(135deg,rgba(108,125,255,.14),rgba(255,255,255,.04));border:1px solid rgba(108,125,255,.20);box-shadow:0 18px 45px rgba(0,0,0,.22);animation:cfoCardIn .46s cubic-bezier(.2,.8,.2,1) both;animation-delay:.12s;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.cfo-app-action-card:hover{transform:translateY(-2px);border-color:rgba(108,125,255,.32);box-shadow:0 22px 55px rgba(0,0,0,.27)}
+@keyframes cfoCardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.cfo-app-action-main{display:grid;grid-template-columns:42px 1fr;gap:14px;align-items:flex-start}
+.cfo-app-action-badge{width:42px;height:42px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:var(--accent);color:#fff;font-size:18px;font-weight:950;box-shadow:0 12px 26px rgba(108,125,255,.32)}
+.cfo-app-action-copy h3{font-size:22px;letter-spacing:-.04em;margin:6px 0 8px}
+.cfo-app-action-copy p{color:var(--text2);font-size:13px;line-height:1.6}
+.cfo-app-preview-strip{margin-top:16px;display:flex;align-items:center;gap:10px;padding:14px;border-radius:20px;background:rgba(13,15,20,.38);border:1px solid rgba(255,255,255,.075)}
+.cfo-app-preview-strip div:not(.cfo-app-preview-note){display:flex;flex-direction:column;gap:3px}
+.cfo-app-preview-strip span{font-size:11px;font-weight:900;color:var(--text3)}
+.cfo-app-preview-strip strong{font-size:24px;font-weight:950;letter-spacing:-.045em}
+.cfo-app-preview-strip strong.after{color:var(--green)}
+.cfo-app-preview-strip em{color:var(--text3);font-style:normal;font-weight:950}
+.cfo-app-preview-note{margin-left:auto;padding:7px 10px;border-radius:999px;background:var(--green-bg);color:var(--green);font-size:12px;font-weight:950}
+.cfo-app-primary-btn{margin-top:16px;width:100%;min-height:58px;border:none;border-radius:20px;background:linear-gradient(135deg,#6c7dff,#8b9aff);color:white;font-size:17px;font-weight:950;box-shadow:0 16px 36px rgba(108,125,255,.32);transition:transform .16s ease,filter .16s ease,box-shadow .16s ease}
+.cfo-app-primary-btn:hover{transform:translateY(-1px) scale(1.01);filter:brightness(1.06);box-shadow:0 20px 46px rgba(108,125,255,.40)}
+.cfo-app-primary-btn:active{transform:translateY(1px) scale(.99)}
+.cfo-app-result-card{display:grid;grid-template-columns:42px 1fr;gap:12px;align-items:center;padding:14px;border-radius:20px;background:rgba(52,213,138,.09);border:1px solid rgba(52,213,138,.22);animation:cfoResultPop .32s cubic-bezier(.2,.8,.2,1)}
+@keyframes cfoResultPop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+.cfo-app-result-icon{width:42px;height:42px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:var(--green);color:#07110c;font-size:18px;font-weight:950}
+.cfo-app-result-card strong{color:var(--green);font-size:14px}.cfo-app-result-card p{color:var(--text);font-size:13px;font-weight:850;margin-top:2px}.cfo-app-result-card span{display:block;color:var(--text3);font-size:12px;margin-top:2px}
+.cfo-app-accordion{display:flex;flex-direction:column;gap:8px;animation:cfoCardIn .46s cubic-bezier(.2,.8,.2,1) both;animation-delay:.18s}
+.cfo-app-accordion>button{width:100%;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:18px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.035);color:var(--text);font-size:13px;font-weight:900}
+.cfo-app-accordion>button span{color:var(--text3);font-size:12px}
+.cfo-app-accordion-body{padding:12px;border-radius:18px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.055);animation:cfoAccordionIn .2s ease}
+@keyframes cfoAccordionIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.cfo-app-score-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.cfo-app-score-item{padding:13px;border-radius:16px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}
+.cfo-app-score-item b{font-size:13px}.cfo-app-score-item span{font-size:12px;font-weight:950}.cfo-app-score-item p{margin-top:8px;color:var(--text3);font-size:11.5px;line-height:1.45}
+.cfo-app-secondary-action{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:12px;border-radius:16px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}
+.cfo-app-secondary-action strong{font-size:13px;color:var(--text)}.cfo-app-secondary-action p{color:var(--text3);font-size:11.5px;line-height:1.45;margin-top:3px}
+@media(max-width:1000px){.cfo-app-status-card{grid-template-columns:1fr}.cfo-app-score-card{max-width:100%}}
+@media(max-width:680px){.cfo-app-status-card,.cfo-app-action-card{padding:18px;border-radius:24px}.cfo-app-status-left h2{font-size:24px}.cfo-app-conclusion strong{font-size:20px}.cfo-app-action-main{grid-template-columns:1fr}.cfo-app-preview-strip{align-items:flex-start;flex-wrap:wrap}.cfo-app-preview-note{margin-left:0}.cfo-app-score-grid{grid-template-columns:1fr}.cfo-app-secondary-action{grid-template-columns:1fr}}
+
 /* CFO live score preview v21 */
 .cfo-input-preview-live{grid-template-columns:1fr 1fr}
 .cfo-live-wide{grid-column:1/-1}
@@ -3535,16 +3589,47 @@ function buildCFOActionPreview(model, action, form=null) {
 }
 
 
+function CountUpNumber({ value, duration=650 }) {
+  const [display, setDisplay] = useState(0);
+  useEffect(()=>{
+    const end = Math.round(n(value));
+    let frame = 0;
+    const frames = Math.max(Math.round(duration / 16), 1);
+    const timer = setInterval(()=>{
+      frame += 1;
+      const progress = 1 - Math.pow(1 - frame / frames, 3);
+      setDisplay(Math.round(end * progress));
+      if (frame >= frames) {
+        setDisplay(end);
+        clearInterval(timer);
+      }
+    }, 16);
+    return ()=>clearInterval(timer);
+  }, [value, duration]);
+  return <>{display}</>;
+}
+
 function CFODecisionDashboard({ model, onExecuteAction, onUndoAction, undoState }) {
   if (!model) return null;
   const [executedAction, setExecutedAction] = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
+  const [showWhy, setShowWhy] = useState(false);
+  const [showMoreActions, setShowMoreActions] = useState(false);
+
   const priorityLabel = { high:"최우선", mid:"중요", low:"관리" };
   const topAction = model.actions?.[0];
-  const secondAction = model.actions?.[1];
+  const otherActions = (model.actions || []).slice(1, 4);
   const mainReason = model.scoreLosses?.[0];
-
+  const statusEmoji = model.tone === "green" ? "🟢" : model.tone === "accent" ? "🔵" : model.tone === "amber" ? "🟡" : "🔴";
   const toneClass = model.tone === "green" ? "ok" : model.tone === "accent" ? "info" : model.tone === "amber" ? "warn" : "danger";
+
+  const headline = model.status === "위험"
+    ? "지금은 투자보다 재무 안전장치가 먼저입니다"
+    : model.status === "주의 필요"
+      ? "지금은 현금흐름을 먼저 정리해야 합니다"
+      : model.status === "양호"
+        ? "좋은 흐름입니다. 낮은 항목만 보강하세요"
+        : "현재 재무 구조는 안정권입니다";
 
   const handleConfirmExecute = (action, form) => {
     if (!action) return;
@@ -3559,165 +3644,123 @@ function CFODecisionDashboard({ model, onExecuteAction, onUndoAction, undoState 
     setPendingAction(null);
   };
 
-  return (
-    <div className={`cfo-product-card ${toneClass}`}>
-      <div className="cfo-product-hero">
-        <div className="cfo-product-left">
-          <div className="cfo-product-kicker">PERSONAL CFO DECISION</div>
-          <h2>
-            {model.status === "위험"
-              ? "지금은 투자보다 재무 안전장치가 먼저입니다."
-              : model.status === "주의 필요"
-                ? "방향은 잡혔지만 현금흐름 보강이 필요합니다."
-                : model.status === "양호"
-                  ? "좋은 흐름입니다. 낮은 항목만 보강하면 됩니다."
-                  : "현재 재무 구조는 매우 안정적입니다."}
-          </h2>
-          <p>{model.message}</p>
+  const topPreview = topAction ? buildCFOActionPreview(model, topAction) : null;
 
-          <div className="cfo-product-reason">
-            <span>왜 이렇게 판단했나요?</span>
-            <strong>
-              {mainReason
-                ? `${mainReason.label}에서 ${mainReason.lost}점 감점`
-                : "현재 입력 기준 큰 감점 요인이 없습니다."}
-            </strong>
-            <small>{mainReason?.reason || "월 1회 점검만 유지해도 충분합니다."}</small>
-          </div>
+  return (
+    <section className={`cfo-app-screen ${toneClass}`}>
+      <div className="cfo-app-status-card">
+        <div className="cfo-app-status-left">
+          <span className="cfo-app-kicker">TODAY'S FINANCIAL DECISION</span>
+          <h2>재무 상태: {model.status} {statusEmoji}</h2>
+          <p>{headline}</p>
         </div>
 
-        <div className="cfo-product-score">
-          <AnimatedScoreBar value={model.totalScore} />
-          <div className="cfo-product-score-row">
-            <strong style={{color:model.toneColor}}>{model.totalScore}</strong>
+        <div className="cfo-app-score-card">
+          <div className="cfo-app-score">
+            <CountUpNumber value={model.totalScore} />
             <span>/100</span>
           </div>
-          <div className="cfo-status-pill" style={{background:model.toneBg,color:model.toneColor}}>{model.status}</div>
+          <AnimatedScoreBar value={model.totalScore} />
         </div>
       </div>
 
-      <div className="cfo-product-action-panel">
-        <div className="cfo-product-action-head">
-          <div>
-            <span className="cfo-product-section-label">NOW ACTION</span>
-            <h3>지금 바로 할 일</h3>
-          </div>
-          <span className="badge badge-muted">자동 반영 가능</span>
-        </div>
-
-        <div className="cfo-action-focus">
-          {topAction ? (() => {
-            const preview = buildCFOActionPreview(model, topAction);
-            return (
-              <>
-                <div className="cfo-action-rank">1</div>
-                <div className="cfo-action-copy">
-                  <div className="row-between">
-                    <strong>{topAction.title}</strong>
-                    <span className={`badge ${topAction.priority==="high"?"badge-red":topAction.priority==="mid"?"badge-amber":"badge-accent"}`}>
-                      {priorityLabel[topAction.priority] || "관리"}
-                    </span>
-                  </div>
-                  <p>{topAction.desc}</p>
-
-                  <div className="cfo-action-preview">
-                    <div className="cfo-preview-score">
-                      <span>현재</span>
-                      <strong>{preview.currentScore}</strong>
-                      <em>→</em>
-                      <span>반영 후</span>
-                      <strong className="after">{preview.nextScore}</strong>
-                    </div>
-
-                    <div className="cfo-preview-change">
-                      <div>
-                        <small>바뀌는 항목</small>
-                        <b>{preview.target}</b>
-                      </div>
-                      <div>
-                        <small>적용 전</small>
-                        <b>{preview.before}</b>
-                      </div>
-                      <div>
-                        <small>적용 후</small>
-                        <b>{preview.after}</b>
-                      </div>
-                    </div>
-
-                    <div className="cfo-preview-note">{preview.effect}</div>
-                  </div>
-                </div>
-
-                <button className="cfo-execute-btn" onClick={()=>setPendingAction(topAction)}>
-                  지금 실행 반영
-                </button>
-              </>
-            );
-          })() : (
-            <div className="empty">추천 행동이 없습니다.</div>
-          )}
-        </div>
-
-        {secondAction && (
-          <div className="cfo-action-sub">
-            <span>다음 행동</span>
-            <strong>{secondAction.title}</strong>
-            <button className="btn btn-ghost btn-sm" onClick={()=>setPendingAction(secondAction)}>간단 반영</button>
-          </div>
-        )}
+      <div className="cfo-app-conclusion">
+        <span>핵심 결론</span>
+        <strong>{headline}</strong>
+        <p>{mainReason ? `${mainReason.label}에서 ${mainReason.lost}점 감점되었습니다. ${mainReason.reason}` : "현재 입력된 데이터 기준으로 큰 감점 요인이 없습니다."}</p>
       </div>
+
+      {topAction ? (
+        <div className="cfo-app-action-card">
+          <div className="cfo-app-action-main">
+            <div className="cfo-app-action-badge">1</div>
+            <div className="cfo-app-action-copy">
+              <div className="row-between">
+                <span className="cfo-app-section-label">지금 해야 할 행동</span>
+                <span className={`badge ${topAction.priority==="high"?"badge-red":topAction.priority==="mid"?"badge-amber":"badge-accent"}`}>
+                  {priorityLabel[topAction.priority] || "관리"}
+                </span>
+              </div>
+              <h3>{topAction.title}</h3>
+              <p>{topAction.desc}</p>
+            </div>
+          </div>
+
+          <div className="cfo-app-preview-strip">
+            <div>
+              <span>현재</span>
+              <strong>{topPreview?.currentScore ?? model.totalScore}</strong>
+            </div>
+            <em>→</em>
+            <div>
+              <span>예상</span>
+              <strong className="after">{topPreview?.nextScore ?? model.totalScore}</strong>
+            </div>
+            <div className="cfo-app-preview-note">
+              +{topAction.expectedScore || 0}점 개선 예상
+            </div>
+          </div>
+
+          <button className="cfo-app-primary-btn" onClick={()=>setPendingAction(topAction)}>
+            지금 실행하기
+          </button>
+        </div>
+      ) : (
+        <div className="card empty">추천 행동이 없습니다.</div>
+      )}
 
       {executedAction && (
-        <div className="cfo-executed-panel">
-          <div className="cfo-executed-icon">✓</div>
-          <div className="cfo-executed-copy">
-            <strong>실행 반영 완료</strong>
+        <div className="cfo-app-result-card">
+          <div className="cfo-app-result-icon">✓</div>
+          <div>
+            <strong>실행 완료</strong>
             <p>{executedAction.title}</p>
-            <div className="cfo-executed-detail">
-              <span>점수 예상</span>
-              <b>{executedAction.preview.currentScore} → {executedAction.preview.nextScore}</b>
-              <span>반영 항목</span>
-              <b>{executedAction.preview.target}</b>
-              <span>처리 시간</span>
-              <b>{executedAction.executedAt}</b>
-            </div>
+            <span>{executedAction.preview.currentScore} → {executedAction.preview.nextScore} 예상</span>
           </div>
         </div>
       )}
 
-      <div className="cfo-product-grid">
-        <div className="cfo-product-mini">
-          <span>핵심 문제</span>
-          <strong>{model.problems?.[0]?.title || "큰 위험 신호 없음"}</strong>
-          <p>{model.problems?.[0]?.desc || "현재 전략을 유지하면서 월 1회 점검하세요."}</p>
-        </div>
-        <div className="cfo-product-mini">
-          <span>6개월 후 예상</span>
-          <strong>{model.simulation?.checkpoints?.find(r=>r.month===6)?.score || model.totalScore}점</strong>
-          <p>현재 저축·투자 흐름을 유지하는 기준입니다.</p>
-        </div>
-        <div className="cfo-product-mini">
-          <span>70점 도달 예상</span>
-          <strong>{model.simulation?.monthsTo70 ? `${model.simulation.monthsTo70}개월` : "24개월 초과"}</strong>
-          <p>비상금과 현금흐름을 우선 개선할 때의 예상입니다.</p>
-        </div>
-      </div>
-
-      <div className="cfo-product-detail">
-        {(model.scoreItems || []).map((item, idx)=>{
-          const rate = item.max > 0 ? item.score / item.max * 100 : 0;
-          const color = rate >= 80 ? "var(--green)" : rate >= 55 ? "var(--accent)" : rate >= 35 ? "var(--amber)" : "var(--red)";
-          return (
-            <div key={idx} className="cfo-product-score-item">
-              <div className="row-between">
-                <span>{item.label}</span>
-                <b style={{color}}>{item.score}/{item.max}</b>
-              </div>
-              <div className="progress"><div className="progress-fill" style={{width:`${clamp(rate,0,100)}%`,background:color}} /></div>
-              <p>{item.reason}</p>
+      <div className="cfo-app-accordion">
+        <button onClick={()=>setShowWhy(v=>!v)}>
+          왜 이걸 추천했나요? <span>{showWhy ? "접기" : "보기"}</span>
+        </button>
+        {showWhy && (
+          <div className="cfo-app-accordion-body">
+            <div className="cfo-app-score-grid">
+              {(model.scoreItems || []).map((item, idx)=>{
+                const rate = item.max > 0 ? item.score / item.max * 100 : 0;
+                const color = rate >= 80 ? "var(--green)" : rate >= 55 ? "var(--accent)" : rate >= 35 ? "var(--amber)" : "var(--red)";
+                return (
+                  <div key={idx} className="cfo-app-score-item">
+                    <div className="row-between">
+                      <b>{item.label}</b>
+                      <span style={{color}}>{item.score}/{item.max}</span>
+                    </div>
+                    <div className="progress"><div className="progress-fill" style={{width:`${clamp(rate,0,100)}%`,background:color}} /></div>
+                    <p>{item.reason}</p>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        )}
+
+        <button onClick={()=>setShowMoreActions(v=>!v)}>
+          다른 행동 보기 <span>{showMoreActions ? "접기" : "보기"}</span>
+        </button>
+        {showMoreActions && (
+          <div className="cfo-app-accordion-body">
+            {otherActions.length ? otherActions.map((a, i)=>(
+              <div key={i} className="cfo-app-secondary-action">
+                <div>
+                  <strong>{a.title}</strong>
+                  <p>{a.desc}</p>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={()=>setPendingAction(a)}>실행</button>
+              </div>
+            )) : <div className="empty">추가 행동이 없습니다.</div>}
+          </div>
+        )}
       </div>
 
       {pendingAction && (
@@ -3731,15 +3774,11 @@ function CFODecisionDashboard({ model, onExecuteAction, onUndoAction, undoState 
       )}
 
       {undoState?.available && (
-        <CFOUndoToast
-          title={undoState.title}
-          onUndo={onUndoAction}
-        />
+        <CFOUndoToast title={undoState.title} onUndo={onUndoAction} />
       )}
-    </div>
+    </section>
   );
 }
-
 
 function detectCFOActionKind(action) {
   const text = `${action?.title || ""} ${action?.desc || ""}`;
