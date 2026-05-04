@@ -1,57 +1,64 @@
-# Season CFO 상용화 베이스 패키지
+# Season CFO App - GitHub Drop-in Final
 
-이 패키지는 기존 Vite + React 프로젝트를 상용 서비스 형태로 확장하기 위한 교체형 베이스입니다.
+이 ZIP은 **GitHub 저장소 안의 기존 파일을 전부 삭제한 뒤 그대로 넣기만 하면 되는 버전**입니다.
 
-## 포함 기능
+## 사용 방법
 
-- `src/App.jsx` 완성형 교체 파일
-- 분배 입력 구조
-- 저장 전 확인 흐름
-- 입력 검증 / 오류 / 경고 구조
-- ISA 한도 체크 구조
-- 비상금 목표 추적 구조
-- 백업 / 복원 흐름
-- Supabase 연동 준비 코드
-- Supabase DB / RLS SQL 스키마
-- Vercel 배포 설정
-- GitHub 업로드용 구조
-
-## 가장 안전한 적용 방법
-
-기존 프로젝트가 이미 있다면 전체를 덮어쓰기보다 먼저 아래 파일만 교체하세요.
-
-```text
-src/App.jsx
-```
-
-그 후 GitHub에 push하면 Vercel에서 자동 빌드됩니다.
-
-## 전체 패키지로 새 프로젝트를 구성하는 경우
-
-```bash
-npm install
-npm run build
-```
-
-빌드가 성공하면 GitHub에 올리세요.
+1. GitHub 저장소 안 기존 파일 전체 삭제
+2. 이 ZIP 압축 해제
+3. 압축 해제된 내용물을 저장소 루트에 그대로 복사
+4. GitHub에 push
+5. Vercel 자동 배포 확인
 
 ```bash
 git add .
-git commit -m "Add Season CFO commercial base"
+git commit -m "Replace with Season CFO drop-in final"
 git push origin main
 ```
 
-## Supabase 사용 여부
+## 포함 기능
 
-Supabase를 사용하지 않아도 앱은 로컬 저장 기반으로 동작합니다.
-클라우드 저장을 사용하려면 다음을 설정하세요.
+- 대시보드
+- 분배입력
+- 저장 전 검증/확인
+- 비상금 목표 추적
+- ISA 한도 체크
+- 로컬 저장
+- Supabase 로그인
+- 클라우드 저장/불러오기
+- AI/로컬 CFO 리포트
+- JSON 백업/복구
+- 암호화 백업
+- Supabase Storage 암호화 업로드
+- 운영센터
+- 알림센터
+- 관리자 권한 확인 베이스
+- 데이터 품질 점수
+- 진단 JSON
+- PWA 기본 구성
+- Supabase SQL/RLS
+- Edge Functions 베이스
+- GitHub Actions 빌드 체크
 
-1. Supabase 프로젝트 생성
-2. `supabase/schema.sql` 실행
-3. Vercel 환경변수 추가
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
+## 확인
 
-## 주의
+```bash
+node scripts/project-check.mjs
+npm run build
+```
 
-이 패키지는 상용화를 위한 베이스입니다. 실제 결제, 본인인증, 금융기관 자동연동, 세법 자동 업데이트, 개인정보 처리방침, 이용약관, 서버 로그 모니터링은 별도 구축이 필요합니다.
+## Supabase
+
+SQL Editor에서 실행:
+
+```text
+supabase/sql/schema.sql
+```
+
+Storage bucket:
+
+```text
+season-secure-backups
+```
+
+결제 기능은 포함하지 않았습니다.
