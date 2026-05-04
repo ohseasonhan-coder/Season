@@ -958,8 +958,81 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .small{font-size:12px}
 
 /* FAB */
-.fab{position:fixed;bottom:28px;right:28px;z-index:100;width:54px;height:54px;border-radius:99px;background:var(--accent);border:none;color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(108,125,255,.45);cursor:pointer;transition:.2s ease}
-.fab:hover{transform:scale(1.08);box-shadow:0 12px 32px rgba(108,125,255,.55)}
+.fab{position:fixed;bottom:28px;right:28px;z-index:100;width:56px;height:56px;border-radius:99px;background:var(--accent);border:none;color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 28px rgba(108,125,255,.5);cursor:pointer;transition:.22s cubic-bezier(.2,.8,.2,1);font-weight:300}
+.fab:hover{transform:scale(1.1) translateY(-2px);box-shadow:0 14px 36px rgba(108,125,255,.6)}
+.fab.fab-open{transform:rotate(45deg) scale(1.08);background:var(--red)}
+
+/* ── 간편입력 모달 오버레이 ── */
+.qa-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:qa-fade-in .18s ease}
+@keyframes qa-fade-in{from{opacity:0}to{opacity:1}}
+
+/* ── 간편입력 시트 (하단 슬라이드) ── */
+.qa-sheet{position:fixed;bottom:0;left:0;right:0;z-index:201;background:var(--surface);border-radius:24px 24px 0 0;box-shadow:0 -8px 48px rgba(0,0,0,.45);max-height:92vh;overflow-y:auto;animation:qa-slide-up .28s cubic-bezier(.2,.8,.2,1);padding-bottom:env(safe-area-inset-bottom,0)}
+@keyframes qa-slide-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.qa-handle{width:40px;height:4px;background:var(--border2);border-radius:99px;margin:12px auto 0}
+.qa-header{padding:16px 20px 0;display:flex;align-items:center;justify-content:space-between}
+.qa-title{font-size:17px;font-weight:700;letter-spacing:-.02em;color:var(--text)}
+.qa-close{width:30px;height:30px;border-radius:99px;border:none;background:var(--surface3);color:var(--text3);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s ease}
+.qa-close:hover{background:var(--border2);color:var(--text)}
+.qa-body{padding:16px 20px 24px}
+
+/* ── 타입 선택 버튼 (수입/지출/자산이동) ── */
+.qa-type-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:18px}
+.qa-type-btn{padding:12px 6px;border-radius:14px;border:2px solid transparent;background:var(--surface2);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;transition:.15s ease;text-align:center;font-family:inherit}
+.qa-type-btn:hover{background:var(--surface3);color:var(--text)}
+.qa-type-btn.active-income{background:var(--green-bg);color:var(--green);border-color:var(--green)}
+.qa-type-btn.active-expense{background:var(--red-bg);color:var(--red);border-color:var(--red)}
+.qa-type-btn.active-transfer{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+
+/* ── 금액 입력 (크게) ── */
+.qa-amount-wrap{position:relative;margin-bottom:16px}
+.qa-amount-input{width:100%;padding:18px 60px 18px 18px;font-size:28px;font-weight:700;font-family:inherit;border-radius:16px;border:2px solid var(--border2);background:var(--surface2);color:var(--text);outline:none;letter-spacing:-.02em;transition:.15s ease}
+.qa-amount-input:focus{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
+.qa-amount-unit{position:absolute;right:18px;top:50%;transform:translateY(-50%);font-size:15px;font-weight:600;color:var(--text3)}
+
+/* ── 빠른 금액 칩 ── */
+.qa-quick-amounts{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.qa-quick-amount{padding:6px 12px;border-radius:99px;border:1px solid var(--border2);background:var(--surface3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:.12s ease;font-family:inherit}
+.qa-quick-amount:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+
+/* ── 2컬럼 폼 그리드 ── */
+.qa-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.qa-form-grid.single{grid-template-columns:1fr}
+.qa-field{display:flex;flex-direction:column;gap:5px}
+.qa-label{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.04em;text-transform:uppercase}
+.qa-select,.qa-input{width:100%;padding:10px 13px;border-radius:12px;border:1.5px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:.15s ease;appearance:none;-webkit-appearance:none}
+.qa-select:focus,.qa-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.qa-select.error,.qa-input.error{border-color:var(--red)}
+
+/* ── 추천 칩 ── */
+.qa-suggestion-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.qa-suggestion-chip{padding:3px 8px;border-radius:99px;border:1px solid var(--border);background:var(--surface3);color:var(--text3);font-size:11px;cursor:pointer;font-family:inherit;transition:.12s ease}
+.qa-suggestion-chip:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+
+/* ── 저장 버튼 ── */
+.qa-save-btn{width:100%;padding:16px;border-radius:16px;border:none;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;transition:.18s ease;margin-top:8px}
+.qa-save-btn.income{background:var(--green);color:#fff}
+.qa-save-btn.expense{background:var(--red);color:#fff}
+.qa-save-btn.transfer{background:var(--accent);color:#fff}
+.qa-save-btn:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.qa-save-btn:disabled{opacity:.45;cursor:not-allowed;transform:none;filter:none}
+
+/* ── 템플릿 빠른 선택 ── */
+.qa-template-section{margin-bottom:16px}
+.qa-template-title{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px}
+.qa-template-list{display:flex;gap:6px;flex-wrap:wrap}
+.qa-template-chip{padding:6px 12px;border-radius:99px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:.12s ease}
+.qa-template-chip:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+
+/* ── 입력 성공 피드백 ── */
+.qa-success-toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);z-index:300;background:var(--green);color:#fff;padding:12px 24px;border-radius:99px;font-size:14px;font-weight:700;box-shadow:0 4px 20px rgba(52,213,138,.4);animation:qa-toast-in .25s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes qa-toast-in{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* ── 데스크탑에서 중앙 모달로 ── */
+@media(min-width:769px){
+  .qa-sheet{left:50%;right:auto;transform:translateX(-50%);width:480px;border-radius:24px;bottom:50%;top:auto;transform:translateX(-50%) translateY(50%);max-height:85vh;animation:qa-modal-in .24s cubic-bezier(.2,.8,.2,1)}
+  @keyframes qa-modal-in{from{opacity:0;transform:translateX(-50%) translateY(calc(50% + 24px))}to{opacity:1;transform:translateX(-50%) translateY(50%)}}
+}
 
 /* Modal */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)}
@@ -5417,6 +5490,231 @@ function KpiCard({ label, value, unit, tone, accent }) {
 }
 
 // ─── Transactions Tab ─────────────────────────────────────────────────────────
+// ─── 글로벌 간편입력 모달 ─────────────────────────────────────────────────────
+function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose }) {
+  const EMPTY = { id:"", date:todayISO(), type:"지출", cat1:"", cat2:"", amount:"", inAccount:"", outAccount:"", content:"", memo:"" };
+  const [form, setForm] = useState(EMPTY);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const txTemplates = Array.isArray(data.settings?.transactionTemplates) ? data.settings.transactionTemplates : [];
+  const cat1Opts = Object.keys(data.categories[form.type] || {});
+  const cat2Opts = (data.categories[form.type] || {})[form.cat1] || [];
+
+  const normalizedForm = { ...form, amount: n(form.amount) };
+
+  const canSave = (() => {
+    const f = normalizedForm;
+    if (!f.date || !f.type || !f.cat1 || !f.cat2 || f.amount <= 0) return false;
+    if (f.type === "수입" && !f.inAccount) return false;
+    if (f.type === "지출" && !f.outAccount) return false;
+    if (f.type === "자산이동" && (!f.inAccount || !f.outAccount)) return false;
+    return true;
+  })();
+
+  // 스마트 추천 - 같은 유형의 최근 거래에서 추출
+  const smartSuggestions = useMemo(() => {
+    const tx = (data.transactions || []).filter(t => t.type === form.type);
+    const sameCat1 = tx.filter(t => !form.cat1 || t.cat1 === form.cat1);
+    const sameCat2 = sameCat1.filter(t => !form.cat2 || t.cat2 === form.cat2);
+    const pickTop = (arr, key, limit=4) => {
+      const map = new Map();
+      arr.forEach(t => { const v = String(t[key]||"").trim(); if(v) map.set(v, (map.get(v)||0)+1); });
+      return [...map.entries()].sort((a,b)=>b[1]-a[1]).slice(0,limit).map(([value])=>value);
+    };
+    return {
+      cat1: pickTop(tx, "cat1"),
+      cat2: pickTop(sameCat1.length ? sameCat1 : tx, "cat2"),
+      content: pickTop(sameCat2.length ? sameCat2 : sameCat1.length ? sameCat1 : tx, "content", 5),
+      amount: (() => {
+        const vals = (sameCat2.length ? sameCat2 : sameCat1).map(t => n(t.amount)).filter(v=>v>0);
+        if (!vals.length) return [];
+        const map = new Map();
+        vals.forEach(v => map.set(v, (map.get(v)||0)+1));
+        return [...map.entries()].sort((a,b)=>b[1]-a[1]).slice(0,4).map(([v])=>v);
+      })(),
+    };
+  }, [data.transactions, form.type, form.cat1, form.cat2]);
+
+  // 빠른 금액 선택지
+  const QUICK_AMOUNTS = form.type === "수입"
+    ? [300000, 1000000, 3000000, 5000000]
+    : [10000, 30000, 50000, 100000, 300000];
+
+  const applyTemplate = (tpl) => {
+    setForm({ ...EMPTY, date: todayISO(), type: tpl.type||"지출", cat1: tpl.cat1||"", cat2: tpl.cat2||"", amount: tpl.amount||"", inAccount: tpl.inAccount||"", outAccount: tpl.outAccount||"", content: tpl.content||tpl.name||"", memo: tpl.memo||"" });
+  };
+
+  const handleSave = () => {
+    if (!canSave) return;
+    update(d => {
+      const row = { ...form, amount: n(form.amount), id: uid() };
+      return { ...d, transactions: [...d.transactions, row] };
+    });
+    setShowSuccess(true);
+    setTimeout(() => {
+      setShowSuccess(false);
+      setForm({ ...EMPTY, type: form.type }); // 같은 타입 유지
+    }, 900);
+  };
+
+  const typeClass = form.type === "수입" ? "income" : form.type === "지출" ? "expense" : "transfer";
+  const typeBtnClass = (t) => {
+    if (form.type !== t) return "";
+    if (t === "수입") return "active-income";
+    if (t === "지출") return "active-expense";
+    return "active-transfer";
+  };
+
+  return (
+    <>
+      <div className="qa-overlay" onClick={onClose}/>
+      <div className="qa-sheet" onClick={e=>e.stopPropagation()}>
+        <div className="qa-handle"/>
+        <div className="qa-header">
+          <span className="qa-title">간편 입력</span>
+          <button className="qa-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="qa-body">
+          {/* 템플릿 빠른 선택 */}
+          {txTemplates.length > 0 && (
+            <div className="qa-template-section">
+              <div className="qa-template-title">템플릿</div>
+              <div className="qa-template-list">
+                {txTemplates.map(t => (
+                  <button key={t.id} className="qa-template-chip" onClick={() => applyTemplate(t)}>
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 수입 / 지출 / 자산이동 */}
+          <div className="qa-type-row">
+            {["지출","수입","자산이동"].map(t => (
+              <button key={t} className={`qa-type-btn ${typeBtnClass(t)}`} onClick={() => setForm({...form, type:t, cat1:"", cat2:""})}>
+                {t === "지출" ? "💳 지출" : t === "수입" ? "💰 수입" : "🔄 이동"}
+              </button>
+            ))}
+          </div>
+
+          {/* 금액 */}
+          <div className="qa-amount-wrap">
+            <input
+              className="qa-amount-input"
+              type="number"
+              inputMode="numeric"
+              placeholder="0"
+              value={form.amount}
+              onChange={e => setForm({...form, amount:e.target.value})}
+              autoFocus
+            />
+            <span className="qa-amount-unit">원</span>
+          </div>
+
+          {/* 빠른 금액 + 추천 금액 */}
+          <div className="qa-quick-amounts">
+            {(smartSuggestions.amount.length > 0 ? smartSuggestions.amount : QUICK_AMOUNTS).map(v => (
+              <button key={v} className="qa-quick-amount" onClick={() => setForm({...form, amount:v})}>
+                {fmt(v)}
+              </button>
+            ))}
+          </div>
+
+          {/* 날짜 + 내용 */}
+          <div className="qa-form-grid">
+            <div className="qa-field">
+              <label className="qa-label">날짜</label>
+              <input className="qa-input" type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/>
+            </div>
+            <div className="qa-field">
+              <label className="qa-label">내용</label>
+              <input className="qa-input" value={form.content} onChange={e=>setForm({...form,content:e.target.value})} placeholder="무엇에 썼나요?"/>
+              {smartSuggestions.content.length > 0 && (
+                <div className="qa-suggestion-row">
+                  {smartSuggestions.content.map(v => (
+                    <button key={v} className="qa-suggestion-chip" onClick={() => setForm({...form,content:v})}>{v}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 대분류 + 소분류 */}
+          <div className="qa-form-grid">
+            <div className="qa-field">
+              <label className="qa-label">대분류</label>
+              <select className="qa-select" value={form.cat1} onChange={e=>setForm({...form,cat1:e.target.value,cat2:""})}>
+                <option value="">선택</option>
+                {cat1Opts.map(x=><option key={x}>{x}</option>)}
+              </select>
+              {smartSuggestions.cat1.length > 0 && (
+                <div className="qa-suggestion-row">
+                  {smartSuggestions.cat1.map(v => (
+                    <button key={v} className="qa-suggestion-chip" onClick={()=>setForm({...form,cat1:v,cat2:""})}>{v}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="qa-field">
+              <label className="qa-label">소분류</label>
+              <select className="qa-select" value={form.cat2} onChange={e=>setForm({...form,cat2:e.target.value})} disabled={!form.cat1}>
+                <option value="">선택</option>
+                {cat2Opts.map(x=><option key={x}>{x}</option>)}
+              </select>
+              {smartSuggestions.cat2.length > 0 && (
+                <div className="qa-suggestion-row">
+                  {smartSuggestions.cat2.map(v => (
+                    <button key={v} className="qa-suggestion-chip" onClick={()=>setForm({...form,cat2:v})}>{v}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 계좌 */}
+          <div className="qa-form-grid">
+            {(form.type === "수입" || form.type === "자산이동") && (
+              <div className="qa-field">
+                <label className="qa-label">입금계좌</label>
+                <select className="qa-select" value={form.inAccount} onChange={e=>setForm({...form,inAccount:e.target.value})}>
+                  <option value="">선택</option>
+                  {accountNamesIn.map(x=><option key={x}>{x}</option>)}
+                </select>
+              </div>
+            )}
+            {(form.type === "지출" || form.type === "자산이동") && (
+              <div className="qa-field">
+                <label className="qa-label">출금계좌</label>
+                <select className="qa-select" value={form.outAccount} onChange={e=>setForm({...form,outAccount:e.target.value})}>
+                  <option value="">선택</option>
+                  {accountNamesOut.map(x=><option key={x}>{x}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* 저장 버튼 */}
+          <button
+            className={`qa-save-btn ${typeClass}`}
+            onClick={handleSave}
+            disabled={!canSave}
+          >
+            {canSave
+              ? `${form.type === "수입" ? "💰" : form.type === "지출" ? "💳" : "🔄"} ${form.type} ${form.amount ? fmt(n(form.amount))+"원" : ""} 저장`
+              : "필수 항목을 입력해 주세요"
+            }
+          </button>
+        </div>
+      </div>
+
+      {showSuccess && (
+        <div className="qa-success-toast">✓ 저장되었어요!</div>
+      )}
+    </>
+  );
+}
+
 function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
   const EMPTY={id:"",date:todayISO(),type:"지출",cat1:"",cat2:"",amount:"",inAccount:"",outAccount:"",content:"",memo:""};
   const [form,setForm]=useState(EMPTY);
@@ -10187,6 +10485,7 @@ export default function App() {
 
   // ── 온보딩: localStorage 플래그로 최초 1회만 표시
   const [showOnboarding,setShowOnboarding]=useState(()=>!localStorage.getItem(OB_KEY));
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
 
   // ── 다크/라이트 테마
   const [theme,setTheme]=useState(()=>localStorage.getItem("season-theme")||"dark");
@@ -10591,6 +10890,30 @@ export default function App() {
           </div>
         </div>
       </div>
+
+
+      {/* FAB 간편입력 */}
+      {!showOnboarding && (
+        <>
+          <button
+            className={showQuickAdd ? 'fab fab-open' : 'fab'}
+            onClick={() => setShowQuickAdd(v => !v)}
+            aria-label='간편 거래 입력'
+            title='간편 거래 입력'
+          >
+            +
+          </button>
+          {showQuickAdd && (
+            <QuickAddModal
+              data={data}
+              update={update}
+              accountNamesIn={accountNamesIn}
+              accountNamesOut={accountNamesOut}
+              onClose={() => setShowQuickAdd(false)}
+            />
+          )}
+        </>
+      )}
     </div>
   );
 }
