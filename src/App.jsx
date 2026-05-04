@@ -19,7 +19,9 @@ const MARKET_CACHE_KEY = `${STORAGE_KEY}:market-cache`;
 const MAX_MARKET_CACHE_AGE_DAYS = 14;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const CLOUD_TABLE = "asset_app_profiles";
+const CLOUD_TABLE = import.meta.env.VITE_SUPABASE_PROFILE_TABLE || "asset_app_profiles";
+const CLOUD_AUDIT_TABLE = import.meta.env.VITE_SUPABASE_AUDIT_TABLE || "asset_app_audit_logs";
+const CLOUD_SNAPSHOT_TABLE = import.meta.env.VITE_SUPABASE_SNAPSHOT_TABLE || "asset_app_snapshots";
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 // ─── Utils ───────────────────────────────────────────────────────────────────
@@ -11366,20 +11368,74 @@ export default function App() {
     return()=>subscription.unsubscribe();
   },[]);
 
+  const writeCloudAudit=async(eventType,eventSummary,payload={})=>{
+    if(!supabase||!session?.user)return;
+    try{
+      await supabase.from(CLOUD_AUDIT_TABLE).insert({
+        user_id:session.user.id,
+        event_type:eventType,
+        event_summary:eventSummary,
+        payload,
+      });
+    }catch(e){
+      console.warn("클라우드 감사 로그 저장 실패", e);
+    }
+  };
+  const createCloudSnapshot=async(label="auto")=>{
+    if(!supabase||!session?.user)return;
+    try{
+      await supabase.from(CLOUD_SNAPSHOT_TABLE).insert({
+        user_id:session.user.id,
+        label,
+        payload:migrateData(data),
+      });
+    }catch(e){
+      console.warn("클라우드 스냅샷 저장 실패", e);
+    }
+  };
   const loadCloudData=async()=>{
     if(!supabase||!session?.user)return;
     setSyncState("불러오는 중...");
-    const {data:row,error}=await supabase.from(CLOUD_TABLE).select("data").eq("user_id",session.user.id).maybeSingle();
-    if(error){setSyncState("불러오기 실패");return;}
-    if(row?.data){skipCloudSaveRef.current=true;setData(migrateData(row.data));setSyncState("불러오기 완료");}
+    const {data:row,error}=await supabase
+      .from(CLOUD_TABLE)
+      .select("data,payload,updated_at,version")
+      .eq("user_id",session.user.id)
+      .maybeSingle();
+    if(error){
+      console.error("클라우드 불러오기 실패", error);
+      setSyncState(`불러오기 실패: ${error.message || "권한/스키마 확인"}`);
+      return;
+    }
+    const cloudPayload = row?.data || row?.payload;
+    if(cloudPayload){
+      skipCloudSaveRef.current=true;
+      setData(migrateData(cloudPayload));
+      setSyncState("불러오기 완료");
+      await writeCloudAudit("cloud_load","클라우드 데이터를 불러왔습니다.",{updated_at:row?.updated_at||""});
+    }
     else setSyncState("신규 계정");
     setCloudReady(true);
   };
   const saveCloudData=async(manual=true)=>{
     if(!supabase||!session?.user)return;
     setSyncState("저장 중...");
-    const {error}=await supabase.from(CLOUD_TABLE).upsert({user_id:session.user.id,data,updated_at:new Date().toISOString()},{onConflict:"user_id"});
-    if(error){setSyncState("저장 실패");return;}
+    const payload = migrateData(data);
+    const {error}=await supabase.from(CLOUD_TABLE).upsert({
+      user_id:session.user.id,
+      data:payload,
+      payload,
+      version:payload.version || 10,
+      updated_at:new Date().toISOString(),
+    },{onConflict:"user_id"});
+    if(error){
+      console.error("클라우드 저장 실패", error);
+      setSyncState(`저장 실패: ${error.message || "권한/스키마 확인"}`);
+      return;
+    }
+    if(manual){
+      await createCloudSnapshot("manual-save");
+      await writeCloudAudit("cloud_save","수동 클라우드 저장을 완료했습니다.",{transactionCount:payload.transactions?.length||0});
+    }
     setSyncState(manual?"수동 저장 완료":"자동 저장 완료");
     setCloudReady(true);
   };
