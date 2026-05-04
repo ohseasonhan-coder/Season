@@ -4373,9 +4373,10 @@ function CFOExecutionHistoryPanel({ history=[], onRollback }) {
 
 function detectCFOActionKind(action) {
   const text = `${action?.title || ""} ${action?.desc || ""}`;
+  // 순서 중요: ISA/ETF/매수/납입은 화면상 투자 실행으로 처리해야 금액 입력칸이 표시됩니다.
+  if (text.includes("ISA") || text.includes("ETF") || text.includes("납입") || text.includes("매수") || text.includes("리밸런싱") || text.includes("포트폴리오") || text.includes("투자") || text.includes("자동투자") || text.includes("투자금")) return "investment";
   if (text.includes("비상금")) return "emergency";
-  if (text.includes("지출") || text.includes("예산")) return "budget";
-  if (text.includes("투자") || text.includes("자동투자") || text.includes("투자금")) return "investment";
+  if (text.includes("지출") || text.includes("예산") || text.includes("절감")) return "budget";
   if (text.includes("은퇴")) return "retirement";
   return "memo";
 }
@@ -4384,7 +4385,7 @@ function defaultCFOActionForm({ action, model, data }) {
   const kind = detectCFOActionKind(action);
   const accounts = (data?.accounts || []).filter(a=>a.active);
   const defaultFrom = accounts.find(a=>a.defaultIn)?.name || accounts[0]?.name || "";
-  const defaultTo = accounts.find(a=>String(a.type||"").includes("증권"))?.name || accounts.find(a=>String(a.name||"").includes("ISA"))?.name || accounts[1]?.name || "";
+  const defaultTo = accounts.find(a=>String(a.name||"").includes("ISA"))?.name || accounts.find(a=>String(a.type||"").includes("증권"))?.name || accounts[1]?.name || "";
   const emergencyAccount = accounts.find(a=>String(a.name||"").includes("비상") || String(a.name||"").includes("파킹") || String(a.name||"").includes("카카오"))?.name || defaultTo || defaultFrom;
   const monthlyExpense = Math.max(n(model?.detailedDiagnosis?.[0]?.expense), n(data?.settings?.retirementMonthlyExpense), 0);
   const actionAmount = n(action?.recommendedAmount || action?.amount || 0);
@@ -4490,7 +4491,7 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
   const verification = buildCFOExecutionVerification(data, action, form);
   const accounts = (data?.accounts || []).filter(a=>a.active);
   const updateForm = (patch) => setForm(prev=>({ ...prev, ...patch }));
-  const amountLabel = form.kind === "budget" ? "절감 목표 금액" : form.kind === "investment" ? "투자 금액" : form.kind === "emergency" ? "비상금 이체 금액" : "금액";
+  const amountLabel = form.kind === "budget" ? "절감 목표 금액" : form.kind === "investment" ? "실제 ISA 입금/투자금액" : form.kind === "emergency" ? "비상금 이체 금액" : "실제 실행금액";
   const confirmLabel = form.kind === "budget" ? "예산에 반영" : form.kind === "investment" ? "자산까지 자동 반영" : form.kind === "emergency" ? "거래내역에 비상금 반영" : "실행 반영";
   const amountError = form.kind !== "memo" && n(form.kind === "investment" ? (form.actualDepositAmount ?? form.amount) : form.amount) <= 0;
   const accountError = ["emergency","investment"].includes(form.kind) && (!form.fromAccount || !form.toAccount);
@@ -4547,17 +4548,25 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
                 <div className="field-hint">추천금액도 수정 가능하지만, 실제 반영은 아래 실제 입금/투자금액을 기준으로 처리됩니다.</div>
               </div>
               <div className={`field ${amountError ? "field-has-error" : ""}`}>
-                <label>실제 입금/투자금액</label>
-                <input type="number" value={form.actualDepositAmount ?? form.amount} onChange={(e)=>updateForm({actualDepositAmount:e.target.value, amount:e.target.value})} placeholder="실제로 ISA에 넣은 금액" />
+                <label>실제 ISA 입금/투자금액</label>
+                <input type="number" value={form.actualDepositAmount ?? form.amount} onChange={(e)=>updateForm({actualDepositAmount:e.target.value, amount:e.target.value})} placeholder="실제로 ISA에 넣을 금액을 입력" />
+                <div className="field-hint">이 금액을 기준으로 점수·검증·거래내역·ISA 계좌금액·포트폴리오가 다시 계산됩니다.</div>
               </div>
             </>
           )}
 
-          {form.kind !== "memo" && form.kind !== "investment" && (
-            <div className={`field ${amountError ? "field-has-error" : ""}`}>
-              <label>{amountLabel}</label>
-              <input type="number" value={form.amount} onChange={(e)=>updateForm({amount:e.target.value})} placeholder="금액 입력" />
-            </div>
+          {form.kind !== "investment" && (
+            <>
+              <div className="field">
+                <label>CFO 추천금액</label>
+                <input type="number" value={form.recommendedAmount ?? form.amount} onChange={(e)=>updateForm({recommendedAmount:e.target.value})} placeholder="추천 금액" />
+                <div className="field-hint">추천금액은 참고용입니다. 실제 반영은 아래 실제 실행금액 기준으로 처리됩니다.</div>
+              </div>
+              <div className={`field ${amountError ? "field-has-error" : ""}`}>
+                <label>{form.kind === "memo" ? "실제 실행금액" : amountLabel}</label>
+                <input type="number" value={form.amount} onChange={(e)=>updateForm({amount:e.target.value, actualDepositAmount:e.target.value})} placeholder="실제로 반영할 금액" />
+              </div>
+            </>
           )}
 
           {["emergency","investment"].includes(form.kind) && (
