@@ -1342,6 +1342,22 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .apple-cfo-undo-toast button{border:none;border-radius:999px;padding:7px 11px;background:var(--accent-bg);color:var(--accent2);font-size:12px;font-weight:950}
 @media(max-width:680px){.apple-cfo-modal{padding:18px;border-radius:24px}.apple-cfo-preview-grid{grid-template-columns:1fr}.apple-cfo-modal-actions{grid-template-columns:1fr}.apple-cfo-undo-toast{left:16px;right:16px;transform:none;justify-content:space-between}}
 
+/* CFO execution history + per-item rollback v20 */
+.cfo-history-panel{margin-top:14px;padding:14px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.075)}
+.cfo-history-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.cfo-history-head strong{font-size:13px;color:var(--text)}
+.cfo-history-head span{font-size:11px;color:var(--text3);font-weight:800}
+.cfo-history-list{display:flex;flex-direction:column;gap:8px}
+.cfo-history-item{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:11px;border-radius:16px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.065)}
+.cfo-history-item h4{font-size:13px;color:var(--text);margin:0 0 4px;font-weight:900;letter-spacing:-.02em}
+.cfo-history-item p{font-size:11.5px;color:var(--text3);line-height:1.45;margin:0}
+.cfo-history-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.cfo-history-tag{display:inline-flex;align-items:center;padding:4px 7px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);font-size:10.5px;font-weight:900;color:var(--text2)}
+.cfo-history-rollback{border:none;border-radius:12px;padding:8px 10px;background:var(--red-bg);color:var(--red);font-size:11.5px;font-weight:950;white-space:nowrap}
+.cfo-history-rollback:hover{transform:translateY(-1px);opacity:.9}
+@media(max-width:680px){.cfo-history-item{grid-template-columns:1fr}.cfo-history-rollback{width:100%}}
+
+
 /* CFO execution confirmation v18 */
 .cfo-executed-panel{
   position:relative;
@@ -4137,7 +4153,7 @@ function CountUpNumber({ value, duration=650 }) {
   return <>{display}</>;
 }
 
-function CFODecisionDashboard({ model, onExecuteAction, onUndoAction, undoState }) {
+function CFODecisionDashboard({ model, data, onExecuteAction, onUndoAction, undoState, onRollbackHistory }) {
   if (!model) return null;
   const [executedAction, setExecutedAction] = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
@@ -4147,6 +4163,7 @@ function CFODecisionDashboard({ model, onExecuteAction, onUndoAction, undoState 
   const priorityLabel = { high:"최우선", mid:"중요", low:"관리" };
   const topAction = model.actions?.[0];
   const otherActions = (model.actions || []).slice(1, 4);
+  const cfoHistory = Array.isArray(data?.cfoActionHistory) ? data.cfoActionHistory.slice(0, 8) : [];
   const mainReason = model.scoreLosses?.[0];
   const statusEmoji = model.tone === "green" ? "🟢" : model.tone === "accent" ? "🔵" : model.tone === "amber" ? "🟡" : "🔴";
   const toneClass = model.tone === "green" ? "ok" : model.tone === "accent" ? "info" : model.tone === "amber" ? "warn" : "danger";
@@ -4276,7 +4293,7 @@ function CFODecisionDashboard({ model, onExecuteAction, onUndoAction, undoState 
         <button onClick={()=>setShowMoreActions(v=>!v)}>
           다른 행동 보기 <span>{showMoreActions ? "접기" : "보기"}</span>
         </button>
-        {showMoreActions && (
+        {showMoreActions && showMoreActions !== "history" && (
           <div className="cfo-app-accordion-body">
             {otherActions.length ? otherActions.map((a, i)=>(
               <div key={i} className="cfo-app-secondary-action">
@@ -4289,6 +4306,16 @@ function CFODecisionDashboard({ model, onExecuteAction, onUndoAction, undoState 
             )) : <div className="empty">추가 행동이 없습니다.</div>}
           </div>
         )}
+
+        <button onClick={()=>setShowMoreActions(v=>v === "history" ? false : "history")}>
+          실행 기록 보기 <span>{showMoreActions === "history" ? "접기" : "보기"}</span>
+        </button>
+        {showMoreActions === "history" && (
+          <div className="cfo-app-accordion-body">
+            <CFOExecutionHistoryPanel history={cfoHistory} onRollback={onRollbackHistory} />
+          </div>
+        )}
+
       </div>
 
       {pendingAction && (
@@ -4305,6 +4332,42 @@ function CFODecisionDashboard({ model, onExecuteAction, onUndoAction, undoState 
         <CFOUndoToast title={undoState.title} onUndo={onUndoAction} />
       )}
     </section>
+  );
+}
+
+
+function CFOExecutionHistoryPanel({ history=[], onRollback }) {
+  if (!history.length) return <div className="empty">아직 CFO 실행 기록이 없습니다.</div>;
+  return (
+    <div className="cfo-history-panel">
+      <div className="cfo-history-head">
+        <strong>최근 CFO 실행 기록</strong>
+        <span>개별 실행만 되돌릴 수 있습니다</span>
+      </div>
+      <div className="cfo-history-list">
+        {history.map((h)=>{
+          const amount = n(h.actualDepositAmount ?? h.amount);
+          const dateLabel = h.executedDate || (h.executedAt ? String(h.executedAt).slice(0,10) : "-");
+          return (
+            <div className="cfo-history-item" key={h.id || h.executionId || h.executionKey}>
+              <div>
+                <h4>{h.title || "CFO 실행"}</h4>
+                <p>{dateLabel} · {h.fromAccount || "출금계좌"} → {h.toAccount || "반영계좌"}</p>
+                <div className="cfo-history-tags">
+                  <span className="cfo-history-tag">{h.kind || "action"}</span>
+                  <span className="cfo-history-tag">{fmt(amount)}원</span>
+                  {h.forcedDuplicate ? <span className="cfo-history-tag">강제 재실행</span> : null}
+                  {h.executionMonth ? <span className="cfo-history-tag">{h.executionMonth}</span> : null}
+                </div>
+              </div>
+              <button className="cfo-history-rollback" onClick={()=>onRollback?.(h.id || h.executionId)}>
+                이 실행 되돌리기
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -4691,6 +4754,7 @@ function applyCFOActionToData(data, action, form={}) {
   const title = String(action.title || "");
   const desc = String(action.desc || "");
   const executedAt = new Date().toISOString();
+  const executionId = form.executionId || uid();
   const kind = form.kind || detectCFOActionKind(action);
   const amount = Math.max(n(kind === "investment" || kind === "retirement" ? (form.actualDepositAmount ?? form.amount) : form.amount), 0);
   const next = migrateData({ ...data });
@@ -4702,7 +4766,7 @@ function applyCFOActionToData(data, action, form={}) {
   }
 
   next.cfoActionHistory = [
-    { id: uid(), title, desc, executedAt, executedDate: now, executionMonth: duplicateInfo.executionMonth, executionKey: duplicateInfo.executionKey, ruleKey: duplicateInfo.ruleKey, forcedDuplicate: !!form.forceRun, expectedScore: n(action.expectedScore), priority: action.priority || "mid", kind, recommendedAmount: n(form.recommendedAmount), actualDepositAmount: amount, amount, fromAccount: form.fromAccount || "", toAccount: form.toAccount || "", allocation, memo: form.memo || "", verificationRows: form.verification?.rows || [] },
+    { id: executionId, executionId, title, desc, executedAt, executedDate: now, executionMonth: duplicateInfo.executionMonth, executionKey: duplicateInfo.executionKey, ruleKey: duplicateInfo.ruleKey, forcedDuplicate: !!form.forceRun, expectedScore: n(action.expectedScore), priority: action.priority || "mid", kind, recommendedAmount: n(form.recommendedAmount), actualDepositAmount: amount, amount, fromAccount: form.fromAccount || "", toAccount: form.toAccount || "", allocation, memo: form.memo || "", verificationRows: form.verification?.rows || [], rollbackPatch: { kind, amount, fromAccount: form.fromAccount || "", toAccount: form.toAccount || "", allocation, budgetCategory: form.budgetCategory || "", date: now } },
     ...((next.cfoActionHistory || []).slice(0, 29)),
   ];
 
@@ -4710,7 +4774,7 @@ function applyCFOActionToData(data, action, form={}) {
     const exists = (next.events || []).some(e => String(e.name || "").includes(name));
     if (!exists) next.events = [...(next.events || []), { id: uid(), name, yearsFromNow: 1, amountNeeded, currentPrepared: 0, priority }];
   };
-  const addTx = (tx) => { next.transactions = [{ id: uid(), date: now, ...tx }, ...(next.transactions || [])]; };
+  const addTx = (tx) => { next.transactions = [{ id: uid(), date: now, executionId, ...tx }, ...(next.transactions || [])]; };
 
   if (kind === "emergency") {
     addSystemEvent("🛡️ 비상금 3개월치 확보", amount || 3000000, "높음");
@@ -4743,6 +4807,67 @@ function applyCFOActionToData(data, action, form={}) {
   }
 
   next.lastCfoActionAt = executedAt;
+  return next;
+}
+
+
+function undoPortfolioBuy(next, allocation=[]) {
+  (Array.isArray(allocation) ? allocation : []).forEach(item => {
+    const idx = (next.portfolio || []).findIndex(p => String(p.name || "").trim() === String(item.name || "").trim());
+    if (idx < 0) return;
+    const row = next.portfolio[idx];
+    const buyAmount = n(item.buyAmount);
+    const price = n(row.currentPrice || row.avgPrice) || 1;
+    const removeQty = buyAmount / price;
+    next.portfolio[idx] = {
+      ...row,
+      qty: Math.max(n(row.qty) - removeQty, 0),
+      targetAmount: Math.max(n(row.targetAmount) - buyAmount, 0),
+      memo: [row.memo, `CFO 실행 되돌리기 -${fmt(buyAmount)}원`].filter(Boolean).join(" / "),
+      lastCfoRollbackAt: new Date().toISOString(),
+    };
+  });
+}
+
+function rollbackCFOActionFromData(data, historyId) {
+  const next = migrateData({ ...data });
+  const history = Array.isArray(next.cfoActionHistory) ? next.cfoActionHistory : [];
+  const target = history.find(h => String(h.id || h.executionId) === String(historyId));
+  if (!target) return next;
+
+  const patch = target.rollbackPatch || target;
+  const kind = patch.kind || target.kind || "memo";
+  const amount = Math.max(n(patch.amount ?? target.actualDepositAmount ?? target.amount), 0);
+  const fromAccount = patch.fromAccount || target.fromAccount || "";
+  const toAccount = patch.toAccount || target.toAccount || "";
+  const allocation = patch.allocation || target.allocation || [];
+
+  if (kind === "emergency") {
+    addToAssetCurrent(next, fromAccount, amount, { category:"은행예금" });
+    addToAssetCurrent(next, toAccount, -amount, { category:"현금성", includeInEmergency:true });
+  } else if (kind === "investment" || kind === "retirement") {
+    addToAssetCurrent(next, fromAccount, amount, { category:"은행예금" });
+    addToAssetCurrent(next, toAccount, -amount, { category:"주식계좌" });
+    undoPortfolioBuy(next, allocation);
+    next.settings = {
+      ...next.settings,
+      annualIsaContributionCurrent: String(toAccount || "").includes("ISA")
+        ? Math.max(n(next.settings?.annualIsaContributionCurrent) - amount, 0)
+        : n(next.settings?.annualIsaContributionCurrent),
+    };
+  } else if (kind === "budget") {
+    const cat = patch.budgetCategory || target.budgetCategory || "";
+    next.budgets = (next.budgets || []).map(b => cat && b.cat1 !== cat ? b : { ...b, budget: n(b.budget) + amount });
+  }
+
+  const executionId = target.executionId || target.id;
+  next.transactions = (next.transactions || []).filter(t => String(t.executionId || "") !== String(executionId));
+  next.cfoActionHistory = history.filter(h => String(h.id || h.executionId) !== String(historyId));
+  next.lastCfoRollbackAt = new Date().toISOString();
+  next.cfoRollbackHistory = [
+    { id: uid(), rolledBackHistoryId: historyId, title: target.title || "CFO 실행", amount, kind, rolledBackAt: next.lastCfoRollbackAt },
+    ...((next.cfoRollbackHistory || []).slice(0, 29)),
+  ];
   return next;
 }
 
@@ -4829,6 +4954,19 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
     setCfoUndoState(null);
   };
 
+  const handleCFORollbackHistory = (historyId) => {
+    if (!historyId || !update) return;
+    const previousData = JSON.parse(JSON.stringify(data));
+    const target = (data.cfoActionHistory || []).find(h => String(h.id || h.executionId) === String(historyId));
+    update(d=>rollbackCFOActionFromData(d, historyId));
+    setCfoUndoState({
+      available: true,
+      title: `${target?.title || "CFO 실행"} 되돌림`,
+      previousData,
+      createdAt: Date.now(),
+    });
+  };
+
 
   const healthColor=advanced.tone==="green"?"var(--green)":advanced.tone==="accent"?"var(--accent)":advanced.tone==="amber"?"var(--amber)":"var(--red)";
   const healthBg=advanced.tone==="green"?"var(--green-bg)":advanced.tone==="accent"?"var(--accent-bg)":advanced.tone==="amber"?"var(--amber-bg)":"var(--red-bg)";
@@ -4836,7 +4974,7 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
   return (
     <div className="stack dashboard-pro">
       <DashboardAdvicePanel nlp={dashboardNLP} />
-      <CFODecisionDashboard model={cfoDecisionModel} onExecuteAction={handleCFOExecuteAction} onUndoAction={handleCFOUndoAction} undoState={cfoUndoState} />
+      <CFODecisionDashboard model={cfoDecisionModel} data={data} onExecuteAction={handleCFOExecuteAction} onUndoAction={handleCFOUndoAction} undoState={cfoUndoState} onRollbackHistory={handleCFORollbackHistory} />
       <AICoachPanel coach={buildIntegratedCoach({ area:"대시보드", data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim, eventAnalysis, monthlySeries })}/>
 
       <div className="dashboard-hero">
