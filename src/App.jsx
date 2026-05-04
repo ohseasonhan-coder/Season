@@ -4401,7 +4401,7 @@ function buildCFOActionPreview(model, action, form=null) {
   const desc = String(action?.desc || "");
   const text = `${title} ${desc}`;
   const kind = form?.kind || detectCFOActionKind(action);
-  const amount = Math.max(n(form?.actualDepositAmount ?? form?.amount), 0);
+  const amount = Math.max(n(form?.kind === "compound" ? (n(form?.emergencyAmount) + n(form?.isaAmount)) : (form?.actualDepositAmount ?? form?.amount)), 0);
   const data = model?.sourceData || {};
 
   let amountFactor = 1;
@@ -4420,7 +4420,7 @@ function buildCFOActionPreview(model, action, form=null) {
       const selectedBudget = (data.budgets || []).find(b=>b.cat1 === form?.budgetCategory);
       const target = Math.max(n(selectedBudget?.budget) * 0.1, 100000);
       amountFactor = clamp(amount / target, 0.2, 1.5);
-    } else if (kind === "investment" || kind === "retirement") {
+    } else if (kind === "investment" || kind === "retirement" || kind === "compound") {
       const monthlyInvest = Math.max(n(data.settings?.monthlyInvestDefault), n(data.settings?.triggerMonthlyInvestAmount), 100000);
       amountFactor = clamp(amount / monthlyInvest, 0.2, 1.5);
     }
@@ -4434,7 +4434,11 @@ function buildCFOActionPreview(model, action, form=null) {
   let after = "개선안 반영";
   let effect = expected > 0 ? `입력 금액 기준 CFO 점수 +${expected}점 예상` : "점수 변동은 작지만 관리 기준이 정리됩니다.";
 
-  if (kind === "emergency" || text.includes("비상금")) {
+  if (kind === "compound") {
+    target = "비상금 + ISA 복합 실행";
+    before = "비상금 저축과 투자 실행이 분리되지 않음";
+    after = amount > 0 ? `비상금 ${fmt(form?.emergencyAmount)}원 + ISA ${fmt(form?.isaAmount)}원을 분리 반영` : "비상금/ISA 실행 금액을 분리 입력";
+  } else if (kind === "emergency" || text.includes("비상금")) {
     target = "비상금 목표";
     before = "비상금 부족/보강 필요";
     after = amount > 0 ? `${fmt(amount)}원을 비상금 이체 거래로 반영` : "비상금 목표를 생성하고 현금 우선 배분 기준을 설정";
@@ -4721,9 +4725,12 @@ function CFOExecutionHistoryPanel({ history=[], onRollback }) {
 
 function detectCFOActionKind(action) {
   const text = `${action?.title || ""} ${action?.desc || ""}`;
-  // 순서 중요: ISA/ETF/매수/납입은 화면상 투자 실행으로 처리해야 금액 입력칸이 표시됩니다.
-  if (text.includes("ISA") || text.includes("ETF") || text.includes("납입") || text.includes("매수") || text.includes("리밸런싱") || text.includes("포트폴리오") || text.includes("투자") || text.includes("자동투자") || text.includes("투자금")) return "investment";
-  if (text.includes("비상금")) return "emergency";
+  const hasEmergency = text.includes("비상금");
+  const hasInvestment = text.includes("ISA") || text.includes("ETF") || text.includes("납입") || text.includes("매수") || text.includes("리밸런싱") || text.includes("포트폴리오") || text.includes("투자") || text.includes("자동투자") || text.includes("투자금");
+  // 복합 행동은 단일 ISA 입력이 아니라 비상금/ISA를 분리 입력하도록 처리합니다.
+  if (hasEmergency && hasInvestment) return "compound";
+  if (hasInvestment) return "investment";
+  if (hasEmergency) return "emergency";
   if (text.includes("지출") || text.includes("예산") || text.includes("절감")) return "budget";
   if (text.includes("은퇴")) return "retirement";
   return "memo";
@@ -4733,13 +4740,16 @@ function defaultCFOActionForm({ action, model, data }) {
   const kind = detectCFOActionKind(action);
   const accounts = (data?.accounts || []).filter(a=>a.active);
   const defaultFrom = accounts.find(a=>a.defaultIn)?.name || accounts[0]?.name || "";
-  const defaultTo = accounts.find(a=>String(a.name||"").includes("ISA"))?.name || accounts.find(a=>String(a.type||"").includes("증권"))?.name || accounts[1]?.name || "";
-  const emergencyAccount = accounts.find(a=>String(a.name||"").includes("비상") || String(a.name||"").includes("파킹") || String(a.name||"").includes("카카오"))?.name || defaultTo || defaultFrom;
+  const defaultInvestmentTo = accounts.find(a=>String(a.name||"").includes("ISA"))?.name || accounts.find(a=>String(a.type||"").includes("증권"))?.name || accounts[1]?.name || "";
+  const emergencyAccount = accounts.find(a=>String(a.name||"").includes("비상") || String(a.name||"").includes("파킹") || String(a.name||"").includes("카카오") || String(a.name||"").includes("KOFR"))?.name || accounts.find(a=>String(a.category||"").includes("현금"))?.name || defaultFrom;
   const monthlyExpense = Math.max(n(model?.detailedDiagnosis?.[0]?.expense), n(data?.settings?.retirementMonthlyExpense), 0);
   const actionAmount = n(action?.recommendedAmount || action?.amount || 0);
   const baseAmount = actionAmount > 0
     ? actionAmount
-    : kind === "budget" ? 100000 : kind === "investment" ? n(data?.settings?.monthlyInvestDefault || data?.settings?.triggerMonthlyInvestAmount || 100000) : kind === "emergency" ? Math.max(Math.round(monthlyExpense || 3000000), 100000) : 0;
+    : kind === "budget" ? 100000 : (kind === "investment" || kind === "compound") ? n(data?.settings?.monthlyInvestDefault || data?.settings?.triggerMonthlyInvestAmount || 100000) : kind === "emergency" ? Math.max(Math.round(monthlyExpense || 3000000), 100000) : 0;
+
+  const compoundEmergencyAmount = kind === "compound" ? n(action?.emergencyAmount || 500000) : 0;
+  const compoundIsaAmount = kind === "compound" ? Math.max(baseAmount - compoundEmergencyAmount, 0) : 0;
 
   return {
     kind,
@@ -4747,14 +4757,17 @@ function defaultCFOActionForm({ action, model, data }) {
     recommendedAmount: baseAmount,
     amount: baseAmount,
     actualDepositAmount: baseAmount,
+    emergencyAmount: kind === "compound" ? compoundEmergencyAmount : baseAmount,
+    isaAmount: kind === "compound" ? compoundIsaAmount : baseAmount,
     fromAccount: defaultFrom,
-    toAccount: kind === "emergency" ? emergencyAccount : defaultTo,
+    toAccount: kind === "emergency" ? emergencyAccount : defaultInvestmentTo,
+    emergencyAccount,
+    investmentAccount: defaultInvestmentTo,
     budgetCategory: "식비",
     applyScope: "이번 달",
     memo: `CFO 실행 - ${action?.title || ""}`,
   };
 }
-
 
 function getCFOActionRuleKey(action, form={}) {
   const raw = action?.ruleId || action?.id || action?.title || "cfo-action";
@@ -4812,12 +4825,19 @@ function buildCFOExecutionVerification(data, action, form={}) {
   const rows = [];
   const add = (label, beforeValue, afterValue) => rows.push({ label, before: beforeValue, after: afterValue });
 
-  if (["investment","retirement","emergency"].includes(kind)) {
+  if (["investment","retirement","emergency","compound"].includes(kind)) {
     add(`${from} 현금`, `${fmt(getAccountAssetCurrent(before, from))}원`, `${fmt(getAccountAssetCurrent(after, from))}원`);
-    if (kind === "emergency") add(`${to} 비상금`, `${fmt(getAccountAssetCurrent(before, to))}원`, `${fmt(getAccountAssetCurrent(after, to))}원`);
+    if (kind === "emergency") {
+      add(`${to} 비상금`, `${fmt(getAccountAssetCurrent(before, to))}원`, `${fmt(getAccountAssetCurrent(after, to))}원`);
+    }
+    if (kind === "compound") {
+      const emergencyTo = form.emergencyAccount || "비상금계좌";
+      add(`${emergencyTo} 비상금`, `${fmt(getAccountAssetCurrent(before, emergencyTo))}원`, `${fmt(getAccountAssetCurrent(after, emergencyTo))}원`);
+    }
   }
-  if (["investment","retirement"].includes(kind)) {
-    add(`${to} 계좌금액`, `${fmt(getAccountAssetCurrent(before, to))}원`, `${fmt(getAccountAssetCurrent(after, to))}원`);
+  if (["investment","retirement","compound"].includes(kind)) {
+    const investTo = kind === "compound" ? (form.investmentAccount || to) : to;
+    add(`${investTo} 계좌금액`, `${fmt(getAccountAssetCurrent(before, investTo))}원`, `${fmt(getAccountAssetCurrent(after, investTo))}원`);
     add("포트폴리오 반영액", `${fmt(getPortfolioMarketValue(before))}원`, `${fmt(getPortfolioMarketValue(after))}원`);
     add("ISA 연간 납입액", `${fmt(before.settings?.annualIsaContributionCurrent)}원`, `${fmt(after.settings?.annualIsaContributionCurrent)}원`);
   }
@@ -4839,10 +4859,14 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
   const verification = buildCFOExecutionVerification(data, action, form);
   const accounts = (data?.accounts || []).filter(a=>a.active);
   const updateForm = (patch) => setForm(prev=>({ ...prev, ...patch }));
+  const isCompound = form.kind === "compound";
+  const actualTotal = isCompound ? n(form.emergencyAmount) + n(form.isaAmount) : n(form.kind === "investment" ? (form.actualDepositAmount ?? form.amount) : form.amount);
   const amountLabel = form.kind === "budget" ? "절감 목표 금액" : form.kind === "investment" ? "실제 ISA 입금/투자금액" : form.kind === "emergency" ? "비상금 이체 금액" : "실제 실행금액";
-  const confirmLabel = form.kind === "budget" ? "예산에 반영" : form.kind === "investment" ? "자산까지 자동 반영" : form.kind === "emergency" ? "거래내역에 비상금 반영" : "실행 반영";
-  const amountError = form.kind !== "memo" && n(form.kind === "investment" ? (form.actualDepositAmount ?? form.amount) : form.amount) <= 0;
-  const accountError = ["emergency","investment"].includes(form.kind) && (!form.fromAccount || !form.toAccount);
+  const confirmLabel = isCompound ? "비상금·ISA 분리 반영" : form.kind === "budget" ? "예산에 반영" : form.kind === "investment" ? "자산까지 자동 반영" : form.kind === "emergency" ? "거래내역에 비상금 반영" : "실행 반영";
+  const amountError = form.kind !== "memo" && actualTotal <= 0;
+  const accountError = isCompound
+    ? (!form.fromAccount || (n(form.emergencyAmount) > 0 && !form.emergencyAccount) || (n(form.isaAmount) > 0 && !form.investmentAccount))
+    : ["emergency","investment"].includes(form.kind) && (!form.fromAccount || !form.toAccount);
 
   return (
     <div className="apple-cfo-modal-overlay" role="dialog" aria-modal="true">
@@ -4861,7 +4885,7 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
         <div className="cfo-input-preview cfo-input-preview-live">
           <div>
             <small>반영 위치</small>
-            <b>{form.kind === "budget" ? "예산/지출 관리" : form.kind === "investment" ? "거래내역 + 포트폴리오 + 현금자산" : form.kind === "emergency" ? "거래내역 + 비상금 목표" : "CFO 실행 기록"}</b>
+            <b>{isCompound ? "비상금계좌 + ISA + 포트폴리오" : form.kind === "budget" ? "예산/지출 관리" : form.kind === "investment" ? "거래내역 + 포트폴리오 + 현금자산" : form.kind === "emergency" ? "거래내역 + 비상금 목표" : "CFO 실행 기록"}</b>
           </div>
           <div>
             <small>예상 점수</small>
@@ -4872,6 +4896,13 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
             <b>{preview.after}</b>
             <em>{preview.effect}</em>
           </div>
+          {isCompound && n(form.isaAmount) > 0 && (
+            <div className="cfo-live-wide">
+              <small>ISA 투자 배분</small>
+              <b>{buildCFOInvestmentAllocation(form.isaAmount).map(a=>`${a.name} ${fmt(a.buyAmount)}원`).join(" / ")}</b>
+              <em>출금계좌에서 총 {fmt(n(form.emergencyAmount)+n(form.isaAmount))}원 차감 → 비상금 {fmt(form.emergencyAmount)}원 / ISA {fmt(form.isaAmount)}원 분리 반영</em>
+            </div>
+          )}
           {form.kind === "investment" && n(form.actualDepositAmount ?? form.amount) > 0 && (
             <div className="cfo-live-wide">
               <small>목표비중 부족분</small>
@@ -4879,7 +4910,6 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
               <em>현금성 자산 차감 → ISA 계좌금액 증가 → 포트폴리오 수량/평균단가 증가 → 거래내역 2건 기록</em>
             </div>
           )}
-
         </div>
 
         <div className="cfo-input-grid">
@@ -4888,7 +4918,46 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
             <input type="date" value={form.date} onChange={(e)=>updateForm({date:e.target.value})} />
           </div>
 
-          {form.kind === "investment" && (
+          {isCompound && (
+            <>
+              <div className="field">
+                <label>CFO 추천 총액</label>
+                <input type="number" value={form.recommendedAmount ?? actualTotal} onChange={(e)=>updateForm({recommendedAmount:e.target.value})} placeholder="추천 총액" />
+                <div className="field-hint">추천값은 참고용입니다. 아래 비상금/ISA 금액이 실제 반영 기준입니다.</div>
+              </div>
+              <div className={`field ${n(form.emergencyAmount) < 0 ? "field-has-error" : ""}`}>
+                <label>비상금 저축금액</label>
+                <input type="number" value={form.emergencyAmount} onChange={(e)=>updateForm({emergencyAmount:e.target.value})} placeholder="비상금으로 따로 넣을 금액" />
+              </div>
+              <div className={`field ${n(form.isaAmount) < 0 ? "field-has-error" : ""}`}>
+                <label>ISA 입금/투자금액</label>
+                <input type="number" value={form.isaAmount} onChange={(e)=>updateForm({isaAmount:e.target.value, actualDepositAmount:e.target.value})} placeholder="ISA에 따로 넣을 금액" />
+              </div>
+              <div className={`field ${accountError ? "field-has-error" : ""}`}>
+                <label>출금계좌</label>
+                <select value={form.fromAccount} onChange={(e)=>updateForm({fromAccount:e.target.value})}>
+                  <option value="">선택</option>
+                  {accounts.map(a=><option key={a.id} value={a.name}>{a.name}</option>)}
+                </select>
+              </div>
+              <div className={`field ${accountError ? "field-has-error" : ""}`}>
+                <label>비상금 입금계좌</label>
+                <select value={form.emergencyAccount} onChange={(e)=>updateForm({emergencyAccount:e.target.value})}>
+                  <option value="">선택</option>
+                  {accounts.map(a=><option key={a.id} value={a.name}>{a.name}</option>)}
+                </select>
+              </div>
+              <div className={`field ${accountError ? "field-has-error" : ""}`}>
+                <label>ISA 투자계좌</label>
+                <select value={form.investmentAccount} onChange={(e)=>updateForm({investmentAccount:e.target.value, toAccount:e.target.value})}>
+                  <option value="">선택</option>
+                  {accounts.map(a=><option key={a.id} value={a.name}>{a.name}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+
+          {!isCompound && form.kind === "investment" && (
             <>
               <div className="field">
                 <label>CFO 추천금액</label>
@@ -4903,7 +4972,7 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
             </>
           )}
 
-          {form.kind !== "investment" && (
+          {!isCompound && form.kind !== "investment" && (
             <>
               <div className="field">
                 <label>CFO 추천금액</label>
@@ -4917,7 +4986,7 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
             </>
           )}
 
-          {["emergency","investment"].includes(form.kind) && (
+          {!isCompound && ["emergency","investment"].includes(form.kind) && (
             <>
               <div className={`field ${accountError ? "field-has-error" : ""}`}>
                 <label>출금계좌</label>
@@ -4996,7 +5065,7 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
         )}
 
         <div className="apple-cfo-modal-note">
-          입력한 실제 금액으로 거래내역·ISA 계좌금액·포트폴리오·현금성 자산·예산이 동시에 반영됩니다. 같은 달 동일 실행은 기본 차단되며, 실행 후 <b>되돌리기</b>로 바로 복구할 수 있습니다.
+          {isCompound ? "비상금과 ISA를 각각 입력한 금액으로 분리 반영합니다. 출금계좌에서는 두 금액의 합계가 차감되고, 거래내역은 비상금 저축·ISA 입금·ETF 매수로 나뉘어 기록됩니다." : "입력한 실제 금액으로 거래내역·ISA 계좌금액·포트폴리오·현금성 자산·예산이 동시에 반영됩니다."} 같은 달 동일 실행은 기본 차단되며, 실행 후 <b>되돌리기</b>로 바로 복구할 수 있습니다.
         </div>
 
         <div className="apple-cfo-modal-actions">
@@ -5004,7 +5073,7 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
           <button
             className="apple-cfo-confirm-btn"
             disabled={amountError || accountError || (duplicateInfo.isDuplicate && !form.forceRun)}
-            onClick={()=>onConfirm({ ...form, duplicateInfo, verification })}
+            onClick={()=>onConfirm({ ...form, duplicateInfo, verification, amount: actualTotal, actualDepositAmount: isCompound ? n(form.isaAmount) : (form.actualDepositAmount ?? form.amount) })}
             style={{opacity:(amountError || accountError || (duplicateInfo.isDuplicate && !form.forceRun))?0.45:1}}
           >
             {confirmLabel}
@@ -5113,9 +5182,11 @@ function applyCFOActionToData(data, action, form={}) {
   const executedAt = new Date().toISOString();
   const executionId = form.executionId || uid();
   const kind = form.kind || detectCFOActionKind(action);
-  const amount = Math.max(n(kind === "investment" || kind === "retirement" ? (form.actualDepositAmount ?? form.amount) : form.amount), 0);
+  const emergencyAmount = Math.max(n(form.emergencyAmount), 0);
+  const isaAmount = Math.max(n(form.isaAmount ?? form.actualDepositAmount ?? form.amount), 0);
+  const amount = Math.max(n(kind === "compound" ? emergencyAmount + isaAmount : (kind === "investment" || kind === "retirement" ? (form.actualDepositAmount ?? form.amount) : form.amount)), 0);
   const next = migrateData({ ...data });
-  const allocation = kind === "investment" || kind === "retirement" ? buildCFOInvestmentAllocation(amount) : [];
+  const allocation = kind === "compound" ? buildCFOInvestmentAllocation(isaAmount) : (kind === "investment" || kind === "retirement" ? buildCFOInvestmentAllocation(amount) : []);
 
   const duplicateInfo = getCFOExecutionDuplicateInfo(data, action, form);
   if (duplicateInfo.isDuplicate && !form.forceRun && !form.__previewOnly) {
@@ -5123,7 +5194,7 @@ function applyCFOActionToData(data, action, form={}) {
   }
 
   next.cfoActionHistory = [
-    { id: executionId, executionId, title, desc, executedAt, executedDate: now, executionMonth: duplicateInfo.executionMonth, executionKey: duplicateInfo.executionKey, ruleKey: duplicateInfo.ruleKey, forcedDuplicate: !!form.forceRun, expectedScore: n(action.expectedScore), priority: action.priority || "mid", kind, recommendedAmount: n(form.recommendedAmount), actualDepositAmount: amount, amount, fromAccount: form.fromAccount || "", toAccount: form.toAccount || "", allocation, memo: form.memo || "", verificationRows: form.verification?.rows || [], rollbackPatch: { kind, amount, fromAccount: form.fromAccount || "", toAccount: form.toAccount || "", allocation, budgetCategory: form.budgetCategory || "", date: now } },
+    { id: executionId, executionId, title, desc, executedAt, executedDate: now, executionMonth: duplicateInfo.executionMonth, executionKey: duplicateInfo.executionKey, ruleKey: duplicateInfo.ruleKey, forcedDuplicate: !!form.forceRun, expectedScore: n(action.expectedScore), priority: action.priority || "mid", kind, recommendedAmount: n(form.recommendedAmount), actualDepositAmount: kind === "compound" ? isaAmount : amount, emergencyAmount, isaAmount, amount, fromAccount: form.fromAccount || "", toAccount: kind === "compound" ? (form.investmentAccount || form.toAccount || "ISA") : (form.toAccount || ""), emergencyAccount: form.emergencyAccount || "", investmentAccount: form.investmentAccount || "", allocation, memo: form.memo || "", verificationRows: form.verification?.rows || [], rollbackPatch: { kind, amount, emergencyAmount, isaAmount, fromAccount: form.fromAccount || "", toAccount: kind === "compound" ? (form.investmentAccount || form.toAccount || "ISA") : (form.toAccount || ""), emergencyAccount: form.emergencyAccount || "", investmentAccount: form.investmentAccount || "", allocation, budgetCategory: form.budgetCategory || "", date: now } },
     ...((next.cfoActionHistory || []).slice(0, 29)),
   ];
 
@@ -5133,7 +5204,31 @@ function applyCFOActionToData(data, action, form={}) {
   };
   const addTx = (tx) => { next.transactions = [{ id: uid(), date: now, executionId, ...tx }, ...(next.transactions || [])]; };
 
-  if (kind === "emergency") {
+  if (kind === "compound") {
+    const emergencyAccount = form.emergencyAccount || form.toAccount || "비상금";
+    const investmentAccount = form.investmentAccount || form.toAccount || "ISA";
+    const totalOut = emergencyAmount + isaAmount;
+    addSystemEvent("🛡️ 비상금 3개월치 확보", emergencyAmount || 3000000, "높음");
+    addToAssetCurrent(next, form.fromAccount, -totalOut, { category:"은행예금" });
+    if (emergencyAmount > 0) {
+      addToAssetCurrent(next, emergencyAccount, emergencyAmount, { category:"현금성", includeInEmergency:true });
+      addTx({ type:"자산이동", cat1:"계좌이체", cat2:"내계좌간이체", amount:emergencyAmount, fromAccount:form.fromAccount || "", toAccount:emergencyAccount, memo:form.memo || `CFO 자동실행 - 비상금 저축 ${fmt(emergencyAmount)}원`, source:"CFO_COMPOUND_EMERGENCY", editable:true });
+    }
+    if (isaAmount > 0) {
+      addToAssetCurrent(next, investmentAccount, isaAmount, { category:"주식계좌", includeInEmergency:false });
+      applyPortfolioBuy(next, { accountName: investmentAccount, allocation, memo: form.memo || `CFO 자동실행 - ETF 자동매수` });
+      next.settings = {
+        ...next.settings,
+        autoTriggerEnabled:true,
+        autoBuyTriggerEnabled:true,
+        triggerMonthlyInvestAmount: Math.max(n(next.settings?.triggerMonthlyInvestAmount), isaAmount, n(next.settings?.monthlyInvestDefault)),
+        monthlyInvestDefault: Math.max(n(next.settings?.monthlyInvestDefault), isaAmount),
+        annualIsaContributionCurrent: String(investmentAccount || "").includes("ISA") ? Math.min(n(next.settings?.isaAnnualLimit || 20000000), n(next.settings?.annualIsaContributionCurrent) + isaAmount) : n(next.settings?.annualIsaContributionCurrent),
+      };
+      addTx({ type:"자산이동", cat1:"계좌이체", cat2:"내계좌간이체", amount:isaAmount, fromAccount:form.fromAccount || "", toAccount:investmentAccount, memo:form.memo || `CFO 자동실행 - ${investmentAccount} 입금 ${fmt(isaAmount)}원`, source:"CFO_COMPOUND_ISA", editable:true });
+      addTx({ type:"자산이동", cat1:"투자", cat2:"ETF매수", amount:isaAmount, fromAccount:investmentAccount, toAccount:investmentAccount, memo:form.memo || `CFO 자동실행 - ETF 매수 ${allocation.map(a=>`${a.name} ${fmt(a.buyAmount)}원`).join(" / ")}`, source:"CFO_COMPOUND_ISA", editable:true });
+    }
+  } else if (kind === "emergency") {
     addSystemEvent("🛡️ 비상금 3개월치 확보", amount || 3000000, "높음");
     addToAssetCurrent(next, form.fromAccount, -amount, { category:"은행예금" });
     addToAssetCurrent(next, form.toAccount, amount, { category:"현금성", includeInEmergency:true });
@@ -5199,7 +5294,22 @@ function rollbackCFOActionFromData(data, historyId) {
   const toAccount = patch.toAccount || target.toAccount || "";
   const allocation = patch.allocation || target.allocation || [];
 
-  if (kind === "emergency") {
+  if (kind === "compound") {
+    const emergencyAmount = Math.max(n(patch.emergencyAmount ?? target.emergencyAmount), 0);
+    const isaAmount = Math.max(n(patch.isaAmount ?? target.isaAmount ?? target.actualDepositAmount), 0);
+    const emergencyAccount = patch.emergencyAccount || target.emergencyAccount || "";
+    const investmentAccount = patch.investmentAccount || patch.toAccount || target.investmentAccount || target.toAccount || "ISA";
+    addToAssetCurrent(next, fromAccount, emergencyAmount + isaAmount, { category:"은행예금" });
+    addToAssetCurrent(next, emergencyAccount, -emergencyAmount, { category:"현금성", includeInEmergency:true });
+    addToAssetCurrent(next, investmentAccount, -isaAmount, { category:"주식계좌" });
+    undoPortfolioBuy(next, allocation);
+    next.settings = {
+      ...next.settings,
+      annualIsaContributionCurrent: String(investmentAccount || "").includes("ISA")
+        ? Math.max(n(next.settings?.annualIsaContributionCurrent) - isaAmount, 0)
+        : n(next.settings?.annualIsaContributionCurrent),
+    };
+  } else if (kind === "emergency") {
     addToAssetCurrent(next, fromAccount, amount, { category:"은행예금" });
     addToAssetCurrent(next, toAccount, -amount, { category:"현금성", includeInEmergency:true });
   } else if (kind === "investment" || kind === "retirement") {
