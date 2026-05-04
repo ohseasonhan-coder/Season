@@ -1268,6 +1268,56 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .cfo-input-preview b{transition:color .18s ease, transform .18s ease}
 .cfo-input-preview-live div:nth-child(2) b{color:var(--green);font-size:16px}
 
+
+/* CFO next-action flow step UI v21 */
+.cfo-flow-strip{
+  margin:16px 0 0;
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  gap:10px;
+  align-items:center;
+  padding:12px;
+  border-radius:18px;
+  background:rgba(255,255,255,.035);
+  border:1px solid rgba(255,255,255,.07);
+}
+.cfo-flow-step{
+  display:grid;
+  grid-template-columns:34px 1fr;
+  gap:10px;
+  align-items:center;
+  min-width:0;
+}
+.cfo-flow-no{
+  width:34px;height:34px;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(108,125,255,.14);
+  color:var(--accent2);
+  border:1px solid rgba(108,125,255,.22);
+  font-weight:950;font-size:12px;
+}
+.cfo-flow-step.done .cfo-flow-no{background:var(--green-bg);color:var(--green);border-color:rgba(52,213,138,.28)}
+.cfo-flow-copy span{display:block;font-size:10px;font-weight:900;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px}
+.cfo-flow-copy strong{display:block;font-size:12.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cfo-flow-copy p{font-size:11px;color:var(--text3);line-height:1.35;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cfo-flow-arrow{color:var(--text3);font-weight:950;font-size:18px;opacity:.7}
+.cfo-next-action-panel{
+  margin-top:14px;
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:12px;
+  align-items:center;
+  padding:14px;
+  border-radius:18px;
+  background:linear-gradient(135deg,rgba(52,213,138,.12),rgba(108,125,255,.07));
+  border:1px solid rgba(52,213,138,.22);
+}
+.cfo-next-action-panel small{display:block;font-size:10px;font-weight:950;color:var(--green);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+.cfo-next-action-panel strong{display:block;font-size:14px;color:var(--text);margin-bottom:4px}
+.cfo-next-action-panel p{font-size:12px;color:var(--text2);line-height:1.45}
+.cfo-next-action-panel .btn{min-width:110px}
+@media(max-width:700px){.cfo-flow-strip{grid-template-columns:1fr}.cfo-flow-arrow{display:none}.cfo-next-action-panel{grid-template-columns:1fr}}
+
 /* CFO input execution modal v20 */
 .cfo-input-modal{width:min(620px,100%)}
 .cfo-input-preview{
@@ -4071,6 +4121,112 @@ function buildCFODecisionModel({ data={}, dashboard={}, dashboardDetail={}, fina
 }
 
 
+
+function getEmergencyFundFromCFOData(data={}) {
+  const assets = Array.isArray(data.assets) ? data.assets : [];
+  const included = assets.filter(a => a.kind !== "부채" && (a.includeInEmergency || `${a.category||""} ${a.name||""}`.includes("현금") || `${a.name||""}`.includes("파킹") || `${a.name||""}`.includes("비상")));
+  const sum = included.reduce((total, a) => total + n(a.current), 0);
+  if (sum > 0) return sum;
+  return assets.filter(a=>a.kind !== "부채").reduce((total,a)=>total+n(a.current),0);
+}
+
+function getYearlyIsaContributionFromCFOData(data={}) {
+  const currentYear = new Date().getFullYear();
+  const txSum = (data.transactions || [])
+    .filter(t => String(t.date || "").startsWith(String(currentYear)))
+    .filter(t => `${t.account || ""} ${t.fromAccount || ""} ${t.toAccount || ""} ${t.memo || ""}`.includes("ISA"))
+    .reduce((sum, t) => sum + n(t.amount), 0);
+  return Math.max(txSum, n(data.settings?.annualIsaContributionCurrent));
+}
+
+function buildNextCFOFlowAction(data={}, completedAction=null) {
+  const settings = data.settings || {};
+  const emergencyFund = getEmergencyFundFromCFOData(data);
+  const emergencyFloor = 15000000;
+  const emergencyTarget = 30000000;
+  const isaAnnualLimit = n(settings.isaAnnualLimit || 20000000);
+  const isaContributed = getYearlyIsaContributionFromCFOData(data);
+  const isaRemaining = Math.max(isaAnnualLimit - isaContributed, 0);
+  const monthsLeft = Math.max(12 - new Date().getMonth(), 1);
+  const isaMonthlyNeed = Math.ceil(isaRemaining / monthsLeft / 10000) * 10000;
+  const completedKind = completedAction ? detectCFOActionKind(completedAction) : "";
+
+  const withFlow = (action, stepNumber, nextLabel) => ({
+    ...action,
+    flowStepNumber: stepNumber,
+    flowNextLabel: nextLabel || "다음 단계",
+    flowGenerated: true,
+  });
+
+  if (emergencyFund < emergencyFloor) {
+    const need = Math.max(emergencyFloor - emergencyFund, 0);
+    return withFlow({
+      title:"비상금 1차 기준까지 추가 저축",
+      desc:`비상금 1차 기준 1,500만원까지 ${fmt(need)}원이 남았습니다. 이 금액을 채운 뒤 ISA 납입 단계로 넘어갑니다.`,
+      priority:"high",
+      expectedScore:8,
+      recommendedAmount:Math.min(2000000, need),
+      ruleId:"flow-emergency-floor",
+    }, 1, "비상금 1차 확보 후 ISA 납입");
+  }
+
+  if (isaRemaining > 0 && completedKind !== "investment") {
+    return withFlow({
+      title:"ISA 잔여 한도 월별 납입",
+      desc:`비상금 1차 기준은 충족했습니다. ISA 잔여 한도 ${fmt(isaRemaining)}원을 남은 ${monthsLeft}개월에 나눠 월 ${fmt(isaMonthlyNeed)}원 기준으로 납입하세요.`,
+      priority:"high",
+      expectedScore:6,
+      recommendedAmount:isaMonthlyNeed,
+      ruleId:"flow-isa-after-emergency",
+    }, 2, "ISA 납입 후 ETF 매수/리밸런싱");
+  }
+
+  if (emergencyFund < emergencyTarget) {
+    const need = Math.max(emergencyTarget - emergencyFund, 0);
+    return withFlow({
+      title:"비상금 최종 3,000만원까지 병행 보강",
+      desc:`ISA 납입을 반영했습니다. 이제 비상금 최종 목표 3,000만원까지 ${fmt(need)}원을 월 50만원 단위로 보강하세요.`,
+      priority:"mid",
+      expectedScore:5,
+      recommendedAmount:Math.min(500000, need),
+      ruleId:"flow-emergency-target",
+    }, 3, "최종 비상금 확보 후 월 200만원 투자");
+  }
+
+  return withFlow({
+    title:"월 200만원 전액 투자 루틴 유지",
+    desc:"비상금과 ISA 납입 흐름이 안정권입니다. 다음 실행은 나스닥100 90% / 배당 10% 기준으로 월 투자 루틴을 유지하는 단계입니다.",
+    priority:"mid",
+    expectedScore:4,
+    recommendedAmount:n(settings.monthlyInvestDefault || settings.triggerMonthlyInvestAmount || 2000000),
+    ruleId:"flow-full-invest-routine",
+  }, 4, "월말 리밸런싱 점검");
+}
+
+function CFOFlowStrip({ currentAction, nextAction, completedAction }) {
+  return (
+    <div className="cfo-flow-strip">
+      <div className={`cfo-flow-step ${completedAction ? "done" : ""}`}>
+        <div className="cfo-flow-no">{completedAction ? "✓" : (currentAction?.flowStepNumber || 1)}</div>
+        <div className="cfo-flow-copy">
+          <span>{completedAction ? "완료한 행동" : "현재 단계"}</span>
+          <strong>{completedAction?.title || currentAction?.title || "현재 행동"}</strong>
+          <p>{completedAction ? "입력한 금액 기준으로 반영 완료" : (currentAction?.flowNextLabel || "실행 후 다음 단계로 이동")}</p>
+        </div>
+      </div>
+      <div className="cfo-flow-arrow">→</div>
+      <div className="cfo-flow-step">
+        <div className="cfo-flow-no">{nextAction?.flowStepNumber || ((currentAction?.flowStepNumber || 1) + 1)}</div>
+        <div className="cfo-flow-copy">
+          <span>다음 예정 행동</span>
+          <strong>{nextAction?.title || "실행 후 자동 계산"}</strong>
+          <p>{nextAction?.desc || "이번 실행 결과를 반영한 뒤 다음 행동을 보여줍니다."}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function buildCFOActionPreview(model, action, form=null) {
   const currentScore = n(model?.totalScore);
   const baseExpected = n(action?.expectedScore);
@@ -4159,10 +4315,13 @@ function CFODecisionDashboard({ model, data, onExecuteAction, onUndoAction, undo
   const [pendingAction, setPendingAction] = useState(null);
   const [showWhy, setShowWhy] = useState(false);
   const [showMoreActions, setShowMoreActions] = useState(false);
+  const [flowNextAction, setFlowNextAction] = useState(null);
+  const [flowCompletedAction, setFlowCompletedAction] = useState(null);
 
   const priorityLabel = { high:"최우선", mid:"중요", low:"관리" };
-  const topAction = model.actions?.[0];
-  const otherActions = (model.actions || []).slice(1, 4);
+  const baseTopAction = model.actions?.[0];
+  const topAction = flowNextAction || baseTopAction;
+  const otherActions = (model.actions || []).filter(a => getCFOActionRuleKey(a) !== getCFOActionRuleKey(topAction)).slice(0, 3);
   const cfoHistory = Array.isArray(data?.cfoActionHistory) ? data.cfoActionHistory.slice(0, 8) : [];
   const mainReason = model.scoreLosses?.[0];
   const statusEmoji = model.tone === "green" ? "🟢" : model.tone === "accent" ? "🔵" : model.tone === "amber" ? "🟡" : "🔴";
@@ -4179,17 +4338,24 @@ function CFODecisionDashboard({ model, data, onExecuteAction, onUndoAction, undo
   const handleConfirmExecute = (action, form) => {
     if (!action) return;
     const preview = buildCFOActionPreview(model, action, form);
+    const currentData = model.sourceData || data;
+    const simulatedAfter = applyCFOActionToData(currentData, action, { ...form, forceRun:true, __previewOnly:true });
+    const nextAction = buildNextCFOFlowAction(simulatedAfter, action);
     onExecuteAction?.(action, form);
     setExecutedAction({
       id: uid(),
       title: action.title,
       preview,
+      nextAction,
       executedAt: new Date().toLocaleString("ko-KR"),
     });
+    setFlowCompletedAction(action);
+    setFlowNextAction(nextAction);
     setPendingAction(null);
   };
 
   const topPreview = topAction ? buildCFOActionPreview(model, topAction) : null;
+  const previewNextAction = flowNextAction || (topAction ? buildNextCFOFlowAction(model.sourceData || data, null) : null);
 
   return (
     <section className={`cfo-app-screen ${toneClass}`}>
@@ -4231,6 +4397,8 @@ function CFODecisionDashboard({ model, data, onExecuteAction, onUndoAction, undo
             </div>
           </div>
 
+          <CFOFlowStrip currentAction={topAction} nextAction={previewNextAction} completedAction={flowCompletedAction} />
+
           <div className="cfo-app-preview-strip">
             <div>
               <span>현재</span>
@@ -4247,7 +4415,7 @@ function CFODecisionDashboard({ model, data, onExecuteAction, onUndoAction, undo
           </div>
 
           <button className="cfo-app-primary-btn" onClick={()=>setPendingAction(topAction)}>
-            지금 실행하기
+            {flowNextAction ? "다음 행동 실행하기" : "지금 실행하기"}
           </button>
         </div>
       ) : (
@@ -4262,6 +4430,19 @@ function CFODecisionDashboard({ model, data, onExecuteAction, onUndoAction, undo
             <p>{executedAction.title}</p>
             <span>{executedAction.preview.currentScore} → {executedAction.preview.nextScore} 예상</span>
           </div>
+        </div>
+      )}
+
+      {executedAction?.nextAction && (
+        <div className="cfo-next-action-panel">
+          <div>
+            <small>NEXT ACTION</small>
+            <strong>{executedAction.nextAction.title}</strong>
+            <p>{executedAction.nextAction.desc}</p>
+          </div>
+          <button className="btn btn-success" onClick={()=>setPendingAction(executedAction.nextAction)}>
+            바로 실행
+          </button>
         </div>
       )}
 
