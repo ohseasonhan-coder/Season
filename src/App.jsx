@@ -6640,7 +6640,14 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
 
   const save=()=>{
     if(!canSave) return showToast(validationMessages.filter(x=>x.level === 'danger').map(x=>x.title).join(' · '), 'warn');
-    if(duplicateCandidates.length>0&&!window.confirm("중복 거래가 감지되었습니다. 그래도 저장할까요?")) return;
+    if(duplicateCandidates.length>0) {
+      // 중복 감지 - 경고 토스트로 알림, 사용자가 다시 저장 버튼 누르면 통과
+      if(!form.__duplicateConfirmed) {
+        showToast("중복 거래가 감지되었습니다. 다시 저장하면 반영됩니다.", "warn");
+        setForm(f=>({...f, __duplicateConfirmed:true}));
+        return;
+      }
+    }
     update(d=>{
       const row={...form,amount:n(form.amount),id:form.id||uid()};
       const list=form.id?d.transactions.map(t=>t.id===form.id?row:t):[...d.transactions,row];
@@ -7237,30 +7244,82 @@ async function fetchJsonWithTimeout(url, options={}, timeoutMs=7000){
   finally{ clearTimeout(timer); }
 }
 async function fetchFxUsdKrw(settings={}){
-  const endpoints=["/api/fx?base=USD&quote=KRW","/api/exchange-rate?base=USD&quote=KRW"];
-  for(const url of endpoints){
-    try{ const j=await fetchJsonWithTimeout(url,{},6500); const rate=n(j.rate||j.usdKrw||j.USDKRW||j.item?.rate); if(rate>0){ const fx={rate,asOf:j.asOf||j.date||j.item?.asOf||new Date().toISOString(),source:url,stale:false}; const cache=loadMarketCache(); saveMarketCache({...cache,fx}); return fx; } }
-    catch(error){ console.warn("환율 API 실패:", url, error?.message||error); }
+  // 1차: 내부 API
+  const internalEndpoints=["/api/fx?base=USD&quote=KRW","/api/exchange-rate?base=USD&quote=KRW"];
+  for(const url of internalEndpoints){
+    try{ const j=await fetchJsonWithTimeout(url,{},5000); const rate=n(j.rate||j.usdKrw||j.USDKRW||j.item?.rate); if(rate>900&&rate<2000){ const fx={rate,asOf:j.asOf||j.date||j.item?.asOf||new Date().toISOString(),source:url,stale:false}; const cache=loadMarketCache(); saveMarketCache({...cache,fx}); return fx; } }
+    catch(error){ console.warn("환율 내부API 실패:", url, error?.message||error); }
   }
+  // 2차: Yahoo Finance (USDKRW=X) - 공개 API
+  try{
+    const yahooUrl="https://query1.finance.yahoo.com/v8/finance/chart/USDKRW=X?interval=1d&range=1d";
+    const r=await fetchJsonWithTimeout(yahooUrl,{},7000);
+    const rate=n(r?.chart?.result?.[0]?.meta?.regularMarketPrice);
+    if(rate>900&&rate<2000){
+      const fx={rate,asOf:new Date().toISOString(),source:"yahoo-finance",stale:false};
+      const cache=loadMarketCache(); saveMarketCache({...cache,fx}); return fx;
+    }
+  }catch(e){ console.warn("환율 Yahoo 실패:", e?.message); }
+  // 3차: ExchangeRate-API (무료 공개)
+  try{
+    const r=await fetchJsonWithTimeout("https://open.er-api.com/v6/latest/USD",{},6000);
+    const rate=n(r?.rates?.KRW);
+    if(rate>900&&rate<2000){
+      const fx={rate,asOf:new Date().toISOString(),source:"exchangerate-api",stale:false};
+      const cache=loadMarketCache(); saveMarketCache({...cache,fx}); return fx;
+    }
+  }catch(e){ console.warn("환율 ExchangeRate-API 실패:", e?.message); }
+  // 4차: 캐시 및 수동 설정값 fallback
   const cache=loadMarketCache();
-  if(cache.fx&&n(cache.fx.rate)>0) return {...cache.fx,stale:true,source:cache.fx.source||"cache"};
+  if(cache.fx&&n(cache.fx.rate)>0) return {...cache.fx,stale:true,source:(cache.fx.source||"cache")+"-stale"};
   if(n(settings.fxUsdKrw)>0) return {rate:n(settings.fxUsdKrw),asOf:settings.fxAsOf||"수동/기존값",source:"settings",stale:true};
-  throw new Error("환율 API 응답 없음 및 기존 환율 없음");
+  throw new Error("환율 조회 실패 (내부API·Yahoo·ExchangeRate-API 모두 실패)");
 }
 async function fetchQuoteWithFallback(row, previousRow=null){
   const symbol=buildServerSymbolFromRow(row);
+  const isKrx=/^\d{6}\.KS$/.test(symbol)||/^\d{6}$/.test(String(row.code||row.ticker||""));
+  const code6=String(row.code||row.ticker||"").replace(".KS","").trim();
+  // 1차: 내부 API
   try{
-    const j=await fetchJsonWithTimeout(`/api/quote?symbol=${encodeURIComponent(symbol)}&name=${encodeURIComponent(row.name||"")}`,{},6500);
-    if(!j.ok||!j.item||n(j.item.currentPrice)<=0) throw new Error("invalid quote");
-    const quote={currentPrice:n(j.item.currentPrice),quoteAsOf:j.item.asOf||new Date().toISOString(),symbol:j.item.symbol||row.symbol,market:j.item.market||row.market,currency:j.item.currency||row.currency,stale:false};
-    rememberQuote(row,quote); return quote;
-  }catch(error){
-    console.warn("현재가 API 실패:", symbol, error?.message||error);
-    const cached=getCachedQuote(row);
-    if(cached) return {currentPrice:n(cached.currentPrice),quoteAsOf:cached.quoteAsOf||cached.asOf||cached.cachedAt,symbol:cached.symbol||row.symbol,market:cached.market||row.market,currency:cached.currency||row.currency,stale:true,source:"cache"};
-    if(previousRow&&n(previousRow.currentPrice)>0) return {currentPrice:n(previousRow.currentPrice),quoteAsOf:previousRow.quoteAsOf||"기존값",symbol:previousRow.symbol||row.symbol,market:previousRow.market||row.market,currency:previousRow.currency||row.currency,stale:true,source:"previous"};
-    throw new Error("현재가 API 응답 없음 및 기존 가격 없음");
+    const j=await fetchJsonWithTimeout(`/api/quote?symbol=${encodeURIComponent(symbol)}&name=${encodeURIComponent(row.name||"")}`,{},5000);
+    if(j.ok&&j.item&&n(j.item.currentPrice)>0){
+      const quote={currentPrice:n(j.item.currentPrice),quoteAsOf:j.item.asOf||new Date().toISOString(),symbol:j.item.symbol||row.symbol,market:j.item.market||row.market,currency:j.item.currency||row.currency,stale:false,source:"internal"};
+      rememberQuote(row,quote); return quote;
+    }
+  }catch(e){ console.warn("시세 내부API 실패:", symbol, e?.message); }
+  // 2차: KRX ETF/주식 - 네이버증권 (jina.ai 프록시)
+  if(isKrx && code6){
+    try{
+      const jinaUrl=`https://r.jina.ai/https://finance.naver.com/item/main.naver?code=${code6}`;
+      const r=await fetchJsonWithTimeout(jinaUrl,{},8000);
+      // jina는 text 반환이므로 raw 파싱
+      const text=typeof r==="string"?r:(r.raw||r.text||JSON.stringify(r));
+      const m=text.match(/현재가[^\d]*([\d,]+)/)||text.match(/"regularMarketPrice"\s*:\s*([\d.]+)/);
+      if(m){
+        const price=Number((m[1]||"").replace(/,/g,""));
+        if(price>0){
+          const quote={currentPrice:price,quoteAsOf:new Date().toISOString(),symbol:code6+".KS",market:"KRX",currency:"KRW",stale:false,source:"naver-jina"};
+          rememberQuote(row,quote); return quote;
+        }
+      }
+    }catch(e){ console.warn("시세 네이버/jina 실패:", code6, e?.message); }
   }
+  // 3차: Yahoo Finance (KRX는 .KS, 미국주식은 직접)
+  try{
+    const yahooSymbol=isKrx?(code6+".KS"):symbol;
+    const yahooUrl=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1d&range=1d`;
+    const r=await fetchJsonWithTimeout(yahooUrl,{},7000);
+    const meta=r?.chart?.result?.[0]?.meta;
+    if(meta&&n(meta.regularMarketPrice)>0){
+      const quote={currentPrice:n(meta.regularMarketPrice),quoteAsOf:new Date(n(meta.regularMarketTime)*1000).toISOString(),symbol:yahooSymbol,market:meta.fullExchangeName||row.market,currency:meta.currency||row.currency||"KRW",stale:false,source:"yahoo"};
+      rememberQuote(row,quote); return quote;
+    }
+  }catch(e){ console.warn("시세 Yahoo 실패:", symbol, e?.message); }
+  // 4차: 캐시 및 이전값 fallback
+  const cached=getCachedQuote(row);
+  if(cached) return {currentPrice:n(cached.currentPrice),quoteAsOf:cached.quoteAsOf||cached.cachedAt,symbol:cached.symbol||row.symbol,market:cached.market||row.market,currency:cached.currency||row.currency,stale:true,source:"cache"};
+  if(previousRow&&n(previousRow.currentPrice)>0) return {currentPrice:n(previousRow.currentPrice),quoteAsOf:previousRow.quoteAsOf||"기존값",symbol:previousRow.symbol||row.symbol,market:previousRow.market||row.market,currency:previousRow.currency||row.currency,stale:true,source:"previous"};
+  throw new Error("시세 조회 실패 (내부API·네이버·Yahoo 모두 실패)");
 }
 
 function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
@@ -7337,7 +7396,10 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
         rememberQuote(next,{currentPrice:next.currentPrice,quoteAsOf:next.quoteAsOf,symbol:next.symbol,market:next.market,currency:next.currency});
         return next;
       })}));
-      setMarketMsg(`현재가 갱신 완료: 성공 ${okCount}개${staleCount?`, 기존/캐시 사용 ${staleCount}개`:""}${failCount?`, 실패 ${failCount}개`:""}`);
+      const srcMap={};
+      results.filter(r=>r.ok).forEach(r=>{ const s=r.source||"unknown"; srcMap[s]=(srcMap[s]||0)+1; });
+      const srcText=Object.entries(srcMap).map(([s,c])=>`${{"internal":"서버","yahoo":"Yahoo","naver-jina":"네이버","cache":"캐시"}[s]||s} ${c}개`).join(" · ");
+      setMarketMsg(`현재가 갱신: 성공 ${okCount}개${staleCount?` (캐시 ${staleCount}개)`:""}${failCount?`, 실패 ${failCount}개`:""} | 소스: ${srcText||"-"}`);
       if(failCount>0) setQErr("일부 종목은 API 실패로 기존 가격을 유지했습니다.");
     }catch(error){setQErr(`전체 업데이트 실패: ${error?.message||"알 수 없는 오류"}. 기존 가격은 유지됩니다.`);}
     finally{setBulkUp(false);}
@@ -10263,6 +10325,7 @@ function buildStep5VerificationRows(validations, calculationAudit) {
 
 function DataTab({ data, update, validations, calculationAudit }) {
   const showToast = useToast();
+  const { showConfirm, ConfirmPortal } = useConfirm();
   const [showPrivacyLocal, setShowPrivacyLocal] = React.useState(false);
 
   const fileRef = useRef();
@@ -10272,8 +10335,9 @@ function DataTab({ data, update, validations, calculationAudit }) {
   const [step5CheckedAt, setStep5CheckedAt] = useState("");
   if (typeof window !== "undefined") window.__assetAppCurrentData = data;
 
-  const applySampleVerificationData = () => {
-    if (!window.confirm("샘플 데이터로 교체할까요? 현재 데이터는 자동 백업됩니다.")) return;
+  const applySampleVerificationData = async () => {
+    const ok1 = await showConfirm("샘플 데이터로 교체할까요?\n현재 데이터는 자동 백업됩니다.");
+    if (!ok1) return;
     const backup = createManualStorageBackup(data, "before-sample-verification");
     if (!backup.ok) return showToast(`백업 실패: ${backup.error}`, 'error');
     update(() => buildSampleVerificationData());
@@ -10330,10 +10394,10 @@ function DataTab({ data, update, validations, calculationAudit }) {
     showToast('수동 백업이 생성되었습니다.', 'success');
   };
 
-  const restoreSelectedBackup = (key) => {
+  const restoreSelectedBackup = async (key) => {
     const targetKey = key || selectedBackupKey;
     if (!targetKey) return showToast('복원할 백업을 선택하세요.', 'warn');
-    if (!window.confirm("선택한 시점으로 복원할까요?")) return;
+    if (!(await showConfirm("선택한 시점으로 복원할까요?"))) return;
     const result = restoreStorageBackup(targetKey);
     if (!result.ok) return showToast(`복원 실패: ${result.error}`, 'error');
     update(() => result.data);
@@ -10342,22 +10406,22 @@ function DataTab({ data, update, validations, calculationAudit }) {
     showToast('복원 완료', 'success');
   };
 
-  const deleteSelectedBackup = (key) => {
+  const deleteSelectedBackup = async (key) => {
     const targetKey = key || selectedBackupKey;
     if (!targetKey) return showToast('삭제할 백업을 선택하세요.', 'warn');
-    if (!window.confirm("이 백업을 삭제할까요?")) return;
+    if (!(await showConfirm("이 백업을 삭제할까요?"))) return;
     const result = deleteStorageBackup(targetKey);
     if (!result.ok) return showToast(`삭제 실패: ${result.error}`, 'error');
     refreshBackups();
     setStatusMessage("선택한 백업을 삭제했습니다.");
   };
 
-  const importJSON = (file) => {
+  const importJSON = async (file) => {
     const rd = new FileReader();
     rd.onload = () => {
       const result = validateImportedAppData(rd.result);
       if (!result.ok) return showToast(`복원 실패: ${result.error}`, 'error');
-      if (!window.confirm("업로드한 파일로 복원할까요?")) return;
+      if (!(await showConfirm("업로드한 파일로 복원할까요?"))) return;
       createManualStorageBackup(data, "before-import");
       update(() => result.data);
       refreshBackups();
@@ -10378,6 +10442,7 @@ function DataTab({ data, update, validations, calculationAudit }) {
   return (
     <div className="stack">
       {showPrivacyLocal&&<PrivacyModal onClose={()=>setShowPrivacyLocal(false)}/>}
+      {ConfirmPortal}
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:4}}>
         <button className="btn btn-sm btn-ghost" onClick={()=>setShowPrivacyLocal(true)}>📋 개인정보처리방침</button>
       </div>
@@ -10492,7 +10557,7 @@ function DataTab({ data, update, validations, calculationAudit }) {
             <span className="badge badge-red">주의</span>
           </div>
           <div className="stack">
-            <button className="btn btn-danger" onClick={()=>{ if(!window.confirm("전체 초기화할까요? 자동 백업 후 진행됩니다.")) return; createManualStorageBackup(data,"before-clear"); update(()=>emptyData()); refreshBackups(); setStatusMessage("전체 데이터를 초기화했습니다. 초기화 직전 백업이 생성되었습니다."); }}>전체 초기화</button>
+            <button className="btn btn-danger" onClick={async()=>{ if(!(await showConfirm("전체 초기화할까요?\n자동 백업 후 진행됩니다."))) return; createManualStorageBackup(data,"before-clear"); update(()=>emptyData()); refreshBackups(); setStatusMessage("전체 데이터를 초기화했습니다. 초기화 직전 백업이 생성되었습니다."); }}>전체 초기화</button>
             <button className="btn btn-ghost" onClick={()=>{ localStorage.removeItem(OB_KEY); window.location.reload(); }} title="온보딩 위자드를 다시 보여줍니다">🚀 온보딩 다시 보기</button>
             <button className="btn btn-ghost" onClick={refreshBackups}>백업 목록 새로고침</button>
           </div>
