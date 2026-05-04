@@ -2775,6 +2775,14 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 :root[data-theme='light'] .mobile-tab-btn.active .mobile-tab-icon-wrap{background:rgba(80,96,232,.12);border-color:rgba(80,96,232,.22)}
 :root[data-theme='light'] .mlo-header{background:linear-gradient(135deg,rgba(80,96,232,.14),rgba(23,158,94,.06))}
 :root[data-theme='light'] .mlo-logo-mark{background:linear-gradient(135deg,#5060e8,#6070ff)}
+
+/* ── 면책 고지 배너 ── */
+.disclaimer-banner{display:flex;align-items:flex-start;gap:10px;padding:10px 16px;background:rgba(240,180,41,.08);border:1px solid rgba(240,180,41,.2);border-radius:10px;margin-bottom:14px;font-size:11px;color:var(--text3);line-height:1.5}
+.disclaimer-banner strong{color:var(--amber);font-size:11px;white-space:nowrap}
+.disclaimer-banner a{color:var(--accent);text-decoration:none}
+.disclaimer-banner a:hover{text-decoration:underline}
+/* ── 전역 면책 푸터 ── */
+.legal-footer{text-align:center;font-size:10px;color:var(--text3);padding:16px 20px 8px;line-height:1.6;border-top:1px solid var(--border);margin-top:24px}
 `;
 
 
@@ -2953,7 +2961,7 @@ function OnboardingWizard({ onComplete }) {
           <>
             <div className="ob-eyebrow">Step 2 · 투자 목표</div>
             <div className="ob-h">투자 성향과<br/>목표를 알려주세요</div>
-            <div className="ob-sub">시뮬레이션과 리밸런싱 추천에 바로 반영됩니다.</div>
+            <div className="ob-sub">시뮬레이션과 목표비중 계산에 바로 반영됩니다.</div>
 
             <div className="ob-fstack">
               <div className="ob-f">
@@ -3383,6 +3391,7 @@ function AICoachPanel({ coach }) {
         </div>
       )}
     </div>
+    </ToastProvider>
   );
 }
 
@@ -3551,7 +3560,7 @@ function buildSimulationNLP({ advanced, base, w, targetRate, scenario }) {
   } else {
     tone = "amber"; icon = "📊";
     message = `${scenLabel} 시나리오 기준 목표 달성률은 ${fmtPct(targetRate)}예요. 월 투자금 증액이나 기대수익률 조정으로 더 가까워질 수 있어요.`;
-    actions.push({ label: "투자 전략 설정 확인", tag: "설정" });
+    actions.push({ label: "목표비중 설정 확인", tag: "설정" });
   }
 
   // 낙관 vs 보수 힌트
@@ -3674,7 +3683,7 @@ function buildPortfolioNLP(financialAnalysis, data) {
   } else if (totalRate >= 0 && overConcentrated.length > 0) {
     tone = "amber"; icon = "⚖️";
     message = `수익률은 +${fmtPct(totalRate)}지만 ${overConcentrated.map(r => r.name).join(", ")} 비중이 높아요. 리밸런싱을 검토해보세요.`;
-    actions.push({ label: "리밸런싱 계산기 확인", tag: "리밸런싱" });
+    actions.push({ label: "목표비중 현황 확인", tag: "리밸런싱" });
   } else if (totalRate < 0) {
     tone = "red"; icon = "📉";
     message = `현재 전체 수익률 ${fmtPct(totalRate)}, 평가손실 ${fmt(Math.abs(totalProfit))}원이에요.`;
@@ -4866,7 +4875,7 @@ function CFOActionInputModal({ action, model, data, onClose, onConfirm }) {
           </div>
           {form.kind === "investment" && n(form.actualDepositAmount ?? form.amount) > 0 && (
             <div className="cfo-live-wide">
-              <small>자동 매수 배분</small>
+              <small>목표비중 부족분</small>
               <b>{buildCFOInvestmentAllocation(form.actualDepositAmount ?? form.amount).map(a=>`${a.name} ${fmt(a.buyAmount)}원`).join(" / ")}</b>
               <em>현금성 자산 차감 → ISA 계좌금액 증가 → 포트폴리오 수량/평균단가 증가 → 거래내역 2건 기록</em>
             </div>
@@ -5069,7 +5078,7 @@ function applyPortfolioBuy(next, { accountName="ISA", allocation=[], memo="" }) 
     if (idx < 0) {
       next.portfolio = [
         ...(next.portfolio || []),
-        { id: uid(), account: accountName || "ISA", name:item.name, code:item.code || "", symbol:item.symbol || "", ticker:item.code || "", market:item.market || "KRX ETF", currency:item.currency || "KRW", qty:0, avgPrice:0, currentPrice:0, targetAmount:0, riskSigma:item.assetClass === "배당" ? 0.15 : 0.22, assetClass:item.assetClass || "기타", memo:"CFO 자동 매수로 생성" },
+        { id: uid(), account: accountName || "ISA", name:item.name, code:item.code || "", symbol:item.symbol || "", ticker:item.code || "", market:item.market || "KRX ETF", currency:item.currency || "KRW", qty:0, avgPrice:0, currentPrice:0, targetAmount:0, riskSigma:item.assetClass === "배당" ? 0.15 : 0.22, assetClass:item.assetClass || "기타", memo:"CFO 목표비중 기반으로 추가됨" },
       ];
       idx = next.portfolio.length - 1;
     }
@@ -5490,6 +5499,121 @@ function KpiCard({ label, value, unit, tone, accent }) {
 }
 
 // ─── Transactions Tab ─────────────────────────────────────────────────────────
+// ─── Toast 알림 시스템 (alert() 대체) ────────────────────────────────────────
+const ToastContext = React.createContext(null);
+function ToastProvider({ children }) {
+  const [toasts, setToasts] = React.useState([]);
+  const showToast = React.useCallback((msg, type="info", duration=3200) => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts(prev => [...prev.slice(-4), { id, msg, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
+  }, []);
+  return (
+    <ToastContext.Provider value={showToast}>
+      {children}
+      <div style={{position:"fixed",bottom:96,left:"50%",transform:"translateX(-50%)",zIndex:9999,display:"flex",flexDirection:"column",gap:8,alignItems:"center",pointerEvents:"none"}}>
+        {toasts.map(t => (
+          <div key={t.id} style={{
+            padding:"11px 20px",borderRadius:99,fontSize:13,fontWeight:600,
+            background:t.type==="error"?"var(--red)":t.type==="success"?"var(--green)":t.type==="warn"?"var(--amber)":"var(--surface3)",
+            color:t.type==="error"||t.type==="success"?"#fff":t.type==="warn"?"#1a1400":"var(--text)",
+            boxShadow:"0 4px 20px rgba(0,0,0,.35)",
+            animation:"qa-toast-in .25s cubic-bezier(.2,.8,.2,1) forwards",
+            whiteSpace:"nowrap",maxWidth:"90vw",overflow:"hidden",textOverflow:"ellipsis",
+            pointerEvents:"none",
+          }}>
+            {t.type==="error"?"⚠ ":t.type==="success"?"✓ ":t.type==="warn"?"💡 ":"ℹ "}{t.msg}
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+function useToast() { return React.useContext(ToastContext); }
+// confirm 대체: Promise 기반 모달
+function ConfirmModal({ message, onConfirm, onCancel }) {
+  return (
+    <>
+      <div style={{position:"fixed",inset:0,zIndex:8000,background:"rgba(0,0,0,.55)",backdropFilter:"blur(4px)"}} onClick={onCancel}/>
+      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:8001,background:"var(--surface)",borderRadius:20,padding:"28px 28px 20px",maxWidth:360,width:"90vw",boxShadow:"0 16px 48px rgba(0,0,0,.5)"}}>
+        <div style={{fontSize:15,fontWeight:600,color:"var(--text)",marginBottom:20,lineHeight:1.5}}>{message}</div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+          <button className="btn btn-ghost" onClick={onCancel}>취소</button>
+          <button className="btn btn-danger" onClick={onConfirm}>확인</button>
+        </div>
+      </div>
+    </>
+  );
+}
+function useConfirm() {
+  const [state, setState] = React.useState(null);
+  const showConfirm = (message) => new Promise(resolve => {
+    setState({ message, resolve });
+  });
+  const handleConfirm = () => { state?.resolve(true); setState(null); };
+  const handleCancel = () => { state?.resolve(false); setState(null); };
+  const ConfirmPortal = state ? <ConfirmModal message={state.message} onConfirm={handleConfirm} onCancel={handleCancel}/> : null;
+  return { showConfirm, ConfirmPortal };
+}
+
+
+
+// ─── 개인정보처리방침 모달 ────────────────────────────────────────────────────
+function PrivacyModal({ onClose }) {
+  return (
+    <>
+      <div className="qa-overlay" onClick={onClose}/>
+      <div className="qa-sheet" onClick={e=>e.stopPropagation()} style={{maxHeight:"85vh"}}>
+        <div className="qa-handle"/>
+        <div className="qa-header">
+          <span className="qa-title">개인정보처리방침</span>
+          <button className="qa-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="qa-body" style={{fontSize:13,lineHeight:1.8,color:"var(--text2)"}}>
+          <p><strong style={{color:"var(--text)"}}>1. 수집하는 개인정보</strong><br/>
+          이 앱은 이메일 주소(클라우드 동기화 선택 시), 사용자가 직접 입력한 재무 데이터(거래내역·자산·포트폴리오)를 수집합니다.</p>
+          <p><strong style={{color:"var(--text)"}}>2. 이용 목적</strong><br/>
+          수집된 정보는 개인 재무 현황 계산 및 클라우드 동기화 목적으로만 사용되며, 제3자에게 제공하지 않습니다.</p>
+          <p><strong style={{color:"var(--text)"}}>3. 보관 기간</strong><br/>
+          클라우드 데이터는 회원 탈퇴 또는 삭제 요청 시 즉시 파기합니다. 로컬 데이터는 사용자가 직접 관리합니다.</p>
+          <p><strong style={{color:"var(--text)"}}>4. 제3자 제공</strong><br/>
+          재무 데이터는 어떠한 제3자(광고주, 금융기관 등)에게도 제공하지 않습니다.</p>
+          <p><strong style={{color:"var(--text)"}}>5. 권리 행사</strong><br/>
+          개인정보 열람·수정·삭제는 '데이터 관리' 탭에서 직접 처리하거나, 앱 내 데이터 초기화로 삭제할 수 있습니다.</p>
+          <p><strong style={{color:"var(--text)"}}>6. 면책 사항</strong><br/>
+          이 앱은 투자자문업 등록을 하지 않은 개인 재무 계산기입니다. 제공되는 모든 수치와 분석은 참고용이며, 실제 투자·세무 결정에 활용하지 마세요.</p>
+          <p style={{fontSize:11,color:"var(--text3)",marginTop:16}}>시행일: 2025년 1월 1일</p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── 면책 고지 배너 ───────────────────────────────────────────────────────────
+function DisclaimerBanner({ context="general" }) {
+  const msgs = {
+    investment: "이 앱은 목표비중·수익률 등 사용자가 직접 설정한 값을 기반으로 현황을 계산하는 참고용 도구입니다. 투자 결정 전 반드시 공인 금융전문가와 상담하세요. 실제 매수·매도는 증권사 앱에서 직접 실행하세요.",
+    tax: "세금 계산은 일반적인 사례를 바탕으로 한 참고용입니다. 실제 신고·납부 전에는 국세청(hometax.go.kr) 또는 세무사에게 확인하세요.",
+    general: "이 앱은 개인 재무 현황을 정리하는 참고용 계산기입니다. 금융·세무 조언을 제공하지 않습니다.",
+  };
+  return (
+    <div className="disclaimer-banner">
+      <strong>⚠ 참고용</strong>
+      <span>{msgs[context] || msgs.general}</span>
+    </div>
+  );
+}
+
+// ─── 전역 법적 푸터 ───────────────────────────────────────────────────────────
+function LegalFooter() {
+  return (
+    <div className="legal-footer">
+      이 서비스는 투자자문업 등록을 하지 않은 개인 재무 현황 계산기입니다. 제공되는 모든 수치·분석·제안은 참고용이며, 투자 결정의 근거로 사용하지 마세요.
+      실제 투자·세무 결정은 공인 금융전문가 또는 세무사와 상담하시기 바랍니다.
+    </div>
+  );
+}
+
 // ─── 글로벌 간편입력 모달 ─────────────────────────────────────────────────────
 function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose }) {
   const EMPTY = { id:"", date:todayISO(), type:"지출", cat1:"", cat2:"", amount:"", inAccount:"", outAccount:"", content:"", memo:"" };
@@ -5715,10 +5839,292 @@ function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose 
   );
 }
 
+
+// ─── SMS 파싱 유틸 ────────────────────────────────────────────────────────────
+function parseSmsText(text, accountNamesOut=[]) {
+  // 카드/결제 알림 패턴들
+  const patterns = [
+    // 신한: [신한카드] 5,900원 (스타벅스)
+    { re: /\[?신한카드\]?\s*([\d,]+)원\s*[\(\[（]?([^\)\]\）
+]+)[\)\]\）]?/g, card:"신한카드" },
+    // 국민: [KB국민카드] 12,000원 승인 (교보문고)
+    { re: /\[?KB국민카드\]?\s*([\d,]+)원\s*승인?\s*[\(\[（]?([^\)\]\）
+]+)[\)\]\）]?/g, card:"KB국민카드" },
+    // 삼성: [삼성카드] 8,500원 (CU)
+    { re: /\[?삼성카드\]?\s*([\d,]+)원\s*[\(\[（]?([^\)\]\）
+]+)[\)\]\）]?/g, card:"삼성카드" },
+    // 현대: [현대카드] 32,000원 (올리브영)
+    { re: /\[?현대카드\]?\s*([\d,]+)원\s*[\(\[（]?([^\)\]\）
+]+)[\)\]\）]?/g, card:"현대카드" },
+    // 토스: 토스머니 3,500원 결제 (편의점)
+    { re: /토스머니\s*([\d,]+)원\s*결제\s*[\(\[（]?([^\)\]\）
+]+)[\)\]\）]?/g, card:"토스" },
+    // 카카오페이: 카카오페이 6,000원 결제 (배달의민족)
+    { re: /카카오페이\s*([\d,]+)원\s*결제\s*[\(\[（]?([^\)\]\）
+]+)[\)\]\）]?/g, card:"카카오페이" },
+    // 일반 패턴: 숫자원 (가맹점)
+    { re: /([\d,]+)원\s*(?:승인|결제|사용)\s*[\(\[（]([^\)\]\）
+]{2,20})[\)\]\）]/g, card:"신용카드" },
+  ];
+
+  const results = [];
+  const today = new Date().toISOString().slice(0,10);
+
+  for (const { re, card } of patterns) {
+    let m;
+    re.lastIndex = 0;
+    while ((m = re.exec(text)) !== null) {
+      const amount = Number(m[1].replace(/,/g,""));
+      const content = m[2]?.trim().slice(0,30) || "카드결제";
+      if (amount > 0 && amount < 100000000) {
+        // 카테고리 자동 추정
+        const cat1 = guessCategory(content);
+        const outAccount = accountNamesOut.find(a => a.includes(card.replace("카드","").trim())) || accountNamesOut.find(a=>a.includes("카드")) || "";
+        results.push({
+          id: Math.random().toString(36).slice(2),
+          date: today,
+          type: "지출",
+          cat1,
+          cat2: "기타",
+          amount,
+          inAccount: "",
+          outAccount,
+          content,
+          memo: `SMS 파싱: ${card}`,
+        });
+      }
+    }
+  }
+  // 중복 제거 (같은 금액+내용)
+  const seen = new Set();
+  return results.filter(r => {
+    const key = `${r.amount}|${r.content}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function guessCategory(content) {
+  const c = content.toLowerCase();
+  if (/스타벅스|커피|카페|투썸|이디야|메가|할리스/.test(c)) return "식비";
+  if (/배달의민족|요기요|쿠팡이츠|배민|맥도날드|버거킹|롯데리아|파리바게뜨|뚜레쥬르/.test(c)) return "식비";
+  if (/마트|이마트|홈플러스|롯데마트|코스트코|gs25|cu|세븐/.test(c)) return "식비";
+  if (/주유|gs칼텍스|sk에너지|현대오일|s-oil/.test(c)) return "교통";
+  if (/지하철|버스|택시|카카오모빌리티|kt|올리브영|다이소/.test(c)) return "생활";
+  if (/넷플릭스|유튜브|spotify|왓챠|티빙|웨이브|애플/.test(c)) return "취미여행";
+  if (/병원|의원|약국|치과/.test(c)) return "생활";
+  if (/보험/.test(c)) return "보험세금";
+  if (/식당|음식|한식|중식|일식|치킨|피자/.test(c)) return "식비";
+  return "기타지출";
+}
+
+// CSV 파싱 (신한·KB·하나·우리은행 포맷 지원)
+function parseCsvText(text, accountNamesIn=[], accountNamesOut=[]) {
+  const lines = text.split(/\r?\n/).filter(l=>l.trim());
+  if (lines.length < 2) return [];
+  const results = [];
+  const today = new Date().toISOString().slice(0,10);
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(",").map(c=>c.trim().replace(/^"|"$/g,""));
+    if (cols.length < 3) continue;
+
+    // 신한은행 포맷: 날짜, 내용, 출금, 입금, 잔액
+    // KB포맷: 거래일자, 거래내용, 출금액, 입금액, 잔액
+    // 공통: 날짜 컬럼, 내용 컬럼, 출금/입금 컬럼 탐지
+    let date = "", content = "", outAmt = 0, inAmt = 0;
+    
+    // 날짜 탐지 (YYYY.MM.DD or YYYY-MM-DD or YYYYMMDD)
+    const dateCol = cols.find(c => /^\d{4}[.\/\-]\d{1,2}[.\/\-]\d{1,2}$/.test(c) || /^\d{8}$/.test(c));
+    if (dateCol) {
+      date = dateCol.replace(/\./g,"-").replace(/\//g,"-");
+      if (/^\d{8}$/.test(dateCol)) date = `${dateCol.slice(0,4)}-${dateCol.slice(4,6)}-${dateCol.slice(6,8)}`;
+    }
+    if (!date || date < "2020-01-01") continue;
+
+    // 내용 탐지 (한글 2자 이상인 컬럼)
+    content = cols.find(c => /[가-힣]{2,}/.test(c) && c.length > 1 && !c.includes(".")) || cols[1] || "";
+    content = content.slice(0,40);
+
+    // 금액 탐지 (숫자만 있는 컬럼)
+    const numCols = cols.map(c=>Number(c.replace(/,/g,""))).filter(v=>Number.isFinite(v)&&v>=0);
+    if (numCols.length >= 2) {
+      outAmt = numCols.find(v=>v>0&&v<100000000) || 0;
+      inAmt = numCols[1] > 0 ? numCols[1] : 0;
+    }
+
+    if (!content || (outAmt === 0 && inAmt === 0)) continue;
+
+    if (outAmt > 0) {
+      results.push({
+        id: Math.random().toString(36).slice(2), date, type:"지출",
+        cat1: guessCategory(content), cat2:"기타", amount:outAmt,
+        inAccount:"", outAccount: accountNamesOut[0]||"",
+        content, memo:"CSV 가져오기",
+      });
+    }
+    if (inAmt > 0) {
+      results.push({
+        id: Math.random().toString(36).slice(2), date, type:"수입",
+        cat1:"근로소득", cat2:"월급", amount:inAmt,
+        inAccount: accountNamesIn[0]||"", outAccount:"",
+        content, memo:"CSV 가져오기",
+      });
+    }
+  }
+  return results.slice(0, 500); // 최대 500건
+}
+
+// ─── SMS/CSV 가져오기 패널 ────────────────────────────────────────────────────
+function ImportPanel({ data, update, accountNamesIn, accountNamesOut, onClose }) {
+  const [mode, setMode] = React.useState("sms"); // "sms" | "csv"
+  const [smsText, setSmsText] = React.useState("");
+  const [csvText, setCsvText] = React.useState("");
+  const [parsed, setParsed] = React.useState([]);
+  const [selected, setSelected] = React.useState(new Set());
+  const [done, setDone] = React.useState(false);
+  const showToast = useToast();
+  const fileRef = React.useRef();
+
+  const handleParse = () => {
+    const text = mode === "sms" ? smsText : csvText;
+    if (!text.trim()) { showToast("텍스트를 먼저 붙여넣어 주세요.", "warn"); return; }
+    const rows = mode === "sms"
+      ? parseSmsText(text, accountNamesOut)
+      : parseCsvText(text, accountNamesIn, accountNamesOut);
+    if (!rows.length) { showToast("인식된 거래가 없습니다. 형식을 확인하세요.", "warn"); return; }
+    setParsed(rows);
+    setSelected(new Set(rows.map(r=>r.id)));
+  };
+
+  const handleFileLoad = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setCsvText(ev.target.result);
+    reader.readAsText(file, "UTF-8");
+    e.target.value = "";
+  };
+
+  const toggleAll = () => {
+    if (selected.size === parsed.length) setSelected(new Set());
+    else setSelected(new Set(parsed.map(r=>r.id)));
+  };
+
+  const handleImport = () => {
+    const toAdd = parsed.filter(r => selected.has(r.id));
+    if (!toAdd.length) { showToast("가져올 항목을 선택하세요.", "warn"); return; }
+    update(d => ({ ...d, transactions: [...d.transactions, ...toAdd] }));
+    showToast(`${toAdd.length}건을 가져왔습니다.`, "success");
+    setDone(true);
+    setTimeout(onClose, 1200);
+  };
+
+  const typeColor = (type) => type==="수입"?"var(--green)":type==="지출"?"var(--red)":"var(--accent)";
+
+  return (
+    <>
+      <div className="qa-overlay" onClick={onClose}/>
+      <div className="qa-sheet" onClick={e=>e.stopPropagation()} style={{maxHeight:"88vh"}}>
+        <div className="qa-handle"/>
+        <div className="qa-header">
+          <span className="qa-title">📥 거래 가져오기</span>
+          <button className="qa-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="qa-body">
+          {/* 탭 선택 */}
+          <div className="qa-type-row" style={{marginBottom:14}}>
+            <button className={`qa-type-btn ${mode==="sms"?"active-expense":""}`} onClick={()=>{setMode("sms");setParsed([]);}}>
+              💬 문자 붙여넣기
+            </button>
+            <button className={`qa-type-btn ${mode==="csv"?"active-income":""}`} onClick={()=>{setMode("csv");setParsed([]);}}>
+              📄 CSV/엑셀
+            </button>
+          </div>
+
+          {mode==="sms" && (
+            <>
+              <div style={{fontSize:12,color:"var(--text3)",marginBottom:8,lineHeight:1.6}}>
+                카드사·토스·카카오페이 결제 문자를 한꺼번에 복사해서 붙여넣으세요. 신한·KB·삼성·현대카드, 토스머니, 카카오페이를 지원합니다.
+              </div>
+              <textarea
+                className="qa-input"
+                style={{height:120,resize:"vertical",lineHeight:1.5}}
+                placeholder={"[신한카드] 5,900원 결제 (스타벅스)\n[KB국민카드] 32,000원 승인 (올리브영)\n카카오페이 12,000원 결제 (배달의민족)"}
+                value={smsText}
+                onChange={e=>setSmsText(e.target.value)}
+              />
+            </>
+          )}
+
+          {mode==="csv" && (
+            <>
+              <div style={{fontSize:12,color:"var(--text3)",marginBottom:8,lineHeight:1.6}}>
+                은행/카드사 앱 → 거래내역 → 엑셀/CSV 내보내기 후 파일을 열거나 내용을 붙여넣으세요. 신한·KB·하나·우리은행 형식을 지원합니다.
+              </div>
+              <button className="btn btn-ghost" style={{marginBottom:8,width:"100%"}} onClick={()=>fileRef.current?.click()}>
+                📂 CSV 파일 열기
+              </button>
+              <input ref={fileRef} type="file" accept=".csv,.txt" style={{display:"none"}} onChange={handleFileLoad}/>
+              <textarea
+                className="qa-input"
+                style={{height:90,resize:"vertical",lineHeight:1.5,fontSize:11}}
+                placeholder={"거래일자,거래내용,출금액,입금액,잔액\n2025-04-01,스타벅스,5900,,1234567"}
+                value={csvText}
+                onChange={e=>setCsvText(e.target.value)}
+              />
+            </>
+          )}
+
+          <button className={`qa-save-btn income`} style={{marginTop:10}} onClick={handleParse}>
+            {parsed.length ? `다시 분석 (${parsed.length}건 감지됨)` : "거래 분석하기"}
+          </button>
+
+          {parsed.length > 0 && (
+            <>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",margin:"16px 0 8px"}}>
+                <span style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>감지된 거래 {parsed.length}건</span>
+                <button className="btn btn-sm btn-ghost" onClick={toggleAll}>
+                  {selected.size===parsed.length?"전체 해제":"전체 선택"}
+                </button>
+              </div>
+              <div style={{maxHeight:240,overflowY:"auto",display:"flex",flexDirection:"column",gap:6}}>
+                {parsed.map(r=>(
+                  <div key={r.id} onClick={()=>setSelected(prev=>{const s=new Set(prev);s.has(r.id)?s.delete(r.id):s.add(r.id);return s;})}
+                    style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:12,background:selected.has(r.id)?"var(--accent-bg)":"var(--surface2)",border:`1.5px solid ${selected.has(r.id)?"var(--accent)":"transparent"}`,cursor:"pointer",transition:".12s ease"}}>
+                    <input type="checkbox" readOnly checked={selected.has(r.id)} style={{accentColor:"var(--accent)",flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.content}</div>
+                      <div style={{fontSize:11,color:"var(--text3)"}}>{r.date} · {r.cat1}</div>
+                    </div>
+                    <div style={{fontSize:14,fontWeight:700,color:typeColor(r.type),flexShrink:0}}>{r.type==="수입"?"+":"-"}{r.amount.toLocaleString()}원</div>
+                  </div>
+                ))}
+              </div>
+              <button
+                className={`qa-save-btn ${done?"transfer":"expense"}`}
+                style={{marginTop:12}}
+                onClick={handleImport}
+                disabled={selected.size===0||done}
+              >
+                {done ? "✓ 가져오기 완료!" : `선택한 ${selected.size}건 가져오기`}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
+  const showToast = useToast();
+
   const EMPTY={id:"",date:todayISO(),type:"지출",cat1:"",cat2:"",amount:"",inAccount:"",outAccount:"",content:"",memo:""};
   const [form,setForm]=useState(EMPTY);
   const [showForm,setShowForm]=useState(true);
+  const [showImport,setShowImport]=useState(false);
 
   // 필터 state
   const [search,setSearch]=useState("");
@@ -5934,7 +6340,7 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
   const resetFilters=()=>{setSearch("");setFilterMonth(thisMonthISO());setFilterType("");setFilterCat1("");};
 
   const saveTemplate=()=>{
-    if(!canSave) return alert("템플릿 저장 전 필수값을 먼저 채워주세요.");
+    if(!canSave) return showToast('필수값을 먼저 채워주세요.', 'warn');
     const name=templateName.trim()||form.content||`${form.type} 템플릿`;
     update(d=>({...d,settings:{...d.settings,transactionTemplates:[...(Array.isArray(d.settings.transactionTemplates)?d.settings.transactionTemplates:[]),{id:uid(),name,type:form.type,cat1:form.cat1,cat2:form.cat2,amount:n(form.amount),inAccount:form.inAccount,outAccount:form.outAccount,content:form.content,memo:form.memo}]}}));
     setTemplateName("");
@@ -5942,7 +6348,7 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
   const applyTemplate=(tpl)=>{if(!tpl)return;setForm({...EMPTY,date:todayISO(),type:tpl.type||"지출",cat1:tpl.cat1||"",cat2:tpl.cat2||"",amount:tpl.amount||"",inAccount:tpl.inAccount||"",outAccount:tpl.outAccount||"",content:tpl.content||tpl.name||"",memo:tpl.memo||""});setShowForm(true);};
   const deleteTemplate=(id)=>update(d=>({...d,settings:{...d.settings,transactionTemplates:(Array.isArray(d.settings.transactionTemplates)?d.settings.transactionTemplates:[]).filter(t=>t.id!==id)}}));
   const addFixedRuleFromForm=()=>{
-    if(!canSave) return alert("고정거래 등록 전 필수값을 먼저 채워주세요.");
+    if(!canSave) return showToast('필수값을 먼저 채워주세요.', 'warn');
     const day=clamp(Number(String(form.date||todayISO()).slice(8,10))||1,1,28);
     const name=templateName.trim()||form.content||`${form.type} 고정거래`;
     update(d=>({...d,settings:{...d.settings,fixedTransactionRules:[...(Array.isArray(d.settings.fixedTransactionRules)?d.settings.fixedTransactionRules:[]),{id:uid(),name,day,type:form.type,cat1:form.cat1,cat2:form.cat2,amount:n(form.amount),inAccount:form.inAccount,outAccount:form.outAccount,content:form.content,memo:form.memo,active:true}]}}));
@@ -5952,7 +6358,7 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
   const generateFixedTransactions=()=>{
     const month=autoFillMonth||thisMonthISO();
     const active=fixedRules.filter(r=>r.active!==false);
-    if(!active.length) return alert("등록된 고정거래가 없습니다.");
+    if(!active.length) return showToast('등록된 고정거래가 없습니다.', 'warn');
     let added=0,skipped=0;
     update(d=>{
       const current=[...d.transactions];
@@ -5965,12 +6371,12 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
       });
       return {...d,transactions:current};
     });
-    alert(`${month} 고정거래 생성 완료추가: ${added}건 / 중복 제외: ${skipped}건`);
+    showToast(`${month} 고정거래 생성 완료추가: ${added}건 / 중복 제외: ${skipped}건`);
   };
 
   const save=()=>{
-    if(!canSave) return alert(validationMessages.filter(x=>x.level==="danger").map(x=>`- ${x.title}`).join(""));
-    if(duplicateCandidates.length>0&&!confirm("같은 날짜·금액·내용의 거래가 이미 있습니다. 그래도 저장할까요?")) return;
+    if(!canSave) return showToast(validationMessages.filter(x=>x.level===='danger').map(x=>x.title).join(' · '), 'warn');
+    if(duplicateCandidates.length>0&&!window.confirm("중복 거래가 감지되었습니다. 그래도 저장할까요?")) return;
     update(d=>{
       const row={...form,amount:n(form.amount),id:form.id||uid()};
       const list=form.id?d.transactions.map(t=>t.id===form.id?row:t):[...d.transactions,row];
@@ -5993,6 +6399,7 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
 
   return (
     <div className="stack">
+      {showImport&&<ImportPanel data={data} update={update} accountNamesIn={accountNamesIn} accountNamesOut={accountNamesOut} onClose={()=>setShowImport(false)}/>}
       {validationSummary.total>0&&(
         <div className="kpi-grid">
           <KpiCard label="입력 검증 이슈" value={validationSummary.total} unit="건" tone="red"/>
@@ -6004,7 +6411,10 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
       <div className="card">
         <div className="card-title">
           <h3>{form.id?"거래 수정":"입력센터"} <span style={{fontSize:12,fontWeight:400,color:"var(--text3)",marginLeft:6}}>자동 검증 · 템플릿 · 고정거래</span></h3>
-          <button onClick={()=>setShowForm(v=>!v)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:12,padding:"2px 6px"}}>{showForm?"▲ 접기":"▼ 펼치기"}</button>
+          <div style={{display:"flex",gap:8}}>
+            <button className="btn btn-sm btn-ghost" onClick={()=>setShowImport(true)}>📥 문자/CSV 가져오기</button>
+            <button onClick={()=>setShowForm(v=>!v)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:12,padding:"2px 6px"}}>{showForm?"▲ 접기":"▼ 펼치기"}</button>
+          </div>
         </div>
         {showForm&&(
           <>
@@ -6212,10 +6622,12 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
 
 // ─── Assets Tab ───────────────────────────────────────────────────────────────
 function AssetsTab({ data, update }) {
+  const showToast = useToast();
+
   const empty={id:"",kind:"자산",category:"은행예금",name:"",current:"",previous:"",includeInEmergency:false,note:""};
   const [form,setForm]=useState(empty);
   const save=()=>{
-    if(!form.name) return alert("이름을 입력하세요.");
+    if(!form.name) return showToast('이름을 입력하세요.', 'warn'); return;
     update(d=>{
       const row={...form,current:n(form.current),previous:n(form.previous),id:form.id||uid()};
       const assets=form.id?d.assets.map(a=>a.id===form.id?row:a):[...d.assets,row];
@@ -6495,7 +6907,7 @@ function DipBuyAlertCard({rows,settings}){
 }
 
 
-// ─── 자동 매수 / 리밸런싱 트리거 ─────────────────────────────────────────────
+// ─── 목표비중 부족분 계산기 ─────────────────────────────────────────────
 function AutoTriggerCard({rows,settings}){
   const plan=buildAutoTriggerPlan(rows,settings);
   const enabled=plan.enabled;
@@ -6522,7 +6934,7 @@ function AutoTriggerCard({rows,settings}){
           </table>
         </div>
       ) : (
-        <div className="empty">현재 조건에서는 자동 매수 또는 리밸런싱 실행 후보가 없습니다.</div>
+        <div className="empty">현재 조건에서는 목표비중 대비 부족분 계산 결과가 없습니다.</div>
       )}
       {plan.rebalanceSignals.length>0&&(<div>
         <div style={{fontSize:12,fontWeight:700,color:"var(--text3)",letterSpacing:".06em",textTransform:"uppercase",margin:"4px 0 8px"}}>트리거 감시 상태</div>
@@ -6588,6 +7000,8 @@ async function fetchQuoteWithFallback(row, previousRow=null){
 }
 
 function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
+  const showToast = useToast();
+
   const ef=()=>({ id:"",account:accountOptions[0]?.name||"",name:"",code:"",ticker:"",symbol:"",market:"",currency:"KRW",quoteAsOf:"",qty:"",avgPrice:"",currentPrice:"",targetAmount:"",riskSigma:"0.22",assetClass:"나스닥",memo:"" });
   const [form,setForm]=useState(ef());
   const [kw,setKw]=useState(""),  [sugs,setSugs]=useState([]),  [isOpen,setIsOpen]=useState(false);
@@ -6634,7 +7048,7 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
   };
 
   const save=()=>{
-    if(!form.account||!form.name) return alert("계좌와 종목명 필수");
+    if(!form.account||!form.name) return showToast('계좌와 종목명을 입력하세요.', 'warn'); return;
     update(d=>{
       const row={...form,qty:n(form.qty),avgPrice:n(form.avgPrice),currentPrice:n(form.currentPrice||form.avgPrice),targetAmount:n(form.targetAmount),riskSigma:n(form.riskSigma),symbol:form.symbol||buildServerSymbolFromRow(form),id:form.id||uid()};
       const portfolio=form.id?d.portfolio.map(p=>p.id===form.id?row:p):[...d.portfolio,row];
@@ -6836,10 +7250,12 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
 
 // ─── Budget Tab ───────────────────────────────────────────────────────────────
 function BudgetTab({ data, update, budgetAnalysis }) {
+  const showToast = useToast();
+
   const empty={id:"",cat1:"식비",budget:"",targetWeight:""};
   const [form,setForm]=useState(empty);
   const saveBudget=()=>{
-    if(!form.cat1||n(form.budget)<=0) return alert("카테고리와 예산을 입력하세요.");
+    if(!form.cat1||n(form.budget)<=0) return showToast('카테고리와 예산을 입력하세요.', 'warn'); return;
     update(d=>{
       const row={...form,budget:n(form.budget),targetWeight:n(form.targetWeight),id:form.id||uid()};
       const budgets=form.id?d.budgets.map(b=>b.id===form.id?row:b):[...d.budgets,row];
@@ -7455,7 +7871,7 @@ function TaxCfoCoach({ coach, settings }) {
     <div className="card tax-cfo-coach">
       <div className="cfo-hero" style={{marginBottom:14}}>
         <div>
-          <span className={`badge ${badge(coach.tone)}`}>세금 AI 코치 · CFO 종합판단</span>
+          <span className={`badge ${badge(coach.tone)}`}>세금 AI 코치 · 재무현황 요약</span>
           <h2>세금 관리 점수 {coach.score}점</h2>
           <p>{coach.headline}</p>
           <div className="ai-chip-row">
@@ -7657,6 +8073,7 @@ function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
 }
 
 function TaxTab({ data, update, taxAnalysis, futureSim }) {
+  const showToast = useToast();
   const s = data.settings || {};
   const set = (k, v) => update(d => ({ ...d, settings:{ ...d.settings, [k]:v } }));
   const opt = useMemo(() => calcTaxOptimization(data, taxAnalysis), [data, taxAnalysis]);
@@ -7775,10 +8192,12 @@ function TaxTab({ data, update, taxAnalysis, futureSim }) {
 
 // ─── Planning Tab ─────────────────────────────────────────────────────────────
 function PlanningTab({ data, update, eventAnalysis, dashboard }) {
+  const showToast = useToast();
+
   const empty={id:"",name:"",yearsFromNow:1,amountNeeded:"",currentPrepared:"",priority:"높음"};
   const [form,setForm]=useState(empty);
   const saveEvent=()=>{
-    if(!form.name||n(form.amountNeeded)<=0) return alert("이름과 필요금액을 입력하세요.");
+    if(!form.name||n(form.amountNeeded)<=0) return showToast('이름과 필요금액을 입력하세요.', 'warn'); return;
     update(d=>{
       const row={...form,yearsFromNow:n(form.yearsFromNow),amountNeeded:n(form.amountNeeded),currentPrepared:n(form.currentPrepared),id:form.id||uid()};
       const events=form.id?d.events.map(e=>e.id===form.id?row:e):[...d.events,row];
@@ -8075,11 +8494,12 @@ function CFOCenterTab({ data, dashboard, dashboardDetail, financialAnalysis, bud
 
   return (
     <div className="stack cfo-center">
-      <AICoachPanel coach={buildIntegratedCoach({ area:"CFO 종합판단", data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim })}/>
+      <AICoachPanel coach={buildIntegratedCoach({ area:"재무현황 요약", data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim })}/>
+      <DisclaimerBanner context="investment"/>
       <div className="card cfo-hero">
         <div>
-          <div className="kpi-label">PERSONAL CFO FINAL BOARD</div>
-          <h2>개인 CFO 종합판단</h2>
+          <div className="kpi-label">MY FINANCE SUMMARY BOARD</div>
+          <h2>내 재무현황 요약</h2>
           <p>대시보드, 의사결정, 목표, 세금, 은퇴 데이터를 통합해 이번 달 최우선 행동을 정리합니다.</p>
         </div>
         <div className="cfo-score" style={{color}}>{cfo.score}<span>/100</span></div>
@@ -8127,6 +8547,8 @@ function CFOCenterTab({ data, dashboard, dashboardDetail, financialAnalysis, bud
 
 // ─── Goal Funding Tab ────────────────────────────────────────────────────────
 function GoalFundingTab({ data, update, dashboard, dashboardDetail, futureSim }) {
+  const showToast = useToast();
+
   const empty={
     id:"", goalKind:"일반목표", name:"", yearsFromNow:3,
     amountNeeded:"", currentPrepared:"", priority:"중간",
@@ -8205,10 +8627,10 @@ function GoalFundingTab({ data, update, dashboard, dashboardDetail, futureSim })
   },[nextNetWorthGoal,avgMonthlyNet]);
 
   const save=()=>{
-    if(!form.name) return alert("목표명을 입력하세요.");
+    if(!form.name) return showToast('목표명을 입력하세요.', 'warn'); return;
     if(form.goalKind==="순자산목표"){
-      if(n(form.targetNetWorth||form.amountNeeded)<=0) return alert("목표 순자산을 입력하세요.");
-    } else if(n(form.amountNeeded)<=0) return alert("목표금액을 입력하세요.");
+      if(n(form.targetNetWorth||form.amountNeeded)<=0) return showToast('목표 순자산을 입력하세요.', 'warn'); return;
+    } else if(n(form.amountNeeded)<=0) return showToast('목표금액을 입력하세요.', 'warn'); return;
     update(d=>{
       const goalKind=form.goalKind||"일반목표";
       const row={
@@ -8566,6 +8988,8 @@ function DecisionCenterTab({ data, dashboard, dashboardDetail, financialAnalysis
 
 // ─── Monthly Report Tab ───────────────────────────────────────────────────────
 function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalysis, dashboard, dashboardDetail, taxAnalysis }) {
+  const showToast = useToast();
+
   const months=useMemo(()=>[...new Set((data.transactions||[]).map(t=>monthOf(t.date)).filter(Boolean))].sort().reverse(),[data.transactions]);
   const [month,setMonth]=useState(months[0]||thisMonthISO());
 
@@ -8673,7 +9097,7 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
     if(net<0) nextSteps.push({title:"적자 원인 1개만 먼저 찾기",text:"고액 거래와 지출 TOP 5에서 다음 달 줄일 항목을 하나만 고르세요."});
     if(overBudget.length>0) nextSteps.push({title:`${overBudget[0].cat1} 예산 재설계`,text:"예산을 올릴지, 소비 횟수를 줄일지 둘 중 하나를 정하세요."});
     if(net>0 && emergencyMonths<6) nextSteps.push({title:"흑자 금액 자동 분배",text:"잉여 현금을 비상금 50%, 투자 50%처럼 규칙화하세요."});
-    if(net>0 && emergencyMonths>=6) nextSteps.push({title:"목표 포트폴리오로 자동 매수",text:"남는 현금을 목표 비중에 맞춰 배분하세요."});
+    if(net>0 && emergencyMonths>=6) nextSteps.push({title:"목표비중 기반 추가 배분 검토",text:"남는 현금을 목표 비중에 맞춰 배분하세요."});
     if(pensionRemaining>0) nextSteps.push({title:"절세 한도 월할 계산",text:"남은 세액공제 한도를 남은 개월 수로 나눠 월 납입액을 정하세요."});
     if(nextSteps.length===0) nextSteps.push({title:"현재 루틴 유지",text:"거래 입력, 예산 점검, 월말 리포트 확인 루틴을 유지하세요."});
 
@@ -8692,8 +9116,8 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
   },[data,month,monthlySeries,budgetAnalysis,taxAnalysis,dashboardDetail,financialAnalysis,dashboard]);
 
   const copyReport=async()=>{
-    try{await navigator.clipboard.writeText(report.summaryText);alert("월간 리포트 요약을 복사했습니다.");}
-    catch{alert("복사에 실패했습니다. 브라우저 권한을 확인하세요.");}
+    try{await navigator.clipboard.writeText(report.summaryText);showToast('월간 리포트 요약을 복사했습니다.', 'success');}
+    catch{showToast('복사에 실패했습니다. 브라우저 권한을 확인하세요.', 'error');}
   };
 
   const printReport=()=>window.print();
@@ -9137,6 +9561,8 @@ function SimulationTab({ data, futureSim }) {
 }
 
 function InvestmentTargetSettings({settings,set}){
+  const showToast = useToast();
+
   const rows=getInvestmentTargets(settings);
   const totalWeight=rows.reduce((sum,r)=>sum+n(r.targetWeight),0);
   const weightedReturn=getWeightedExpectedReturn(settings);
@@ -9147,7 +9573,7 @@ function InvestmentTargetSettings({settings,set}){
   const commitRows=(nextRows)=>{
     const nextTotal=nextRows.reduce((sum,r)=>sum+n(r.targetWeight),0);
     if(nextTotal>1.000001){
-      alert(`투자 목표 비중 합계는 100%를 초과할 수 없습니다.\n현재 입력 시 합계: ${fmtPct(nextTotal*100)}\n비중을 낮춘 뒤 다시 입력해주세요.`);
+      showToast(`목표비중 합계 ${fmtPct(nextTotal*100)} - 100% 이하로 조정해주세요.`, 'warn');
       return false;
     }
     set("investmentTargets", nextRows);
@@ -9350,10 +9776,12 @@ function SettingsTab({ data, update }) {
 
 // ─── Accounts Tab ─────────────────────────────────────────────────────────────
 function AccountsTab({ data, update }) {
+  const showToast = useToast();
+
   const empty={id:"",name:"",type:"은행",institution:"",currency:"KRW",owner:"본인",active:true,defaultIn:false,note:""};
   const [form,setForm]=useState(empty);
   const save=()=>{
-    if(!form.name) return alert("계좌명을 입력하세요.");
+    if(!form.name) return showToast('계좌명을 입력하세요.', 'warn'); return;
     update(d=>{
       const row={...form,id:form.id||uid()};
       const accounts=form.id?d.accounts.map(a=>a.id===form.id?row:a):[...d.accounts,row];
@@ -9570,6 +9998,9 @@ function buildStep5VerificationRows(validations, calculationAudit) {
 }
 
 function DataTab({ data, update, validations, calculationAudit }) {
+  const showToast = useToast();
+  const [showPrivacyLocal, setShowPrivacyLocal] = React.useState(false);
+
   const fileRef = useRef();
   const [backupList, setBackupList] = useState(() => getStorageBackupList());
   const [selectedBackupKey, setSelectedBackupKey] = useState("");
@@ -9578,14 +10009,14 @@ function DataTab({ data, update, validations, calculationAudit }) {
   if (typeof window !== "undefined") window.__assetAppCurrentData = data;
 
   const applySampleVerificationData = () => {
-    if (!window.confirm("현재 데이터를 수동 백업한 뒤 테스트용 샘플 데이터로 교체할까요?")) return;
+    if (!window.confirm("샘플 데이터로 교체할까요? 현재 데이터는 자동 백업됩니다.")) return;
     const backup = createManualStorageBackup(data, "before-sample-verification");
-    if (!backup.ok) return alert(`샘플 적용 전 백업 실패: ${backup.error}`);
+    if (!backup.ok) return showToast(`백업 실패: ${backup.error}`, 'error');
     update(() => buildSampleVerificationData());
     refreshBackups();
     setStep5CheckedAt(new Date().toISOString());
     setStatusMessage("테스트용 샘플 데이터를 적용했습니다. 대시보드와 계산값 검증 센터에서 숫자를 확인하세요.");
-    alert("샘플 데이터 적용 완료");
+    showToast('샘플 데이터 적용 완료', 'success');
   };
 
   const runStep5Verification = () => {
@@ -9617,7 +10048,7 @@ function DataTab({ data, update, validations, calculationAudit }) {
 
   const exportSelectedBackup = (key) => {
     const raw = localStorage.getItem(key);
-    if (!raw) return alert("선택한 백업을 찾을 수 없습니다.");
+    if (!raw) return showToast('선택한 백업을 찾을 수 없습니다.', 'error');
     const createdAt = key.replace(STORAGE_BACKUP_PREFIX, "").replace(/[:.]/g, "-");
     const blob = new Blob([raw], { type: "application/json" });
     const a = document.createElement("a");
@@ -9629,30 +10060,30 @@ function DataTab({ data, update, validations, calculationAudit }) {
 
   const createManualBackup = () => {
     const result = createManualStorageBackup(data, "manual");
-    if (!result.ok) return alert(`백업 실패: ${result.error}`);
+    if (!result.ok) return showToast(`백업 실패: ${result.error}`, 'error');
     refreshBackups();
     setStatusMessage("수동 복원 지점을 생성했습니다.");
-    alert("수동 백업이 생성되었습니다.");
+    showToast('수동 백업이 생성되었습니다.', 'success');
   };
 
   const restoreSelectedBackup = (key) => {
     const targetKey = key || selectedBackupKey;
-    if (!targetKey) return alert("복원할 백업을 선택하세요.");
-    if (!window.confirm("현재 데이터는 자동 백업 후 선택한 시점으로 복원됩니다. 계속할까요?")) return;
+    if (!targetKey) return showToast('복원할 백업을 선택하세요.', 'warn');
+    if (!window.confirm("선택한 시점으로 복원할까요?")) return;
     const result = restoreStorageBackup(targetKey);
-    if (!result.ok) return alert(`복원 실패: ${result.error}`);
+    if (!result.ok) return showToast(`복원 실패: ${result.error}`, 'error');
     update(() => result.data);
     refreshBackups();
     setStatusMessage("선택한 백업으로 복원했습니다.");
-    alert("복원 완료");
+    showToast('복원 완료', 'success');
   };
 
   const deleteSelectedBackup = (key) => {
     const targetKey = key || selectedBackupKey;
-    if (!targetKey) return alert("삭제할 백업을 선택하세요.");
-    if (!window.confirm("선택한 백업을 삭제할까요?")) return;
+    if (!targetKey) return showToast('삭제할 백업을 선택하세요.', 'warn');
+    if (!window.confirm("이 백업을 삭제할까요?")) return;
     const result = deleteStorageBackup(targetKey);
-    if (!result.ok) return alert(`삭제 실패: ${result.error}`);
+    if (!result.ok) return showToast(`삭제 실패: ${result.error}`, 'error');
     refreshBackups();
     setStatusMessage("선택한 백업을 삭제했습니다.");
   };
@@ -9661,15 +10092,15 @@ function DataTab({ data, update, validations, calculationAudit }) {
     const rd = new FileReader();
     rd.onload = () => {
       const result = validateImportedAppData(rd.result);
-      if (!result.ok) return alert(`복원 실패: ${result.error}`);
-      if (!window.confirm("현재 데이터를 자동 백업한 뒤 업로드한 JSON으로 복원할까요?")) return;
+      if (!result.ok) return showToast(`복원 실패: ${result.error}`, 'error');
+      if (!window.confirm("업로드한 파일로 복원할까요?")) return;
       createManualStorageBackup(data, "before-import");
       update(() => result.data);
       refreshBackups();
       setStatusMessage("외부 JSON 파일로 복원했습니다.");
-      alert("복원 완료");
+      showToast('복원 완료', 'success');
     };
-    rd.onerror = () => alert("파일을 읽지 못했습니다.");
+    rd.onerror = () => showToast('파일을 읽지 못했습니다.', 'error');
     rd.readAsText(file);
   };
 
@@ -9682,6 +10113,10 @@ function DataTab({ data, update, validations, calculationAudit }) {
 
   return (
     <div className="stack">
+      {showPrivacyLocal&&<PrivacyModal onClose={()=>setShowPrivacyLocal(false)}/>}
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:4}}>
+        <button className="btn btn-sm btn-ghost" onClick={()=>setShowPrivacyLocal(true)}>📋 개인정보처리방침</button>
+      </div>
       <div className="card backup-hero-card">
         <div className="row-between" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
           <div>
@@ -9793,7 +10228,7 @@ function DataTab({ data, update, validations, calculationAudit }) {
             <span className="badge badge-red">주의</span>
           </div>
           <div className="stack">
-            <button className="btn btn-danger" onClick={()=>{ if(!window.confirm("현재 데이터를 수동 백업한 뒤 전체 초기화할까요?")) return; createManualStorageBackup(data,"before-clear"); update(()=>emptyData()); refreshBackups(); setStatusMessage("전체 데이터를 초기화했습니다. 초기화 직전 백업이 생성되었습니다."); }}>전체 초기화</button>
+            <button className="btn btn-danger" onClick={()=>{ if(!window.confirm("전체 초기화할까요? 자동 백업 후 진행됩니다.")) return; createManualStorageBackup(data,"before-clear"); update(()=>emptyData()); refreshBackups(); setStatusMessage("전체 데이터를 초기화했습니다. 초기화 직전 백업이 생성되었습니다."); }}>전체 초기화</button>
             <button className="btn btn-ghost" onClick={()=>{ localStorage.removeItem(OB_KEY); window.location.reload(); }} title="온보딩 위자드를 다시 보여줍니다">🚀 온보딩 다시 보기</button>
             <button className="btn btn-ghost" onClick={refreshBackups}>백업 목록 새로고침</button>
           </div>
@@ -10467,7 +10902,7 @@ const NAV = [
   { id:"monthlyReport", icon:"🧾", label:"월간 리포트" },
   { id:"decision", icon:"🧭", label:"의사결정 센터" },
   { id:"goals", icon:"🎯", label:"목표 자금관리" },
-  { id:"cfo", icon:"🏛️", label:"CFO 종합판단" },
+  { id:"cfo", icon:"🏛️", label:"재무현황 요약" },
   { id:"automation", icon:"🤖", label:"자동화 시스템" },
   { section: "관리" },
   { id:"settings", icon:"⚙", label:"설정" },
@@ -10475,7 +10910,7 @@ const NAV = [
   { id:"data", icon:"💾", label:"데이터·백업" },
 ];
 
-const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", risk:"리스크 분석", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", monthlyReport:"월간 리포트", decision:"의사결정 센터", goals:"목표 자금관리", cfo:"CFO 종합판단", automation:"자동화 시스템", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
+const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채", portfolio:"투자 포트폴리오", budget:"가계부", planning:"목표·계획", professional:"전문진단", risk:"리스크 분석", analysis:"재무분석", tax:"세금·절세", simulation:"미래 시뮬레이션", monthlyReport:"월간 리포트", decision:"의사결정 센터", goals:"목표 자금관리", cfo:"재무현황 요약", automation:"자동화 시스템", settings:"설정", accounts:"계좌관리", data:"데이터 관리" };
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -10486,6 +10921,7 @@ export default function App() {
   // ── 온보딩: localStorage 플래그로 최초 1회만 표시
   const [showOnboarding,setShowOnboarding]=useState(()=>!localStorage.getItem(OB_KEY));
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   // ── 다크/라이트 테마
   const [theme,setTheme]=useState(()=>localStorage.getItem("season-theme")||"dark");
@@ -10887,11 +11323,15 @@ export default function App() {
             {tab==="settings"&&<SettingsTab data={data} update={update}/>}
             {tab==="accounts"&&<AccountsTab data={data} update={update}/>}
             {tab==="data"&&<DataTab data={data} update={update} validations={validations} calculationAudit={calculationAudit}/>}
+          <div className="legal-footer">
+            이 서비스는 투자자문업 미등록 개인 재무 계산기입니다. 모든 수치·분석·제안은 참고용이며 투자 결정의 근거로 사용하지 마세요. 실제 투자·세무 결정은 공인 금융전문가 또는 세무사와 상담하시기 바랍니다.
+          </div>
           </div>
         </div>
       </div>
 
 
+      {showPrivacy&&<PrivacyModal onClose={()=>setShowPrivacy(false)}/>}
       {/* FAB 간편입력 */}
       {!showOnboarding && (
         <>
