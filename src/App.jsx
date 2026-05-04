@@ -2776,13 +2776,6 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 :root[data-theme='light'] .mlo-header{background:linear-gradient(135deg,rgba(80,96,232,.14),rgba(23,158,94,.06))}
 :root[data-theme='light'] .mlo-logo-mark{background:linear-gradient(135deg,#5060e8,#6070ff)}
 
-
-/* ── SMS 패턴 관리 ── */
-.pattern-regex{font-family:monospace;font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
-/* ── 사용 분석 바 차트 ── */
-.analytics-bar-wrap{height:60px;display:flex;align-items:flex-end;gap:6px;margin-top:12px}
-.analytics-bar{flex:1;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px;transition:.3s ease}
-.analytics-bar.empty{background:var(--surface3)}
 /* ── 면책 고지 배너 ── */
 .disclaimer-banner{display:flex;align-items:flex-start;gap:10px;padding:10px 16px;background:rgba(240,180,41,.08);border:1px solid rgba(240,180,41,.2);border-radius:10px;margin-bottom:14px;font-size:11px;color:var(--text3);line-height:1.5}
 .disclaimer-banner strong{color:var(--amber);font-size:11px;white-space:nowrap}
@@ -3398,7 +3391,6 @@ function AICoachPanel({ coach }) {
         </div>
       )}
     </div>
-    </ToastProvider>
   );
 }
 
@@ -5596,250 +5588,6 @@ function PrivacyModal({ onClose }) {
   );
 }
 
-
-// ─── 사용 분석 시스템 ────────────────────────────────────────────────────────
-const ANALYTICS_KEY = "season-analytics-v1";
-const MAX_ANALYTICS_SESSIONS = 50;
-
-function loadAnalytics() {
-  try { return JSON.parse(localStorage.getItem(ANALYTICS_KEY)||"{}"); } catch { return {}; }
-}
-function saveAnalytics(data) {
-  try { localStorage.setItem(ANALYTICS_KEY, JSON.stringify(data)); } catch {}
-}
-
-function recordTabVisit(tabId, durationMs=0) {
-  const a = loadAnalytics();
-  const today = new Date().toISOString().slice(0,10);
-  if (!a.tabStats) a.tabStats = {};
-  if (!a.tabStats[tabId]) a.tabStats[tabId] = { visits:0, totalTimeMs:0, lastVisit:"" };
-  a.tabStats[tabId].visits += 1;
-  a.tabStats[tabId].totalTimeMs += durationMs;
-  a.tabStats[tabId].lastVisit = today;
-  if (!a.dailySessions) a.dailySessions = {};
-  if (!a.dailySessions[today]) a.dailySessions[today] = { date:today, tabVisits:{}, actions:[] };
-  a.dailySessions[today].tabVisits[tabId] = (a.dailySessions[today].tabVisits[tabId]||0)+1;
-  // 오래된 세션 정리
-  const days = Object.keys(a.dailySessions).sort().reverse();
-  if (days.length > MAX_ANALYTICS_SESSIONS) {
-    days.slice(MAX_ANALYTICS_SESSIONS).forEach(d => delete a.dailySessions[d]);
-  }
-  saveAnalytics(a);
-}
-
-function recordAction(actionType, detail="") {
-  const a = loadAnalytics();
-  const today = new Date().toISOString().slice(0,10);
-  if (!a.dailySessions) a.dailySessions = {};
-  if (!a.dailySessions[today]) a.dailySessions[today] = { date:today, tabVisits:{}, actions:[] };
-  a.dailySessions[today].actions.push({ type:actionType, detail:detail.slice(0,50), at:new Date().toISOString() });
-  if (a.dailySessions[today].actions.length > 200) a.dailySessions[today].actions = a.dailySessions[today].actions.slice(-100);
-  if (!a.actionCounts) a.actionCounts = {};
-  a.actionCounts[actionType] = (a.actionCounts[actionType]||0)+1;
-  saveAnalytics(a);
-}
-
-function getAnalyticsSummary() {
-  const a = loadAnalytics();
-  const tabStats = a.tabStats || {};
-  const actionCounts = a.actionCounts || {};
-  const dailySessions = a.dailySessions || {};
-  
-  // 탭별 통계 정렬
-  const topTabs = Object.entries(tabStats)
-    .map(([id, s]) => ({ id, ...s, avgTimeMs: s.visits > 0 ? s.totalTimeMs/s.visits : 0 }))
-    .sort((a,b) => b.visits - a.visits);
-  
-  // 일별 활성도
-  const days = Object.values(dailySessions).sort((a,b) => a.date.localeCompare(b.date)).slice(-30);
-  
-  // 가장 많이 쓰는 기능
-  const topActions = Object.entries(actionCounts)
-    .map(([type, count]) => ({ type, count }))
-    .sort((a,b) => b.count - a.count)
-    .slice(0,10);
-  
-  // 활성 일수
-  const activeDays = Object.keys(dailySessions).filter(d => {
-    const s = dailySessions[d];
-    return Object.keys(s.tabVisits||{}).length > 0;
-  }).length;
-  
-  // 최근 7일 활성도
-  const last7 = new Array(7).fill(0).map((_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6-i));
-    const key = d.toISOString().slice(0,10);
-    const session = dailySessions[key] || {};
-    return { date:key, visits: Object.values(session.tabVisits||{}).reduce((s,v)=>s+v,0), actions:(session.actions||[]).length };
-  });
-  
-  return { topTabs, topActions, days, activeDays, last7, totalTabVisits: topTabs.reduce((s,t)=>s+t.visits,0) };
-}
-
-// ─── 사용 분석 대시보드 UI ────────────────────────────────────────────────────
-function AnalyticsDashboard() {
-  const [summary, setSummary] = React.useState(() => getAnalyticsSummary());
-  const [showClear, setShowClear] = React.useState(false);
-  
-  const refresh = () => setSummary(getAnalyticsSummary());
-  
-  const clearAnalytics = () => {
-    localStorage.removeItem(ANALYTICS_KEY);
-    setSummary(getAnalyticsSummary());
-    setShowClear(false);
-  };
-
-  const PAGE_NAMES = {
-    dashboard:"대시보드", transactions:"거래내역", assets:"자산·부채",
-    portfolio:"포트폴리오", budget:"가계부", planning:"목표", professional:"전문진단",
-    risk:"리스크", analysis:"재무분석", tax:"세금", simulation:"시뮬레이션",
-    monthlyReport:"월간리포트", decision:"의사결정", goals:"목표자금", cfo:"CFO",
-    automation:"자동화", settings:"설정", accounts:"계좌", data:"데이터"
-  };
-
-  const ACTION_NAMES = {
-    save_transaction:"거래 저장", delete_transaction:"거래 삭제", edit_transaction:"거래 수정",
-    quick_add:"간편입력", import_sms:"SMS 가져오기", import_csv:"CSV 가져오기",
-    save_asset:"자산 저장", save_portfolio:"종목 저장", fetch_quote:"시세 조회",
-    fetch_fx:"환율 조회", backup_create:"백업 생성", backup_restore:"백업 복원",
-    cfo_execute:"CFO 실행", tab_visit:"탭 방문",
-  };
-
-  const fmtTime = (ms) => {
-    if (ms < 60000) return `${Math.round(ms/1000)}초`;
-    if (ms < 3600000) return `${Math.round(ms/60000)}분`;
-    return `${(ms/3600000).toFixed(1)}시간`;
-  };
-
-  const maxVisits = Math.max(...summary.topTabs.map(t=>t.visits), 1);
-  const maxDay = Math.max(...summary.last7.map(d=>d.visits), 1);
-
-  return (
-    <div className="stack">
-      <div className="card" style={{background:"linear-gradient(135deg,var(--surface),rgba(108,125,255,.08))",borderColor:"rgba(108,125,255,.22)"}}>
-        <div className="card-title">
-          <div>
-            <h3>📊 내 앱 사용 통계</h3>
-            <p style={{fontSize:12,color:"var(--text3)",marginTop:4}}>탭 방문, 기능 사용 패턴을 로컬에 저장해 나에게 맞는 사용 흐름을 파악합니다. 외부로 전송되지 않습니다.</p>
-          </div>
-          <div className="row">
-            <button className="btn btn-sm btn-ghost" onClick={refresh}>새로고침</button>
-            <button className="btn btn-sm btn-danger" onClick={()=>setShowClear(true)}>통계 초기화</button>
-          </div>
-        </div>
-        {showClear && (
-          <div className="alert alert-warn" style={{marginBottom:12}}>
-            <div className="row-between">
-              <span>사용 통계를 초기화할까요? 데이터는 복구되지 않습니다.</span>
-              <div className="row"><button className="btn btn-sm btn-danger" onClick={clearAnalytics}>초기화</button><button className="btn btn-sm btn-ghost" onClick={()=>setShowClear(false)}>취소</button></div>
-            </div>
-          </div>
-        )}
-        <div className="kpi-grid">
-          <div className="kpi-card"><div className="kpi-label">총 탭 방문</div><div className="kpi-value">{summary.totalTabVisits}</div><div className="kpi-sub muted">누적 방문 횟수</div></div>
-          <div className="kpi-card"><div className="kpi-label">활성 사용 일수</div><div className="kpi-value">{summary.activeDays}</div><div className="kpi-sub muted">기록된 날</div></div>
-          <div className="kpi-card"><div className="kpi-label">가장 많이 방문</div><div className="kpi-value" style={{fontSize:16}}>{summary.topTabs[0]?PAGE_NAMES[summary.topTabs[0].id]||summary.topTabs[0].id:"-"}</div></div>
-          <div className="kpi-card"><div className="kpi-label">가장 많이 쓴 기능</div><div className="kpi-value" style={{fontSize:16}}>{summary.topActions[0]?ACTION_NAMES[summary.topActions[0].type]||summary.topActions[0].type:"-"}</div></div>
-        </div>
-      </div>
-
-      {/* 최근 7일 활성도 차트 */}
-      <div className="card">
-        <h3>최근 7일 활성도</h3>
-        <div style={{display:"flex",gap:8,alignItems:"flex-end",height:80,marginTop:12}}>
-          {summary.last7.map(d => (
-            <div key={d.date} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-              <div style={{width:"100%",height:60,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
-                <div style={{
-                  width:"100%",
-                  height:`${Math.max(d.visits/maxDay*100,2)}%`,
-                  background:d.visits>0?"var(--accent)":"var(--surface3)",
-                  borderRadius:4,
-                  transition:".3s ease",
-                  minHeight:d.visits>0?4:2,
-                }}/>
-              </div>
-              <span style={{fontSize:9,color:"var(--text3)"}}>{d.date.slice(5)}</span>
-              {d.visits>0 && <span style={{fontSize:9,color:"var(--accent)",fontWeight:700}}>{d.visits}</span>}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="g2">
-        {/* 탭별 방문 현황 */}
-        <div className="card">
-          <h3>탭별 방문 현황</h3>
-          {summary.topTabs.length ? summary.topTabs.slice(0,10).map(t => (
-            <div key={t.id} style={{marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
-                <span style={{fontWeight:600,color:"var(--text)"}}>{PAGE_NAMES[t.id]||t.id}</span>
-                <div style={{display:"flex",gap:8,color:"var(--text3)"}}>
-                  <span>{t.visits}회</span>
-                  {t.avgTimeMs>0 && <span>평균 {fmtTime(t.avgTimeMs)}</span>}
-                </div>
-              </div>
-              <div style={{height:4,background:"var(--surface3)",borderRadius:99,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${t.visits/maxVisits*100}%`,background:"var(--accent)",borderRadius:99}}/>
-              </div>
-            </div>
-          )) : <div className="empty">아직 방문 기록이 없습니다.</div>}
-        </div>
-
-        {/* 기능 사용 빈도 */}
-        <div className="card">
-          <h3>기능 사용 빈도</h3>
-          {summary.topActions.length ? (
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>기능</th><th className="td-right">사용 횟수</th></tr></thead>
-                <tbody>
-                  {summary.topActions.map(a => (
-                    <tr key={a.type}>
-                      <td>{ACTION_NAMES[a.type]||a.type}</td>
-                      <td className="td-right td-mono">{a.count}회</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : <div className="empty">아직 기능 사용 기록이 없습니다.</div>}
-          <div style={{marginTop:12,fontSize:11,color:"var(--text3)"}}>
-            모든 통계는 이 기기의 로컬 저장소에만 보관됩니다.
-          </div>
-        </div>
-      </div>
-
-      {/* 일별 활성도 상세 */}
-      {summary.days.length > 0 && (
-        <div className="card">
-          <h3>일별 활성도 (최근 30일)</h3>
-          <div className="table-wrap">
-            <table>
-              <thead><tr><th>날짜</th><th className="td-right">탭 방문</th><th className="td-right">액션 수</th><th>가장 많이 방문한 탭</th></tr></thead>
-              <tbody>
-                {summary.days.slice().reverse().slice(0,14).map(d => {
-                  const topTab = Object.entries(d.tabVisits||{}).sort((a,b)=>b[1]-a[1])[0];
-                  const totalVisits = Object.values(d.tabVisits||{}).reduce((s,v)=>s+v,0);
-                  return (
-                    <tr key={d.date}>
-                      <td>{d.date}</td>
-                      <td className="td-right td-mono">{totalVisits}</td>
-                      <td className="td-right td-mono">{(d.actions||[]).length}</td>
-                      <td>{topTab ? `${PAGE_NAMES[topTab[0]]||topTab[0]} (${topTab[1]}회)` : "-"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── 면책 고지 배너 ───────────────────────────────────────────────────────────
 function DisclaimerBanner({ context="general" }) {
   const msgs = {
@@ -5921,7 +5669,6 @@ function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose 
 
   const handleSave = () => {
     if (!canSave) return;
-    recordAction("quick_add", form.type);
     update(d => {
       const row = { ...form, amount: n(form.amount), id: uid() };
       return { ...d, transactions: [...d.transactions, row] };
@@ -6092,360 +5839,171 @@ function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose 
 }
 
 
-// ─── SMS 파싱 유틸 ────────────────────────────────────────────────────────────
-
-// ─── SMS 패턴 학습 시스템 ─────────────────────────────────────────────────────
-const DEFAULT_SMS_PATTERNS = [
-  { id:"p-shinhan",   name:"신한카드",   regex:"\\[?신한카드\\]?\\s*([\\d,]+)원\\s*[\\(\\[（]?([^\\)\\]）\\n]+)[\\)\\]）]?",   card:"신한카드",   active:true },
-  { id:"p-kb",        name:"KB국민카드", regex:"\\[?KB국민카드\\]?\\s*([\\d,]+)원\\s*승인?\\s*[\\(\\[（]?([^\\)\\]）\\n]+)[\\)\\]）]?", card:"KB국민카드", active:true },
-  { id:"p-samsung",   name:"삼성카드",   regex:"\\[?삼성카드\\]?\\s*([\\d,]+)원\\s*[\\(\\[（]?([^\\)\\]）\\n]+)[\\)\\]）]?",   card:"삼성카드",   active:true },
-  { id:"p-hyundai",   name:"현대카드",   regex:"\\[?현대카드\\]?\\s*([\\d,]+)원\\s*[\\(\\[（]?([^\\)\\]）\\n]+)[\\)\\]）]?",   card:"현대카드",   active:true },
-  { id:"p-toss",      name:"토스머니",   regex:"토스머니\\s*([\\d,]+)원\\s*결제\\s*[\\(\\[（]?([^\\)\\]）\\n]+)[\\)\\]）]?",      card:"토스",       active:true },
-  { id:"p-kakao",     name:"카카오페이", regex:"카카오페이\\s*([\\d,]+)원\\s*결제\\s*[\\(\\[（]?([^\\)\\]）\\n]+)[\\)\\]）]?",    card:"카카오페이", active:true },
-  { id:"p-hana",      name:"하나카드",   regex:"\\[?하나카드\\]?\\s*([\\d,]+)원\\s*[\\(\\[（]?([^\\)\\]）\\n]+)[\\)\\]）]?",   card:"하나카드",   active:true },
-  { id:"p-woori",     name:"우리카드",   regex:"\\[?우리카드\\]?\\s*([\\d,]+)원\\s*[\\(\\[（]?([^\\)\\]）\\n]+)[\\)\\]）]?",   card:"우리카드",   active:true },
-  { id:"p-lotte",     name:"롯데카드",   regex:"\\[?롯데카드\\]?\\s*([\\d,]+)원\\s*[\\(\\[（]?([^\\)\\]）\\n]+)[\\)\\]）]?",   card:"롯데카드",   active:true },
-  { id:"p-naver",     name:"네이버페이", regex:"네이버페이\\s*([\\d,]+)원\\s*결제\\s*[\\(\\[（]?([^\\)\\]）\\n]+)[\\)\\]）]?",    card:"네이버페이", active:true },
-  { id:"p-payco",     name:"페이코",     regex:"PAYCO\\s*([\\d,]+)원\\s*결제\\s*[\\(\\[（]?([^\\)\\]）\\n]+)[\\)\\]）]?",         card:"페이코",     active:true },
+// ─── 한국 금융기관 통합 SMS 자동기입 엔진 ─────────────────────────────────────
+const KOREAN_FINANCIAL_INSTITUTIONS = [
+  "KB국민은행","국민은행","국민","KB국민카드","국민카드","신한은행","신한","신한카드","우리은행","우리","우리카드",
+  "하나은행","하나","하나카드","NH농협은행","농협은행","농협","농협카드","NH카드","IBK기업은행","기업은행","기업","IBK카드",
+  "SC제일은행","씨티은행","부산은행","대구은행","광주은행","전북은행","경남은행","제주은행",
+  "수협은행","새마을금고","신협","우체국","케이뱅크","카카오뱅크","토스뱅크",
+  "삼성카드","현대카드","롯데카드","BC카드","비씨카드","카카오페이","네이버페이","토스","페이코","쿠팡페이","제로페이"
 ];
+const CARD_INSTITUTION_HINTS = ["카드","페이","토스","PAY","pay","Pay","삼성","현대","롯데","BC","비씨"];
+const SMS_CATEGORY_RULE_STORAGE_KEY = "asset-app-sms-category-rules-v1";
+const SMS_PATTERN_RULE_STORAGE_KEY = "asset-app-sms-pattern-rules-v1";
 
-const DEFAULT_CATEGORY_RULES = [
-  { id:"cr-coffee",   pattern:"스타벅스|커피|카페|투썸|이디야|메가|할리스|빽다방|폴바셋",       cat1:"식비",     cat2:"커피/간식" },
-  { id:"cr-delivery", pattern:"배달의민족|요기요|쿠팡이츠|배민",                                  cat1:"식비",     cat2:"배달" },
-  { id:"cr-fastfood", pattern:"맥도날드|버거킹|롯데리아|KFC|서브웨이|파리바게뜨|뚜레쥬르",       cat1:"식비",     cat2:"외식" },
-  { id:"cr-mart",     pattern:"마트|이마트|홈플러스|롯데마트|코스트코|GS25|CU|세븐일레븐|미니스톱",cat1:"식비",     cat2:"식재료" },
-  { id:"cr-fuel",     pattern:"주유|GS칼텍스|SK에너지|현대오일|S-OIL|오일뱅크",                  cat1:"교통",     cat2:"주유" },
-  { id:"cr-transit",  pattern:"지하철|버스|택시|카카오모빌리티|T-머니|교통카드",                   cat1:"교통",     cat2:"대중교통" },
-  { id:"cr-telecom",  pattern:"KT|SKT|LGU|통신|핸드폰|휴대폰",                                   cat1:"주거",     cat2:"통신비" },
-  { id:"cr-streaming",pattern:"넷플릭스|유튜브|Spotify|왓챠|티빙|웨이브|디즈니|쿠팡플레이",       cat1:"취미여행", cat2:"구독" },
-  { id:"cr-medical",  pattern:"병원|의원|약국|치과|한의원|피부과",                                 cat1:"생활",     cat2:"의료" },
-  { id:"cr-insurance",pattern:"보험|삼성생명|한화생명|교보생명|현대해상",                          cat1:"보험세금", cat2:"보험료" },
-  { id:"cr-beauty",   pattern:"올리브영|다이소|화장품|미용|헤어|네일",                             cat1:"생활",     cat2:"미용" },
-  { id:"cr-sport",    pattern:"헬스|피트니스|요가|필라테스|GX|스포츠",                             cat1:"취미여행", cat2:"운동" },
-];
-
-// 학습된 패턴으로 카테고리 추측 (사용자 정의 우선)
-function guessCategoryWithLearning(content, categoryRules=[]) {
-  const c = content.toLowerCase();
-  const allRules = [...categoryRules, ...DEFAULT_CATEGORY_RULES];
-  for (const rule of allRules) {
-    try {
-      if (new RegExp(rule.pattern, "i").test(content)) {
-        return { cat1: rule.cat1, cat2: rule.cat2 || "기타" };
-      }
-    } catch {}
+function loadUserSmsCategoryRules() {
+  try {
+    const rows = JSON.parse(localStorage.getItem(SMS_CATEGORY_RULE_STORAGE_KEY) || "[]");
+    return Array.isArray(rows) ? rows.filter(r => r && r.pattern && r.cat1) : [];
+  } catch {
+    return [];
   }
-  return { cat1: "기타지출", cat2: "기타" };
 }
+function loadUserSmsPatternRules() {
+  try {
+    const rows = JSON.parse(localStorage.getItem(SMS_PATTERN_RULE_STORAGE_KEY) || "[]");
+    return Array.isArray(rows) ? rows.filter(r => r && r.pattern) : [];
+  } catch {
+    return [];
+  }
+}
+function normalizeSmsLine(line) {
+  return String(line || "")
+    .replace(/[\u200b\ufeff]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/[￦₩]/g, "원")
+    .trim();
+}
+function detectSmsInstitution(line) {
+  const normalized = normalizeSmsLine(line);
+  return KOREAN_FINANCIAL_INSTITUTIONS.find(name => normalized.includes(name))
+    || (normalized.match(/\[([^\]]{2,14})\]/)?.[1] || "금융알림");
+}
+function parseSmsDate(line) {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m1 = line.match(/(20\d{2})[.\/\-년\s]+(\d{1,2})[.\/\-월\s]+(\d{1,2})/);
+  if (m1) return `${m1[1]}-${String(m1[2]).padStart(2,"0")}-${String(m1[3]).padStart(2,"0")}`;
+  const m2 = line.match(/(\d{1,2})[.\/월\-\s]+(\d{1,2})\s*(?:일)?\s*(?:\d{1,2}:\d{2})?/);
+  if (m2) return `${y}-${String(m2[1]).padStart(2,"0")}-${String(m2[2]).padStart(2,"0")}`;
+  return todayISO();
+}
+function extractSmsAmount(line) {
+  const matches = [...String(line).matchAll(/([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\s*(?:원|KRW|₩)/gi)]
+    .map(m => Number(String(m[1]).replace(/,/g, "")))
+    .filter(v => Number.isFinite(v) && v > 0 && v < 1000000000);
+  if (!matches.length) return 0;
+  // 대부분 첫 금액이 거래금액, 마지막 금액은 잔액인 경우가 많음
+  return matches[0];
+}
+function detectSmsType(line, institution="") {
+  const s = normalizeSmsLine(line);
+  if (/(취소|승인취소|결제취소|매출취소|환불|환급|캐시백)/.test(s)) return { type:"수입", cat1:"기타수입", cat2:"환급", direction:"refund" };
+  if (/(입금|받으셨|입금완료|급여|월급|이자|배당|환급)/.test(s) && !/(출금|결제|승인|사용|인출|납부)/.test(s)) return { type:"수입", cat1:"기타수입", cat2:/(급여|월급)/.test(s)?"월급":/(이자|배당)/.test(s)?"이자":"기타", direction:"in" };
+  if (/(체크카드|카드|승인|결제|사용|매입|일시불|할부|페이|PAY|pay|Pay)/.test(s) || CARD_INSTITUTION_HINTS.some(x => institution.includes(x))) return { type:"지출", cat1:"기타지출", cat2:"기타", direction:"card" };
+  if (/(출금|인출|이체|송금|자동이체|납부|CMS|공과금|수수료)/.test(s)) return { type:"지출", cat1:"기타지출", cat2:"기타", direction:"out" };
+  return { type:"지출", cat1:"기타지출", cat2:"기타", direction:"unknown" };
+}
+function extractSmsContent(line, institution="") {
+  const original = normalizeSmsLine(line);
+  const bracket = original.match(/[\(\[（]([^\)\]）]{2,40})[\)\]）]/)?.[1];
+  if (bracket && !/카드|은행|승인|출금|입금|잔액|누적|한도/.test(bracket)) return bracket.trim();
 
-// 학습된 패턴으로 SMS 파싱 (사용자 정의 패턴 우선)
-function parseSmsTextWithLearning(text, accountNamesOut=[], smsPatterns=[], categoryRules=[]) {
-  const allPatterns = [...smsPatterns, ...DEFAULT_SMS_PATTERNS].filter(p => p.active !== false);
-  const results = [];
-  const today = new Date().toISOString().slice(0,10);
-  
-  for (const patDef of allPatterns) {
+  const slashParts = original.split(/[\/|]/).map(x => x.trim()).filter(Boolean);
+  const candidateFromSlash = slashParts.find(p =>
+    /[가-힣A-Za-z]/.test(p) &&
+    !/[0-9,]+\s*원/.test(p) &&
+    !/(잔액|누적|한도|승인|결제|출금|입금|사용|일시불|체크|카드|은행|가능|후불)/.test(p)
+  );
+  if (candidateFromSlash) return candidateFromSlash.slice(0, 40);
+
+  let cleaned = original
+    .replace(new RegExp(KOREAN_FINANCIAL_INSTITUTIONS.map(x => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g"), " ")
+    .replace(/\[[^\]]+\]/g, " ")
+    .replace(/20\d{2}[.\/\-년\s]+\d{1,2}[.\/\-월\s]+\d{1,2}\s*(?:일)?/g, " ")
+    .replace(/\d{1,2}[.\/월\-\s]+\d{1,2}\s*(?:일)?\s*(?:\d{1,2}:\d{2})?/g, " ")
+    .replace(/[0-9]{1,3}(?:,[0-9]{3})+\s*(?:원|KRW)|[0-9]+\s*(?:원|KRW)/gi, " ")
+    .replace(/(승인취소|결제취소|승인|결제|출금|입금|사용|체크카드|일시불|할부|잔액|누적|한도|가능|알림|완료|이체|송금|납부|인출|후불|교통)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.slice(0, 40) || "금융거래";
+}
+function findMatchedAccount(names=[], institution="", fallbackKeyword="") {
+  const cleanInst = String(institution || "").replace(/은행|카드|페이|뱅크|금고/g, "");
+  return names.find(a => a.includes(institution))
+    || names.find(a => cleanInst && a.includes(cleanInst))
+    || names.find(a => fallbackKeyword && a.includes(fallbackKeyword))
+    || names[0]
+    || "";
+}
+function applyUserSmsPatternRules(text, accountNamesIn=[], accountNamesOut=[]) {
+  const rows = [];
+  const rules = loadUserSmsPatternRules();
+  for (const rule of rules) {
     try {
-      const re = new RegExp(patDef.regex, "g");
+      const re = new RegExp(rule.pattern, rule.flags || "g");
       let m;
       while ((m = re.exec(text)) !== null) {
-        const amount = Number((m[1]||"").replace(/,/g,""));
-        const content = (m[2]||"").trim().slice(0,30) || "카드결제";
-        if (amount > 0 && amount < 100000000) {
-          const { cat1, cat2 } = guessCategory(content);
-          const outAccount = accountNamesOut.find(a => a.includes((patDef.card||"").replace("카드","").trim())) || 
-                            accountNamesOut.find(a=>a.includes("카드")) || "";
-          results.push({
-            id: Math.random().toString(36).slice(2),
-            date: today, type:"지출", cat1, cat2, amount,
-            inAccount:"", outAccount, content,
-            memo:`SMS 파싱: ${patDef.name||patDef.card}`,
-            matchedPattern: patDef.id,
-          });
-        }
-      }
-    } catch(e) { console.warn("패턴 오류:", patDef.name, e.message); }
-  }
-  const seen = new Set();
-  return results.filter(r => { const k=`${r.amount}|${r.content}`; if(seen.has(k)) return false; seen.add(k); return true; });
-}
-
-// ─── SMS 패턴 관리 UI ────────────────────────────────────────────────────────
-function SmsPatternManager({ data, update }) {
-  const showToast = useToast();
-  const patterns = Array.isArray(data.settings?.smsPatterns) ? data.settings.smsPatterns : [];
-  const categoryRules = Array.isArray(data.settings?.categoryRules) ? data.settings.categoryRules : [];
-  const [tab, setTab] = React.useState("patterns");
-  const [testText, setTestText] = React.useState("");
-  const [testResults, setTestResults] = React.useState([]);
-  const [editPattern, setEditPattern] = React.useState(null);
-  const [editRule, setEditRule] = React.useState(null);
-  const emptyPattern = { id:"", name:"", regex:"", card:"", active:true };
-  const emptyRule = { id:"", pattern:"", cat1:"식비", cat2:"기타" };
-
-  const savePattern = () => {
-    if (!editPattern?.name || !editPattern?.regex) { showToast("이름과 정규식을 입력하세요.", "warn"); return; }
-    try { new RegExp(editPattern.regex); } catch { showToast("정규식 형식이 올바르지 않습니다.", "error"); return; }
-    const row = { ...editPattern, id: editPattern.id || ("up-" + Date.now()) };
-    update(d => ({ ...d, settings: { ...d.settings, smsPatterns: editPattern.id
-      ? (d.settings.smsPatterns||[]).map(p => p.id===editPattern.id ? row : p)
-      : [...(d.settings.smsPatterns||[]), row] } }));
-    setEditPattern(null);
-    showToast("패턴 저장 완료", "success");
-  };
-
-  const deletePattern = (id) => {
-    update(d => ({ ...d, settings: { ...d.settings, smsPatterns: (d.settings.smsPatterns||[]).filter(p=>p.id!==id) } }));
-  };
-
-  const togglePattern = (id, active) => {
-    update(d => ({ ...d, settings: { ...d.settings, smsPatterns: (d.settings.smsPatterns||[]).map(p=>p.id===id?{...p,active}:p) } }));
-  };
-
-  const saveRule = () => {
-    if (!editRule?.pattern || !editRule?.cat1) { showToast("패턴과 카테고리를 입력하세요.", "warn"); return; }
-    try { new RegExp(editRule.pattern, "i"); } catch { showToast("정규식 형식이 올바르지 않습니다.", "error"); return; }
-    const row = { ...editRule, id: editRule.id || ("cr-" + Date.now()) };
-    update(d => ({ ...d, settings: { ...d.settings, categoryRules: editRule.id
-      ? (d.settings.categoryRules||[]).map(r => r.id===editRule.id ? row : r)
-      : [...(d.settings.categoryRules||[]), row] } }));
-    setEditRule(null);
-    showToast("규칙 저장 완료", "success");
-  };
-
-  const deleteRule = (id) => {
-    update(d => ({ ...d, settings: { ...d.settings, categoryRules: (d.settings.categoryRules||[]).filter(r=>r.id!==id) } }));
-  };
-
-  const runTest = () => {
-    if (!testText.trim()) { showToast("테스트할 문자를 입력하세요.", "warn"); return; }
-    const results = parseSmsTextWithLearning(testText, [], patterns, categoryRules);
-    setTestResults(results);
-    if (!results.length) showToast("인식된 거래 없음. 패턴을 추가하거나 수정하세요.", "warn");
-  };
-
-  const allPatterns = [...patterns, ...DEFAULT_SMS_PATTERNS];
-  const allRules = [...categoryRules, ...DEFAULT_CATEGORY_RULES];
-  const cat1List = ["식비","주거","교통","생활","보험세금","가족","취미여행","기타지출"];
-
-  return (
-    <div className="stack">
-      <div className="card">
-        <div className="card-title">
-          <h3>📲 SMS 패턴 학습 시스템</h3>
-          <span className="badge badge-accent">사용자 정의 패턴 우선 적용</span>
-        </div>
-        <p style={{fontSize:13,color:"var(--text3)",lineHeight:1.6,marginBottom:14}}>
-          인식 안 되는 카드사 문자 형식을 직접 패턴으로 등록하면 다음 가져오기부터 자동으로 인식됩니다.
-          정규식 첫 번째 캡처그룹은 금액, 두 번째는 가맹점명이어야 합니다.
-        </p>
-        <div className="tab-row">
-          {["patterns","rules","test"].map(t => (
-            <button key={t} className={`tab-chip ${tab===t?"active":""}`} onClick={()=>setTab(t)}>
-              {t==="patterns"?"카드사 패턴":t==="rules"?"카테고리 규칙":"패턴 테스트"}
-            </button>
-          ))}
-        </div>
-
-        {tab==="patterns" && (
-          <div className="stack">
-            {editPattern && (
-              <div style={{padding:16,background:"var(--surface2)",borderRadius:14,border:"1px solid var(--border2)",marginBottom:8}}>
-                <div className="form-grid">
-                  <Field label="패턴 이름"><input value={editPattern.name} onChange={e=>setEditPattern({...editPattern,name:e.target.value})} placeholder="예: 농협카드"/></Field>
-                  <Field label="카드/결제 명칭"><input value={editPattern.card||""} onChange={e=>setEditPattern({...editPattern,card:e.target.value})} placeholder="예: 농협카드"/></Field>
-                </div>
-                <Field label="정규식 패턴">
-                  <input value={editPattern.regex} onChange={e=>setEditPattern({...editPattern,regex:e.target.value})} placeholder="\[?농협카드\]?\s*([\d,]+)원\s*[\(\[（]?([^\)\]）\n]+)[\)\]）]?" style={{fontFamily:"monospace",fontSize:12}}/>
-                  <div className="field-hint">첫 번째 ()는 금액, 두 번째 ()는 가맹점명을 캡처해야 합니다.</div>
-                </Field>
-                <div className="form-actions">
-                  <button className="btn btn-primary" onClick={savePattern}>저장</button>
-                  <button className="btn btn-ghost" onClick={()=>setEditPattern(null)}>취소</button>
-                </div>
-              </div>
-            )}
-            <button className="btn btn-success" onClick={()=>setEditPattern(emptyPattern)}>+ 새 패턴 추가</button>
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>이름</th><th>카드명</th><th>패턴</th><th>타입</th><th>활성</th><th>작업</th></tr></thead>
-                <tbody>
-                  {allPatterns.map((p,i) => (
-                    <tr key={p.id||i}>
-                      <td className="td-name">{p.name}</td>
-                      <td>{p.card}</td>
-                      <td style={{fontFamily:"monospace",fontSize:10,color:"var(--text3)",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis"}}>{p.regex.slice(0,60)}...</td>
-                      <td><span className={`badge ${i<patterns.length?"badge-accent":"badge-muted"}`}>{i<patterns.length?"사용자":"기본"}</span></td>
-                      <td>
-                        {i<patterns.length ? (
-                          <input type="checkbox" checked={p.active!==false} onChange={e=>togglePattern(p.id,e.target.checked)} style={{accentColor:"var(--accent)"}}/>
-                        ) : <span style={{fontSize:11,color:"var(--text3)"}}>항상 활성</span>}
-                      </td>
-                      <td>
-                        {i<patterns.length && (
-                          <div className="row">
-                            <button className="btn btn-sm btn-ghost" onClick={()=>setEditPattern(p)}>수정</button>
-                            <button className="btn btn-sm btn-danger" onClick={()=>deletePattern(p.id)}>삭제</button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {tab==="rules" && (
-          <div className="stack">
-            {editRule && (
-              <div style={{padding:16,background:"var(--surface2)",borderRadius:14,border:"1px solid var(--border2)",marginBottom:8}}>
-                <div className="form-grid">
-                  <Field label="키워드 패턴 (|로 구분)">
-                    <input value={editRule.pattern} onChange={e=>setEditRule({...editRule,pattern:e.target.value})} placeholder="예: 피자헛|도미노|파파존스"/>
-                    <div className="field-hint">여러 키워드는 | 로 구분. 대소문자 무관. 정규식도 가능합니다.</div>
-                  </Field>
-                  <Field label="대분류">
-                    <select value={editRule.cat1} onChange={e=>setEditRule({...editRule,cat1:e.target.value})}>
-                      {cat1List.map(c=><option key={c}>{c}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="소분류"><input value={editRule.cat2||""} onChange={e=>setEditRule({...editRule,cat2:e.target.value})} placeholder="예: 외식"/></Field>
-                </div>
-                <div className="form-actions">
-                  <button className="btn btn-primary" onClick={saveRule}>저장</button>
-                  <button className="btn btn-ghost" onClick={()=>setEditRule(null)}>취소</button>
-                </div>
-              </div>
-            )}
-            <button className="btn btn-success" onClick={()=>setEditRule(emptyRule)}>+ 새 규칙 추가</button>
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>키워드 패턴</th><th>대분류</th><th>소분류</th><th>타입</th><th>작업</th></tr></thead>
-                <tbody>
-                  {allRules.map((r,i) => (
-                    <tr key={r.id||i}>
-                      <td style={{fontFamily:"monospace",fontSize:11,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis"}}>{r.pattern.slice(0,50)}{r.pattern.length>50?"...":""}</td>
-                      <td className="td-name">{r.cat1}</td>
-                      <td>{r.cat2||"-"}</td>
-                      <td><span className={`badge ${i<categoryRules.length?"badge-accent":"badge-muted"}`}>{i<categoryRules.length?"사용자":"기본"}</span></td>
-                      <td>
-                        {i<categoryRules.length && (
-                          <div className="row">
-                            <button className="btn btn-sm btn-ghost" onClick={()=>setEditRule(r)}>수정</button>
-                            <button className="btn btn-sm btn-danger" onClick={()=>deleteRule(r.id)}>삭제</button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {tab==="test" && (
-          <div className="stack">
-            <Field label="테스트할 문자 붙여넣기">
-              <textarea
-                style={{minHeight:140,fontFamily:"monospace",fontSize:12}}
-                placeholder={"[신한카드] 5,900원 결제 (스타벅스)\n[KB국민카드] 32,000원 승인 (올리브영)\n[농협카드] 12,000원 (편의점)"}
-                value={testText}
-                onChange={e=>setTestText(e.target.value)}
-              />
-            </Field>
-            <button className="btn btn-primary" onClick={runTest}>패턴 테스트 실행</button>
-            {testResults.length > 0 && (
-              <div>
-                <div style={{fontSize:13,fontWeight:700,color:"var(--text)",marginBottom:8}}>인식 결과 {testResults.length}건</div>
-                <div className="table-wrap">
-                  <table>
-                    <thead><tr><th>내용</th><th>금액</th><th>대분류</th><th>소분류</th><th>사용 패턴</th></tr></thead>
-                    <tbody>
-                      {testResults.map(r => {
-                        const pat = allPatterns.find(p=>p.id===r.matchedPattern);
-                        return (
-                          <tr key={r.id}>
-                            <td className="td-name">{r.content}</td>
-                            <td className="td-right td-mono text-red">{r.amount.toLocaleString()}원</td>
-                            <td>{r.cat1}</td>
-                            <td>{r.cat2}</td>
-                            <td><span className="badge badge-accent">{pat?.name||r.matchedPattern||"-"}</span></td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function parseSmsText(text, accountNamesOut=[]) {
-  // 카드/결제 알림 패턴들
-  const patterns = [
-    // 신한: [신한카드] 5,900원 (스타벅스)
-    { re: /\[?신한카드\]?\s*([\d,]+)원\s*[\(\[（]?([^\)\]\）
-]+)[\)\]\）]?/g, card:"신한카드" },
-    // 국민: [KB국민카드] 12,000원 승인 (교보문고)
-    { re: /\[?KB국민카드\]?\s*([\d,]+)원\s*승인?\s*[\(\[（]?([^\)\]\）
-]+)[\)\]\）]?/g, card:"KB국민카드" },
-    // 삼성: [삼성카드] 8,500원 (CU)
-    { re: /\[?삼성카드\]?\s*([\d,]+)원\s*[\(\[（]?([^\)\]\）
-]+)[\)\]\）]?/g, card:"삼성카드" },
-    // 현대: [현대카드] 32,000원 (올리브영)
-    { re: /\[?현대카드\]?\s*([\d,]+)원\s*[\(\[（]?([^\)\]\）
-]+)[\)\]\）]?/g, card:"현대카드" },
-    // 토스: 토스머니 3,500원 결제 (편의점)
-    { re: /토스머니\s*([\d,]+)원\s*결제\s*[\(\[（]?([^\)\]\）
-]+)[\)\]\）]?/g, card:"토스" },
-    // 카카오페이: 카카오페이 6,000원 결제 (배달의민족)
-    { re: /카카오페이\s*([\d,]+)원\s*결제\s*[\(\[（]?([^\)\]\）
-]+)[\)\]\）]?/g, card:"카카오페이" },
-    // 일반 패턴: 숫자원 (가맹점)
-    { re: /([\d,]+)원\s*(?:승인|결제|사용)\s*[\(\[（]([^\)\]\）
-]{2,20})[\)\]\）]/g, card:"신용카드" },
-  ];
-
-  const results = [];
-  const today = new Date().toISOString().slice(0,10);
-
-  for (const { re, card } of patterns) {
-    let m;
-    re.lastIndex = 0;
-    while ((m = re.exec(text)) !== null) {
-      const amount = Number(m[1].replace(/,/g,""));
-      const content = m[2]?.trim().slice(0,30) || "카드결제";
-      if (amount > 0 && amount < 100000000) {
-        // 카테고리 자동 추정
-        const cat1 = guessCategory(content);
-        const outAccount = accountNamesOut.find(a => a.includes(card.replace("카드","").trim())) || accountNamesOut.find(a=>a.includes("카드")) || "";
-        results.push({
-          id: Math.random().toString(36).slice(2),
-          date: today,
-          type: "지출",
-          cat1,
-          cat2: "기타",
-          amount,
-          inAccount: "",
-          outAccount,
-          content,
-          memo: `SMS 파싱: ${card}`,
+        const amount = Number(String(m[Number(rule.amountGroup || 1)] || "").replace(/,/g,""));
+        if (!amount) continue;
+        const content = String(m[Number(rule.contentGroup || 2)] || rule.content || "금융거래").trim().slice(0,40);
+        const date = rule.dateGroup ? parseSmsDate(String(m[Number(rule.dateGroup)] || todayISO())) : todayISO();
+        const type = rule.type || "지출";
+        const cat1 = rule.cat1 || guessCategory(content);
+        const cat2 = rule.cat2 || guessSubcategory(content, cat1);
+        rows.push({
+          id: uid(), date, type, cat1, cat2, amount,
+          inAccount: type === "수입" ? findMatchedAccount(accountNamesIn, rule.institution || "") : "",
+          outAccount: type === "지출" ? findMatchedAccount(accountNamesOut, rule.institution || "", "카드") : "",
+          content, memo: `사용자 SMS 패턴: ${rule.name || rule.institution || "직접등록"}`,
         });
       }
+    } catch (error) {
+      console.warn("사용자 SMS 패턴 오류:", rule, error);
     }
   }
-  // 중복 제거 (같은 금액+내용)
+  return rows;
+}
+function parseSmsText(text, accountNamesInOrOut=[], maybeOut=[]) {
+  const accountNamesIn = maybeOut.length ? accountNamesInOrOut : [];
+  const accountNamesOut = maybeOut.length ? maybeOut : accountNamesInOrOut;
+  const rawText = String(text || "");
+  const userPatternRows = applyUserSmsPatternRules(rawText, accountNamesIn, accountNamesOut);
+  const lines = rawText
+    .split(/\r?\n|(?=\[[^\]]+(?:은행|카드|페이|뱅크|PAY|pay|Pay)\])|(?=(?:KB|NH|IBK|신한|우리|하나|농협|기업|카카오|토스|네이버|페이코|삼성|현대|롯데|BC|비씨))/)
+    .map(normalizeSmsLine)
+    .filter(line => line && /[0-9,]+\s*(?:원|KRW|₩)/i.test(line));
+
+  const results = [...userPatternRows];
+  for (const line of lines) {
+    const amount = extractSmsAmount(line);
+    if (!amount) continue;
+    const institution = detectSmsInstitution(line);
+    const date = parseSmsDate(line);
+    const detected = detectSmsType(line, institution);
+    const content = extractSmsContent(line, institution);
+    const cat1 = detected.cat1 === "기타지출" || detected.cat1 === "기타수입" ? guessCategory(content) : detected.cat1;
+    const cat2 = detected.cat2 === "기타" ? guessSubcategory(content, cat1) : detected.cat2;
+    const isIncome = detected.type === "수입";
+    results.push({
+      id: uid(),
+      date,
+      type: detected.type,
+      cat1,
+      cat2,
+      amount,
+      inAccount: isIncome ? findMatchedAccount(accountNamesIn, institution) : "",
+      outAccount: !isIncome ? findMatchedAccount(accountNamesOut, institution, detected.direction === "card" ? "카드" : "") : "",
+      content,
+      memo: `SMS 자동인식: ${institution} · ${detected.direction}`,
+      smsSource: institution,
+      smsRaw: line.slice(0, 160),
+    });
+  }
+
   const seen = new Set();
   return results.filter(r => {
-    const key = `${r.amount}|${r.content}`;
+    const key = `${r.date}|${r.type}|${r.amount}|${r.content}|${r.smsSource || r.memo}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -6453,17 +6011,66 @@ function parseSmsText(text, accountNamesOut=[]) {
 }
 
 function guessCategory(content) {
-  const c = content.toLowerCase();
-  if (/스타벅스|커피|카페|투썸|이디야|메가|할리스/.test(c)) return "식비";
-  if (/배달의민족|요기요|쿠팡이츠|배민|맥도날드|버거킹|롯데리아|파리바게뜨|뚜레쥬르/.test(c)) return "식비";
-  if (/마트|이마트|홈플러스|롯데마트|코스트코|gs25|cu|세븐/.test(c)) return "식비";
-  if (/주유|gs칼텍스|sk에너지|현대오일|s-oil/.test(c)) return "교통";
-  if (/지하철|버스|택시|카카오모빌리티|kt|올리브영|다이소/.test(c)) return "생활";
-  if (/넷플릭스|유튜브|spotify|왓챠|티빙|웨이브|애플/.test(c)) return "취미여행";
-  if (/병원|의원|약국|치과/.test(c)) return "생활";
-  if (/보험/.test(c)) return "보험세금";
-  if (/식당|음식|한식|중식|일식|치킨|피자/.test(c)) return "식비";
+  const c = String(content || "").toLowerCase();
+  for (const rule of loadUserSmsCategoryRules()) {
+    try {
+      if (new RegExp(rule.pattern, "i").test(content)) return rule.cat1 || "기타지출";
+    } catch {}
+  }
+  if (/스타벅스|커피|카페|투썸|이디야|메가|할리스|컴포즈|빽다방|폴바셋/.test(c)) return "식비";
+  if (/배달의민족|요기요|쿠팡이츠|배민|맥도날드|버거킹|롯데리아|파리바게뜨|뚜레쥬르|피자헛|도미노|치킨|피자|식당|음식|한식|중식|일식/.test(c)) return "식비";
+  if (/마트|이마트|홈플러스|롯데마트|코스트코|gs25|cu|세븐|편의점|마켓컬리|쿠팡|SSG|쓱/.test(c)) return "식비";
+  if (/주유|gs칼텍스|sk에너지|현대오일|s-oil|주차|하이패스|톨게이트/.test(c)) return "교통";
+  if (/지하철|버스|택시|카카오모빌리티|티머니|캐시비|철도|코레일|srt/.test(c)) return "교통";
+  if (/kt|skt|lg유플러스|통신|인터넷|관리비|전기|가스|수도/.test(c)) return "주거";
+  if (/올리브영|다이소|무신사|지그재그|의류|미용|헤어|세탁/.test(c)) return "생활";
+  if (/병원|의원|약국|치과|한의원|의료/.test(c)) return "생활";
+  if (/넷플릭스|유튜브|spotify|왓챠|티빙|웨이브|디즈니|구독|영화|공연|운동|헬스/.test(c)) return "취미여행";
+  if (/보험|세금|국민연금|건보|건강보험|지방세|국세|카드대금|대출|이자/.test(c)) return "보험세금";
+  if (/어린이집|유치원|육아|문구|학원|선물|경조사|부모님/.test(c)) return "가족";
+  if (/급여|월급|상여/.test(c)) return "근로소득";
+  if (/이자|배당|환급|환불|캐시백/.test(c)) return "금융소득";
   return "기타지출";
+}
+function guessSubcategory(content, cat1) {
+  const c = String(content || "").toLowerCase();
+  for (const rule of loadUserSmsCategoryRules()) {
+    try {
+      if (new RegExp(rule.pattern, "i").test(content)) return rule.cat2 || "기타";
+    } catch {}
+  }
+  if (cat1 === "식비") {
+    if (/커피|카페|스타벅스|투썸|이디야|메가|할리스|컴포즈|빽다방/.test(c)) return "커피/간식";
+    if (/마트|편의점|이마트|홈플러스|코스트코|gs25|cu|세븐|마켓컬리|쿠팡/.test(c)) return "식재료";
+    if (/배달|요기요|쿠팡이츠|배민/.test(c)) return "배달";
+    return "외식";
+  }
+  if (cat1 === "교통") {
+    if (/주유|오일|칼텍스|s-oil/.test(c)) return "주유";
+    if (/택시/.test(c)) return "택시";
+    if (/주차|하이패스|톨/.test(c)) return "주차";
+    return "대중교통";
+  }
+  if (cat1 === "주거") {
+    if (/관리비|전기|가스|수도/.test(c)) return "관리비";
+    if (/통신|kt|skt|유플러스|인터넷/.test(c)) return "통신비";
+    return "기타";
+  }
+  if (cat1 === "생활") {
+    if (/병원|의원|약국|치과|의료/.test(c)) return "의료";
+    if (/의류|무신사|지그재그/.test(c)) return "의류";
+    if (/미용|헤어/.test(c)) return "미용";
+    return "생필품";
+  }
+  if (cat1 === "보험세금") {
+    if (/보험/.test(c)) return "보험료";
+    if (/세금|국세|지방세/.test(c)) return "세금";
+    if (/국민연금|건보|건강보험/.test(c)) return "국민연금";
+    return "기타";
+  }
+  if (cat1 === "근로소득") return "월급";
+  if (cat1 === "금융소득") return /배당/.test(c) ? "배당" : /이자/.test(c) ? "이자" : "환급";
+  return "기타";
 }
 
 // CSV 파싱 (신한·KB·하나·우리은행 포맷 지원)
@@ -6538,7 +6145,7 @@ function ImportPanel({ data, update, accountNamesIn, accountNamesOut, onClose })
     const text = mode === "sms" ? smsText : csvText;
     if (!text.trim()) { showToast("텍스트를 먼저 붙여넣어 주세요.", "warn"); return; }
     const rows = mode === "sms"
-      ? parseSmsText(text, accountNamesOut)
+      ? parseSmsText(text, accountNamesIn, accountNamesOut)
       : parseCsvText(text, accountNamesIn, accountNamesOut);
     if (!rows.length) { showToast("인식된 거래가 없습니다. 형식을 확인하세요.", "warn"); return; }
     setParsed(rows);
@@ -6562,7 +6169,6 @@ function ImportPanel({ data, update, accountNamesIn, accountNamesOut, onClose })
   const handleImport = () => {
     const toAdd = parsed.filter(r => selected.has(r.id));
     if (!toAdd.length) { showToast("가져올 항목을 선택하세요.", "warn"); return; }
-    recordAction(mode==="sms"?"import_sms":"import_csv", `${toAdd.length}건`);
     update(d => ({ ...d, transactions: [...d.transactions, ...toAdd] }));
     showToast(`${toAdd.length}건을 가져왔습니다.`, "success");
     setDone(true);
@@ -6594,7 +6200,7 @@ function ImportPanel({ data, update, accountNamesIn, accountNamesOut, onClose })
           {mode==="sms" && (
             <>
               <div style={{fontSize:12,color:"var(--text3)",marginBottom:8,lineHeight:1.6}}>
-                카드사·토스·카카오페이 결제 문자를 한꺼번에 복사해서 붙여넣으세요. 신한·KB·삼성·현대카드, 토스머니, 카카오페이를 지원합니다.
+                카드사·토스·카카오페이 결제 문자를 한꺼번에 복사해서 붙여넣으세요. 국민·신한·우리·하나·농협·기업 등 주요 은행과 카드사, 토스·카카오·네이버·페이코 알림을 통합 인식합니다.
               </div>
               <textarea
                 className="qa-input"
@@ -6923,7 +6529,7 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
   };
 
   const save=()=>{
-    if(!canSave) return showToast(validationMessages.filter(x=>x.level===='danger').map(x=>x.title).join(' · '), 'warn');
+    if(!canSave) return showToast(validationMessages.filter(x=>x.level === 'danger').map(x=>x.title).join(' · '), 'warn');
     if(duplicateCandidates.length>0&&!window.confirm("중복 거래가 감지되었습니다. 그래도 저장할까요?")) return;
     update(d=>{
       const row={...form,amount:n(form.amount),id:form.id||uid()};
@@ -7175,7 +6781,7 @@ function AssetsTab({ data, update }) {
   const empty={id:"",kind:"자산",category:"은행예금",name:"",current:"",previous:"",includeInEmergency:false,note:""};
   const [form,setForm]=useState(empty);
   const save=()=>{
-    if(!form.name) return showToast('이름을 입력하세요.', 'warn'); return;
+    if(!form.name) return showToast('이름을 입력하세요.', 'warn');
     update(d=>{
       const row={...form,current:n(form.current),previous:n(form.previous),id:form.id||uid()};
       const assets=form.id?d.assets.map(a=>a.id===form.id?row:a):[...d.assets,row];
@@ -7520,214 +7126,6 @@ async function fetchJsonWithTimeout(url, options={}, timeoutMs=7000){
   try{ const r=await fetch(url,{...options,signal:controller.signal}); const text=await r.text(); let json={}; try{ json=text?JSON.parse(text):{}; }catch{ json={raw:text}; } if(!r.ok) throw new Error(`HTTP ${r.status}`); return json; }
   finally{ clearTimeout(timer); }
 }
-
-// ─── 향상된 시세 조회 시스템 ─────────────────────────────────────────────────
-// Yahoo Finance, KRX, 다중 소스 fallback 체인
-
-const QUOTE_PROVIDERS = {
-  // 내부 API (배포 서버 구현 필요)
-  internal: {
-    name: "내부 API",
-    quote: async (symbol) => {
-      const r = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, {signal: AbortSignal.timeout(5000)});
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const j = await r.json();
-      if (!j.ok || !j.item?.currentPrice) throw new Error("invalid");
-      return { price: j.item.currentPrice, currency: j.item.currency||"KRW", asOf: j.item.asOf, source:"internal" };
-    }
-  },
-  // Yahoo Finance (공개 JSON API - CORS 무관)
-  yahoo: {
-    name: "Yahoo Finance",
-    quote: async (symbol) => {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
-      const r = await fetch(url, {signal: AbortSignal.timeout(7000)});
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const j = await r.json();
-      const meta = j?.chart?.result?.[0]?.meta;
-      if (!meta?.regularMarketPrice) throw new Error("no price");
-      return { price: meta.regularMarketPrice, currency: meta.currency||"USD", asOf: new Date(meta.regularMarketTime*1000).toISOString(), source:"yahoo" };
-    }
-  },
-  // jina.ai 프록시로 네이버증권 크롤링 (KRX)
-  naver: {
-    name: "네이버증권",
-    quote: async (code) => {
-      if (!/^\d{6}$/.test(code)) throw new Error("KRX only");
-      const url = `https://r.jina.ai/https://finance.naver.com/item/main.naver?code=${code}`;
-      const r = await fetch(url, {signal: AbortSignal.timeout(8000)});
-      const text = await r.text();
-      const match = text.match(/현재가[^\d]*(\d[\d,]+)/);
-      if (!match) throw new Error("parse failed");
-      return { price: Number(match[1].replace(/,/g,"")), currency:"KRW", asOf: new Date().toISOString(), source:"naver" };
-    }
-  }
-};
-
-// 심볼 유형 감지
-function detectSymbolType(row) {
-  const ticker = String(row.ticker||row.code||"").trim();
-  const market = String(row.market||"").toUpperCase();
-  if (/^\d{6}$/.test(ticker) || market.includes("KRX")) return { type:"krx", code:ticker };
-  if (ticker && !market.includes("KRX")) return { type:"us", symbol:row.symbol||ticker };
-  return { type:"unknown" };
-}
-
-// 강화된 시세 조회 (다중 소스 fallback)
-async function fetchQuoteEnhanced(row, previousRow=null) {
-  const info = detectSymbolType(row);
-  const cache = getCachedQuote(row);
-  
-  // 캐시 신선도 체크 (1일 이내)
-  if (cache && cache.currentPrice > 0) {
-    const cacheAge = Date.now() - new Date(cache.quoteAsOf||cache.cachedAt||0).getTime();
-    if (cacheAge < 24*60*60*1000) {
-      return { currentPrice:cache.currentPrice, quoteAsOf:cache.quoteAsOf, symbol:cache.symbol||row.symbol, currency:cache.currency||row.currency, stale:false, source:"cache-fresh" };
-    }
-  }
-
-  const errors = [];
-  
-  // KRX ETF/주식: 내부API → 네이버증권
-  if (info.type === "krx") {
-    // 1. 내부 API 시도
-    try {
-      const q = await QUOTE_PROVIDERS.internal.quote(info.code);
-      const result = { currentPrice:q.price, quoteAsOf:q.asOf, symbol:info.code+".KS", currency:"KRW", stale:false, source:q.source };
-      rememberQuote(row, result);
-      return result;
-    } catch(e) { errors.push(`internal: ${e.message}`); }
-    
-    // 2. 네이버증권 (jina 프록시)
-    try {
-      const q = await QUOTE_PROVIDERS.naver.quote(info.code);
-      const result = { currentPrice:q.price, quoteAsOf:q.asOf, symbol:info.code+".KS", currency:"KRW", stale:false, source:q.source };
-      rememberQuote(row, result);
-      return result;
-    } catch(e) { errors.push(`naver: ${e.message}`); }
-    
-    // 3. Yahoo Finance (KS suffix)
-    try {
-      const q = await QUOTE_PROVIDERS.yahoo.quote(info.code+".KS");
-      const result = { currentPrice:q.price, quoteAsOf:q.asOf, symbol:info.code+".KS", currency:"KRW", stale:false, source:q.source };
-      rememberQuote(row, result);
-      return result;
-    } catch(e) { errors.push(`yahoo-ks: ${e.message}`); }
-  }
-  
-  // 미국 주식/ETF: 내부API → Yahoo Finance
-  if (info.type === "us") {
-    // 1. 내부 API 시도
-    try {
-      const q = await QUOTE_PROVIDERS.internal.quote(info.symbol);
-      const result = { currentPrice:q.price, quoteAsOf:q.asOf, symbol:info.symbol, currency:q.currency||"USD", stale:false, source:q.source };
-      rememberQuote(row, result);
-      return result;
-    } catch(e) { errors.push(`internal: ${e.message}`); }
-    
-    // 2. Yahoo Finance 직접
-    try {
-      const q = await QUOTE_PROVIDERS.yahoo.quote(info.symbol);
-      const result = { currentPrice:q.price, quoteAsOf:q.asOf, symbol:info.symbol, currency:q.currency||"USD", stale:false, source:q.source };
-      rememberQuote(row, result);
-      return result;
-    } catch(e) { errors.push(`yahoo: ${e.message}`); }
-  }
-  
-  // 모든 소스 실패 → 캐시 stale 반환
-  console.warn("시세 조회 실패 (모든 소스):", row.name, errors);
-  if (cache && cache.currentPrice > 0) {
-    return { currentPrice:cache.currentPrice, quoteAsOf:cache.quoteAsOf||cache.cachedAt, symbol:cache.symbol||row.symbol, currency:cache.currency||row.currency, stale:true, source:"cache-stale" };
-  }
-  if (previousRow && previousRow.currentPrice > 0) {
-    return { currentPrice:previousRow.currentPrice, quoteAsOf:previousRow.quoteAsOf||"기존값", symbol:previousRow.symbol||row.symbol, currency:previousRow.currency||row.currency, stale:true, source:"previous" };
-  }
-  throw new Error(`시세 조회 실패: ${errors.slice(-2).join(", ")}`);
-}
-
-// 환율 조회 강화 (다중 소스)
-async function fetchFxEnhanced(settings={}) {
-  const errors = [];
-  
-  // 1. 내부 API
-  try {
-    const r = await fetch("/api/fx?base=USD&quote=KRW", {signal: AbortSignal.timeout(5000)});
-    if (r.ok) {
-      const j = await r.json();
-      const rate = Number(j.rate||j.usdKrw||j.USDKRW||0);
-      if (rate > 900 && rate < 2000) {
-        const fx = { rate, asOf: j.asOf||new Date().toISOString(), source:"internal-api", stale:false };
-        const cache = loadMarketCache();
-        saveMarketCache({...cache, fx});
-        return fx;
-      }
-    }
-  } catch(e) { errors.push(`internal: ${e.message}`); }
-  
-  // 2. Yahoo Finance (USDKRW=X)
-  try {
-    const q = await QUOTE_PROVIDERS.yahoo.quote("USDKRW=X");
-    if (q.price > 900 && q.price < 2000) {
-      const fx = { rate:q.price, asOf:q.asOf, source:"yahoo", stale:false };
-      const cache = loadMarketCache();
-      saveMarketCache({...cache, fx});
-      return fx;
-    }
-  } catch(e) { errors.push(`yahoo: ${e.message}`); }
-  
-  // 3. Exchange Rate API (무료, 공개)
-  try {
-    const r = await fetch("https://open.er-api.com/v6/latest/USD", {signal: AbortSignal.timeout(6000)});
-    if (r.ok) {
-      const j = await r.json();
-      const rate = j?.rates?.KRW;
-      if (rate && rate > 900 && rate < 2000) {
-        const fx = { rate, asOf: new Date().toISOString(), source:"er-api", stale:false };
-        const cache = loadMarketCache();
-        saveMarketCache({...cache, fx});
-        return fx;
-      }
-    }
-  } catch(e) { errors.push(`er-api: ${e.message}`); }
-  
-  // 4. 캐시/설정값 fallback
-  const cache = loadMarketCache();
-  if (cache?.fx && cache.fx.rate > 0) return { ...cache.fx, stale:true };
-  if (Number(settings?.fxUsdKrw) > 0) return { rate:Number(settings.fxUsdKrw), asOf:settings.fxAsOf||"수동", source:"settings", stale:true };
-  throw new Error("환율 조회 실패: " + errors.join(", "));
-}
-
-// 전체 포트폴리오 일괄 조회 (병렬)
-async function fetchAllQuotesEnhanced(portfolio=[], onProgress=null) {
-  const results = [];
-  const batchSize = 5; // 동시 요청 5개
-  
-  for (let i = 0; i < portfolio.length; i += batchSize) {
-    const batch = portfolio.slice(i, i+batchSize);
-    const batchResults = await Promise.allSettled(
-      batch.map(p => fetchQuoteEnhanced(p, p).then(q => ({ id:p.id, ok:true, ...q })).catch(e => ({ id:p.id, ok:false, error:e.message })))
-    );
-    results.push(...batchResults.map(r => r.value || r.reason));
-    if (onProgress) onProgress({ done: Math.min(i+batchSize, portfolio.length), total: portfolio.length });
-  }
-  return results;
-}
-
-// ─── 시세 조회 상태 표시 컴포넌트 ────────────────────────────────────────────
-function QuoteStatusBadge({ source, stale }) {
-  if (!source) return null;
-  const isInternal = source === "internal";
-  const isYahoo = source === "yahoo";
-  const isNaver = source === "naver";
-  const isCacheFresh = source === "cache-fresh";
-  const isCacheStale = source === "cache-stale" || stale;
-  
-  const label = isInternal ? "서버API" : isYahoo ? "Yahoo" : isNaver ? "네이버" : isCacheFresh ? "캐시(신선)" : isCacheStale ? "캐시(오래됨)" : source;
-  const tone = isCacheStale ? "badge-amber" : "badge-green";
-  return <span className={`badge ${tone}`} style={{fontSize:9}}>{label}</span>;
-}
-
-// 기존 함수 유지 (하위 호환)
 async function fetchFxUsdKrw(settings={}){
   const endpoints=["/api/fx?base=USD&quote=KRW","/api/exchange-rate?base=USD&quote=KRW"];
   for(const url of endpoints){
@@ -7796,7 +7194,7 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
     setForm(next);setKw(item.name||"");
     try{
       setFetching(true);
-      const q=await fetchQuoteEnhanced(next, null);
+      const q=await fetchQuoteWithFallback(next, null);
       setForm(f=>({...f,currentPrice:q.currentPrice?String(q.currentPrice):f.currentPrice,quoteAsOf:q.quoteAsOf||f.quoteAsOf,symbol:q.symbol||f.symbol,market:q.market||f.market,currency:q.currency||f.currency}));
       setQErr(q.stale?"현재가 API 실패로 캐시/기존 가격을 사용했습니다.":"");
     }catch{setQErr("현재가 자동 조회 실패. 기존 가격도 없어 직접 입력이 필요합니다.");}
@@ -7804,7 +7202,7 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
   };
 
   const save=()=>{
-    if(!form.account||!form.name) return showToast('계좌와 종목명을 입력하세요.', 'warn'); return;
+    if(!form.account||!form.name) return showToast('계좌와 종목명을 입력하세요.', 'warn');
     update(d=>{
       const row={...form,qty:n(form.qty),avgPrice:n(form.avgPrice),currentPrice:n(form.currentPrice||form.avgPrice),targetAmount:n(form.targetAmount),riskSigma:n(form.riskSigma),symbol:form.symbol||buildServerSymbolFromRow(form),id:form.id||uid()};
       const portfolio=form.id?d.portfolio.map(p=>p.id===form.id?row:p):[...d.portfolio,row];
@@ -7815,12 +7213,11 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
 
   const bulkUpdate=async()=>{
     setBulkUp(true); setQErr("");
-    recordAction("fetch_quote", `${data.portfolio.length}종목`);
     try{
       const items=data.portfolio.map(p=>({id:p.id,symbol:buildServerSymbolFromRow(p),name:p.name,code:p.code,ticker:p.ticker}));
       let results=[];
       try{ const j=await fetchJsonWithTimeout("/api/bulk-quotes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items})},9000); if(!j.ok) throw new Error("bulk invalid"); results=Array.isArray(j.results)?j.results:[]; }
-      catch(error){ console.warn("전체 현재가 API 실패, 개별 fallback 실행:", error?.message||error); results=await Promise.all(data.portfolio.map(async p=>{ try{ const q=await fetchQuoteEnhanced(p,p); return {id:p.id,ok:true,currentPrice:q.currentPrice,asOf:q.quoteAsOf,symbol:q.symbol,currency:q.currency,stale:q.stale}; }catch{ return {id:p.id,ok:false}; } })); }
+      catch(error){ console.warn("전체 현재가 API 실패, 개별 fallback 실행:", error?.message||error); results=await Promise.all(data.portfolio.map(async p=>{ try{ const q=await fetchQuoteWithFallback(p,p); return {id:p.id,ok:true,currentPrice:q.currentPrice,asOf:q.quoteAsOf,symbol:q.symbol,currency:q.currency,stale:q.stale}; }catch{ return {id:p.id,ok:false}; } })); }
       let okCount=0, staleCount=0, failCount=0;
       update(d=>({...d,settings:{...d.settings,marketDataLastUpdated:new Date().toISOString()},portfolio:d.portfolio.map(p=>{
         const hit=(results||[]).find(x=>x.id===p.id);
@@ -7830,10 +7227,7 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
         rememberQuote(next,{currentPrice:next.currentPrice,quoteAsOf:next.quoteAsOf,symbol:next.symbol,market:next.market,currency:next.currency});
         return next;
       })}));
-      const sourceBreakdown = {};
-      results.forEach(r=>{ if(r.ok && r.source) sourceBreakdown[r.source]=(sourceBreakdown[r.source]||0)+1; });
-      const sourceText = Object.entries(sourceBreakdown).map(([s,c])=>`${s} ${c}개`).join(" · ");
-      setMarketMsg(`현재가 갱신 완료: 성공 ${okCount}개${staleCount?` (캐시 ${staleCount}개)`:""}${failCount?`, 실패 ${failCount}개`:""} | 소스: ${sourceText||"없음"}`);
+      setMarketMsg(`현재가 갱신 완료: 성공 ${okCount}개${staleCount?`, 기존/캐시 사용 ${staleCount}개`:""}${failCount?`, 실패 ${failCount}개`:""}`);
       if(failCount>0) setQErr("일부 종목은 API 실패로 기존 가격을 유지했습니다.");
     }catch(error){setQErr(`전체 업데이트 실패: ${error?.message||"알 수 없는 오류"}. 기존 가격은 유지됩니다.`);}
     finally{setBulkUp(false);}
@@ -7842,7 +7236,7 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
   const updateFx=async()=>{
     setFxBusy(true); setMarketMsg(""); setQErr("");
     try{
-      const fx=await fetchFxEnhanced(data.settings||{});
+      const fx=await fetchFxUsdKrw(data.settings||{});
       update(d=>({...d,settings:{...d.settings,fxUsdKrw:fx.rate,fxAsOf:fx.asOf,marketDataLastUpdated:new Date().toISOString()}}));
       setMarketMsg(`${fx.stale?"환율 API 실패 · 기존/캐시 환율 유지":"환율 갱신 완료"}: 1 USD = ${fmt(fx.rate)} KRW`);
       if(fx.stale) setQErr("환율 API가 실패하여 마지막 정상 환율을 사용했습니다. 환율 기준시각을 확인하세요.");
@@ -8015,7 +7409,7 @@ function BudgetTab({ data, update, budgetAnalysis }) {
   const empty={id:"",cat1:"식비",budget:"",targetWeight:""};
   const [form,setForm]=useState(empty);
   const saveBudget=()=>{
-    if(!form.cat1||n(form.budget)<=0) return showToast('카테고리와 예산을 입력하세요.', 'warn'); return;
+    if(!form.cat1||n(form.budget)<=0) return showToast('카테고리와 예산을 입력하세요.', 'warn');
     update(d=>{
       const row={...form,budget:n(form.budget),targetWeight:n(form.targetWeight),id:form.id||uid()};
       const budgets=form.id?d.budgets.map(b=>b.id===form.id?row:b):[...d.budgets,row];
@@ -8957,7 +8351,7 @@ function PlanningTab({ data, update, eventAnalysis, dashboard }) {
   const empty={id:"",name:"",yearsFromNow:1,amountNeeded:"",currentPrepared:"",priority:"높음"};
   const [form,setForm]=useState(empty);
   const saveEvent=()=>{
-    if(!form.name||n(form.amountNeeded)<=0) return showToast('이름과 필요금액을 입력하세요.', 'warn'); return;
+    if(!form.name||n(form.amountNeeded)<=0) return showToast('이름과 필요금액을 입력하세요.', 'warn');
     update(d=>{
       const row={...form,yearsFromNow:n(form.yearsFromNow),amountNeeded:n(form.amountNeeded),currentPrepared:n(form.currentPrepared),id:form.id||uid()};
       const events=form.id?d.events.map(e=>e.id===form.id?row:e):[...d.events,row];
@@ -9387,10 +8781,10 @@ function GoalFundingTab({ data, update, dashboard, dashboardDetail, futureSim })
   },[nextNetWorthGoal,avgMonthlyNet]);
 
   const save=()=>{
-    if(!form.name) return showToast('목표명을 입력하세요.', 'warn'); return;
+    if(!form.name) return showToast('목표명을 입력하세요.', 'warn');
     if(form.goalKind==="순자산목표"){
-      if(n(form.targetNetWorth||form.amountNeeded)<=0) return showToast('목표 순자산을 입력하세요.', 'warn'); return;
-    } else if(n(form.amountNeeded)<=0) return showToast('목표금액을 입력하세요.', 'warn'); return;
+      if(n(form.targetNetWorth||form.amountNeeded)<=0) return showToast('목표 순자산을 입력하세요.', 'warn');
+    } else if(n(form.amountNeeded)<=0) return showToast('목표금액을 입력하세요.', 'warn');
     update(d=>{
       const goalKind=form.goalKind||"일반목표";
       const row={
@@ -10541,7 +9935,7 @@ function AccountsTab({ data, update }) {
   const empty={id:"",name:"",type:"은행",institution:"",currency:"KRW",owner:"본인",active:true,defaultIn:false,note:""};
   const [form,setForm]=useState(empty);
   const save=()=>{
-    if(!form.name) return showToast('계좌명을 입력하세요.', 'warn'); return;
+    if(!form.name) return showToast('계좌명을 입력하세요.', 'warn');
     update(d=>{
       const row={...form,id:form.id||uid()};
       const accounts=form.id?d.accounts.map(a=>a.id===form.id?row:a):[...d.accounts,row];
@@ -10760,7 +10154,6 @@ function buildStep5VerificationRows(validations, calculationAudit) {
 function DataTab({ data, update, validations, calculationAudit }) {
   const showToast = useToast();
   const [showPrivacyLocal, setShowPrivacyLocal] = React.useState(false);
-  const [dataTab, setDataTab] = React.useState("backup");
 
   const fileRef = useRef();
   const [backupList, setBackupList] = useState(() => getStorageBackupList());
@@ -10820,7 +10213,6 @@ function DataTab({ data, update, validations, calculationAudit }) {
   };
 
   const createManualBackup = () => {
-    recordAction("backup_create", "manual");
     const result = createManualStorageBackup(data, "manual");
     if (!result.ok) return showToast(`백업 실패: ${result.error}`, 'error');
     refreshBackups();
@@ -10876,20 +10268,9 @@ function DataTab({ data, update, validations, calculationAudit }) {
   return (
     <div className="stack">
       {showPrivacyLocal&&<PrivacyModal onClose={()=>setShowPrivacyLocal(false)}/>}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-        <div className="tab-row" style={{margin:0}}>
-          {[
-            {id:"backup",label:"💾 백업·복원"},
-            {id:"sms",label:"📲 SMS 패턴"},
-            {id:"analytics",label:"📊 사용 통계"},
-            {id:"validation",label:"🔍 검증"},
-          ].map(t=><button key={t.id} className={`tab-chip ${dataTab===t.id?"active":""}`} onClick={()=>setDataTab(t.id)}>{t.label}</button>)}
-        </div>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:4}}>
         <button className="btn btn-sm btn-ghost" onClick={()=>setShowPrivacyLocal(true)}>📋 개인정보처리방침</button>
       </div>
-      {dataTab==="analytics" && <AnalyticsDashboard/>}
-      {dataTab==="sms" && <SmsPatternManager data={data} update={update}/>}
-      {(dataTab==="backup" || dataTab==="validation") && (<div className="stack">
       <div className="card backup-hero-card">
         <div className="row-between" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
           <div>
@@ -11689,22 +11070,11 @@ const PAGE_TITLES = { dashboard:"대시보드", transactions:"거래내역", ass
 export default function App() {
   const [data,setData]=useState(loadData);
   const [tab,setTab]=useState("dashboard");
-  const tabStartTimeRef = React.useRef(Date.now());
-  const prevTabRef = React.useRef("dashboard");
   const [sidebarOpen,setSidebarOpen]=useState(true);
 
   // ── 온보딩: localStorage 플래그로 최초 1회만 표시
   const [showOnboarding,setShowOnboarding]=useState(()=>!localStorage.getItem(OB_KEY));
   const [showQuickAdd, setShowQuickAdd] = useState(false);
-  
-  // 탭 전환 + 분석 기록
-  const switchTab = React.useCallback((newTab) => {
-    const elapsed = Date.now() - tabStartTimeRef.current;
-    recordTabVisit(prevTabRef.current, elapsed);
-    prevTabRef.current = newTab;
-    tabStartTimeRef.current = Date.now();
-    setTab(newTab);
-  }, []);
   const [showPrivacy, setShowPrivacy] = useState(false);
 
   // ── 다크/라이트 테마
@@ -11952,6 +11322,7 @@ export default function App() {
   const totalIssues=validations.reduce((s,v)=>s+n(v.count),0);
 
   return (
+    <ToastProvider>
     <div className="app">
       <script dangerouslySetInnerHTML={{__html:`(function(){try{var t=localStorage.getItem('season-theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})()`}}/>
       <style>{STYLES}</style>
@@ -11995,7 +11366,7 @@ export default function App() {
             <button
               key={item.id}
               className={`mobile-tab-btn ${item.id==="__more__"?(["dashboard","transactions","cfo","assets"].includes(tab)?"":"active"):tab===item.id?"active":""}`}
-              onClick={item.id==="__more__"?()=>setShowMobileMore(true):()=>switchTab(item.id)}
+              onClick={item.id==="__more__"?()=>setShowMobileMore(true):()=>setTab(item.id)}
             >
               <div className="mobile-tab-icon-wrap">
                 <span className="mobile-tab-icon">{item.icon}</span>
@@ -12025,7 +11396,7 @@ export default function App() {
                   <div className="mobile-more-section">{group.section}</div>
                   <div className="mobile-more-grid">
                     {items.map(item=>(
-                      <button key={item.id} className={`mobile-more-item ${tab===item.id?"active":""}`} onClick={()=>{switchTab(item.id);setShowMobileMore(false);}}>
+                      <button key={item.id} className={`mobile-more-item ${tab===item.id?"active":""}`} onClick={()=>{setTab(item.id);setShowMobileMore(false);}}>
                         <div className="mobile-more-icon">{item.icon}</div>
                         <span>{item.label}</span>
                         {item.id==="data"&&totalIssues>0&&<span style={{fontSize:9,color:"var(--red)",fontWeight:900}}>●</span>}
@@ -12055,7 +11426,7 @@ export default function App() {
           {NAV.map((item,i)=>{
             if(item.section) return <div key={i} className="nav-section">{item.section}</div>;
             return (
-              <button key={item.id} className={`nav-item ${tab===item.id?"active":""}`} data-tip={item.label} title={sidebarOpen ? "" : item.label} onClick={()=>switchTab(item.id)}>
+              <button key={item.id} className={`nav-item ${tab===item.id?"active":""}`} data-tip={item.label} title={sidebarOpen ? "" : item.label} onClick={()=>setTab(item.id)}>
                 <span className="nav-icon">{item.icon}</span>
                 <span className="nav-label">{item.label}</span>
                 {item.id==="data"&&totalIssues>0&&<span className="nav-dot"/>}
@@ -12139,5 +11510,6 @@ export default function App() {
         </>
       )}
     </div>
+    </ToastProvider>
   );
 }
