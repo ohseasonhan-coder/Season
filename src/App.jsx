@@ -3391,7 +3391,6 @@ function AICoachPanel({ coach }) {
         </div>
       )}
     </div>
-    </ToastProvider>
   );
 }
 
@@ -5845,26 +5844,19 @@ function parseSmsText(text, accountNamesOut=[]) {
   // 카드/결제 알림 패턴들
   const patterns = [
     // 신한: [신한카드] 5,900원 (스타벅스)
-    { re: /\[?신한카드\]?\s*([\d,]+)원\s*[\(\[（]?([^\)\]\）
-]+)[\)\]\）]?/g, card:"신한카드" },
+    { re: /\[?신한카드\]?\s*([\d,]+)원\s*[\(\[（]?([^\)\]\）]+)[\)\]\）]?/g, card:"신한카드" },
     // 국민: [KB국민카드] 12,000원 승인 (교보문고)
-    { re: /\[?KB국민카드\]?\s*([\d,]+)원\s*승인?\s*[\(\[（]?([^\)\]\）
-]+)[\)\]\）]?/g, card:"KB국민카드" },
+    { re: /\[?KB국민카드\]?\s*([\d,]+)원\s*승인?\s*[\(\[（]?([^\)\]\）]+)[\)\]\）]?/g, card:"KB국민카드" },
     // 삼성: [삼성카드] 8,500원 (CU)
-    { re: /\[?삼성카드\]?\s*([\d,]+)원\s*[\(\[（]?([^\)\]\）
-]+)[\)\]\）]?/g, card:"삼성카드" },
+    { re: /\[?삼성카드\]?\s*([\d,]+)원\s*[\(\[（]?([^\)\]\）]+)[\)\]\）]?/g, card:"삼성카드" },
     // 현대: [현대카드] 32,000원 (올리브영)
-    { re: /\[?현대카드\]?\s*([\d,]+)원\s*[\(\[（]?([^\)\]\）
-]+)[\)\]\）]?/g, card:"현대카드" },
+    { re: /\[?현대카드\]?\s*([\d,]+)원\s*[\(\[（]?([^\)\]\）]+)[\)\]\）]?/g, card:"현대카드" },
     // 토스: 토스머니 3,500원 결제 (편의점)
-    { re: /토스머니\s*([\d,]+)원\s*결제\s*[\(\[（]?([^\)\]\）
-]+)[\)\]\）]?/g, card:"토스" },
+    { re: /토스머니\s*([\d,]+)원\s*결제\s*[\(\[（]?([^\)\]\）]+)[\)\]\）]?/g, card:"토스" },
     // 카카오페이: 카카오페이 6,000원 결제 (배달의민족)
-    { re: /카카오페이\s*([\d,]+)원\s*결제\s*[\(\[（]?([^\)\]\）
-]+)[\)\]\）]?/g, card:"카카오페이" },
+    { re: /카카오페이\s*([\d,]+)원\s*결제\s*[\(\[（]?([^\)\]\）]+)[\)\]\）]?/g, card:"카카오페이" },
     // 일반 패턴: 숫자원 (가맹점)
-    { re: /([\d,]+)원\s*(?:승인|결제|사용)\s*[\(\[（]([^\)\]\）
-]{2,20})[\)\]\）]/g, card:"신용카드" },
+    { re: /([\d,]+)원\s*(?:승인|결제|사용)\s*[\(\[（]([^\)\]\）]{2,20})[\)\]\）]/g, card:"신용카드" },
   ];
 
   const results = [];
@@ -6375,7 +6367,7 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
   };
 
   const save=()=>{
-    if(!canSave) return showToast(validationMessages.filter(x=>x.level===='danger').map(x=>x.title).join(' · '), 'warn');
+    if(!canSave) return showToast(validationMessages.filter(x=>x.level === 'danger').map(x=>x.title).join(' · '), 'warn');
     if(duplicateCandidates.length>0&&!window.confirm("중복 거래가 감지되었습니다. 그래도 저장할까요?")) return;
     update(d=>{
       const row={...form,amount:n(form.amount),id:form.id||uid()};
@@ -6627,7 +6619,7 @@ function AssetsTab({ data, update }) {
   const empty={id:"",kind:"자산",category:"은행예금",name:"",current:"",previous:"",includeInEmergency:false,note:""};
   const [form,setForm]=useState(empty);
   const save=()=>{
-    if(!form.name) return showToast('이름을 입력하세요.', 'warn'); return;
+    if(!form.name) return showToast('이름을 입력하세요.', 'warn');
     update(d=>{
       const row={...form,current:n(form.current),previous:n(form.previous),id:form.id||uid()};
       const assets=form.id?d.assets.map(a=>a.id===form.id?row:a):[...d.assets,row];
@@ -7048,7 +7040,7 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
   };
 
   const save=()=>{
-    if(!form.account||!form.name) return showToast('계좌와 종목명을 입력하세요.', 'warn'); return;
+    if(!form.account||!form.name) return showToast('계좌와 종목명을 입력하세요.', 'warn');
     update(d=>{
       const row={...form,qty:n(form.qty),avgPrice:n(form.avgPrice),currentPrice:n(form.currentPrice||form.avgPrice),targetAmount:n(form.targetAmount),riskSigma:n(form.riskSigma),symbol:form.symbol||buildServerSymbolFromRow(form),id:form.id||uid()};
       const portfolio=form.id?d.portfolio.map(p=>p.id===form.id?row:p):[...d.portfolio,row];
@@ -7255,7 +7247,7 @@ function BudgetTab({ data, update, budgetAnalysis }) {
   const empty={id:"",cat1:"식비",budget:"",targetWeight:""};
   const [form,setForm]=useState(empty);
   const saveBudget=()=>{
-    if(!form.cat1||n(form.budget)<=0) return showToast('카테고리와 예산을 입력하세요.', 'warn'); return;
+    if(!form.cat1||n(form.budget)<=0) return showToast('카테고리와 예산을 입력하세요.', 'warn');
     update(d=>{
       const row={...form,budget:n(form.budget),targetWeight:n(form.targetWeight),id:form.id||uid()};
       const budgets=form.id?d.budgets.map(b=>b.id===form.id?row:b):[...d.budgets,row];
@@ -8197,7 +8189,7 @@ function PlanningTab({ data, update, eventAnalysis, dashboard }) {
   const empty={id:"",name:"",yearsFromNow:1,amountNeeded:"",currentPrepared:"",priority:"높음"};
   const [form,setForm]=useState(empty);
   const saveEvent=()=>{
-    if(!form.name||n(form.amountNeeded)<=0) return showToast('이름과 필요금액을 입력하세요.', 'warn'); return;
+    if(!form.name||n(form.amountNeeded)<=0) return showToast('이름과 필요금액을 입력하세요.', 'warn');
     update(d=>{
       const row={...form,yearsFromNow:n(form.yearsFromNow),amountNeeded:n(form.amountNeeded),currentPrepared:n(form.currentPrepared),id:form.id||uid()};
       const events=form.id?d.events.map(e=>e.id===form.id?row:e):[...d.events,row];
@@ -8627,10 +8619,10 @@ function GoalFundingTab({ data, update, dashboard, dashboardDetail, futureSim })
   },[nextNetWorthGoal,avgMonthlyNet]);
 
   const save=()=>{
-    if(!form.name) return showToast('목표명을 입력하세요.', 'warn'); return;
+    if(!form.name) return showToast('목표명을 입력하세요.', 'warn');
     if(form.goalKind==="순자산목표"){
-      if(n(form.targetNetWorth||form.amountNeeded)<=0) return showToast('목표 순자산을 입력하세요.', 'warn'); return;
-    } else if(n(form.amountNeeded)<=0) return showToast('목표금액을 입력하세요.', 'warn'); return;
+      if(n(form.targetNetWorth||form.amountNeeded)<=0) return showToast('목표 순자산을 입력하세요.', 'warn');
+    } else if(n(form.amountNeeded)<=0) return showToast('목표금액을 입력하세요.', 'warn');
     update(d=>{
       const goalKind=form.goalKind||"일반목표";
       const row={
@@ -9781,7 +9773,7 @@ function AccountsTab({ data, update }) {
   const empty={id:"",name:"",type:"은행",institution:"",currency:"KRW",owner:"본인",active:true,defaultIn:false,note:""};
   const [form,setForm]=useState(empty);
   const save=()=>{
-    if(!form.name) return showToast('계좌명을 입력하세요.', 'warn'); return;
+    if(!form.name) return showToast('계좌명을 입력하세요.', 'warn');
     update(d=>{
       const row={...form,id:form.id||uid()};
       const accounts=form.id?d.accounts.map(a=>a.id===form.id?row:a):[...d.accounts,row];
@@ -11168,6 +11160,7 @@ export default function App() {
   const totalIssues=validations.reduce((s,v)=>s+n(v.count),0);
 
   return (
+    <ToastProvider>
     <div className="app">
       <script dangerouslySetInnerHTML={{__html:`(function(){try{var t=localStorage.getItem('season-theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})()`}}/>
       <style>{STYLES}</style>
@@ -11355,5 +11348,6 @@ export default function App() {
         </>
       )}
     </div>
+    </ToastProvider>
   );
 }
