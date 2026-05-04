@@ -3820,7 +3820,11 @@ function buildAnalysisNLP(monthlySeries, dashboardDetail) {
 
 // ─── Auth Panel ───────────────────────────────────────────────────────────────
 function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
-  const [email,setEmail]=useState(""),  [pw,setPw]=useState(""), [busy,setBusy]=useState(false), [msg,setMsg]=useState(""), [msgOk,setMsgOk]=useState(false);
+  const [email,setEmail]=useState("");
+  const [pw,setPw]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState("");
+  const [msgOk,setMsgOk]=useState(false);
   const [showMobileLogin, setShowMobileLogin]=useState(false);
 
   const runAuth=async(mode)=>{
@@ -3838,15 +3842,22 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
   const syncLabel = syncState || "";
   const syncClass = syncLabel.includes("완료")?"":"syncing";
 
-  /* ── PC 전용 auth-bar (768px 초과) ── */
-  const PcBar = () => {
-    if(!supabase) return (
+  // 중요:
+  // 기존 버전은 AuthBar 내부에서 PcBar, MobileLoginSheet 컴포넌트를 새로 선언한 뒤 <PcBar/>처럼 렌더링했습니다.
+  // 이 구조는 email/pw 상태가 한 글자 바뀔 때마다 하위 컴포넌트 타입이 새로 생성되어 input이 remount되고 포커스가 끊길 수 있습니다.
+  // 그래서 로그인 UI를 별도 nested component로 만들지 않고 AuthBar 안에서 직접 JSX로 렌더링합니다.
+
+  let pcBar = null;
+
+  if(!supabase) {
+    pcBar = (
       <div className="auth-bar">
         <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">Season Finance</span></div>
         <span style={{fontSize:11,color:"var(--text3)"}}>로컬 전용 모드</span>
       </div>
     );
-    if(session?.user) return (
+  } else if(session?.user) {
+    pcBar = (
       <div className="auth-bar">
         <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">Season Finance</span></div>
         <div className="row" style={{gap:8}}>
@@ -3858,94 +3869,126 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
         </div>
       </div>
     );
-    return (
+  } else {
+    pcBar = (
       <div className="auth-bar">
         <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">클라우드 동기화</span></div>
         <div className="row" style={{gap:8}}>
-          <input className="auth-input" type="email" placeholder="이메일" value={email} onChange={e=>setEmail(e.target.value)}/>
-          <input className="auth-input" type="password" placeholder="비밀번호" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&runAuth("signin")}/>
+          <input
+            className="auth-input"
+            type="email"
+            placeholder="이메일"
+            value={email}
+            onChange={e=>setEmail(e.target.value)}
+            autoComplete="email"
+          />
+          <input
+            className="auth-input"
+            type="password"
+            placeholder="비밀번호"
+            value={pw}
+            onChange={e=>setPw(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&runAuth("signin")}
+            autoComplete="current-password"
+          />
           <button className="btn btn-sm btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>로그인</button>
           <button className="btn btn-sm btn-ghost" onClick={()=>runAuth("signup")} disabled={busy}>가입</button>
           {msg&&<span style={{fontSize:11,color:msgOk?"var(--green)":"var(--red)"}}>{msg}</span>}
         </div>
       </div>
     );
-  };
-
-  /* ── 모바일 로그인 시트 ── */
-  const MobileLoginSheet = () => (
-    <>
-      <div className="mobile-login-modal-overlay" onClick={()=>setShowMobileLogin(false)}/>
-      <div className="mobile-login-sheet" onClick={e=>e.stopPropagation()}>
-        <div className="mlo-header">
-          <div className="mlo-glow"/>
-          <div className="mlo-handle"/>
-          <div className="mlo-logo-row">
-            <div className="mlo-logo-mark">S</div>
-            <div><div className="mlo-logo-text">Season Finance</div><div className="mlo-logo-sub">통합 자산관리</div></div>
-          </div>
-          {!session?.user&&<><div className="mlo-headline">클라우드에<br/>연결하세요 ☁️</div><div className="mlo-sub">여러 기기에서 데이터를 동기화하고<br/>안전하게 보관하세요.</div></>}
-          {session?.user&&<><div className="mlo-headline">연결되었어요 ✓</div><div className="mlo-sub">클라우드에 자동으로 동기화 중입니다.</div></>}
-        </div>
-        <div className="mlo-body">
-          {session?.user ? (
-            <>
-              <div className="mlo-session-bar">
-                <div className="mlo-session-avatar">{session.user.email[0].toUpperCase()}</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div className="mlo-session-email">{session.user.email}</div>
-                  <div className="mlo-session-status">● 연결됨 {syncLabel&&`· ${syncLabel}`}</div>
-                </div>
-              </div>
-              <div className="mlo-action-row">
-                <button className="mlo-action-btn" onClick={()=>{onLoadCloud();setShowMobileLogin(false)}}>📥 불러오기</button>
-                <button className="mlo-action-btn" onClick={()=>{onSaveCloud();setShowMobileLogin(false)}}>☁️ 저장</button>
-                <button className="mlo-action-btn danger" onClick={()=>{supabase.auth.signOut();setShowMobileLogin(false)}}>로그아웃</button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="mlo-field">
-                <label>이메일</label>
-                <div className="mlo-input-wrap">
-                  <span className="mlo-input-icon">✉️</span>
-                  <input className="mlo-input" type="email" placeholder="your@email.com" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email"/>
-                </div>
-              </div>
-              <div className="mlo-field">
-                <label>비밀번호</label>
-                <div className="mlo-input-wrap">
-                  <span className="mlo-input-icon">🔒</span>
-                  <input className="mlo-input" type="password" placeholder="••••••••" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&runAuth("signin")} autoComplete="current-password"/>
-                </div>
-              </div>
-              {msg&&<div className={`mlo-msg ${msgOk?"ok":""}`}>{msg}</div>}
-              <div className="mlo-btn-row">
-                <button className="mlo-btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>{busy?"로그인 중...":"로그인"}</button>
-                <button className="mlo-btn-secondary" onClick={()=>runAuth("signup")} disabled={busy}>{busy?"처리 중...":"처음이에요, 계정 만들기"}</button>
-              </div>
-              <div className="mlo-divider">또는</div>
-              <button className="mlo-local-chip" onClick={()=>setShowMobileLogin(false)}>
-                <div className="mlo-local-icon">📱</div>
-                <div><div style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>로컬 모드로 계속하기</div><div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>기기에만 저장 · 동기화 없음</div></div>
-              </button>
-            </>
-          )}
-        </div>
-        <div style={{height:16}}/>
-      </div>
-    </>
-  );
+  }
 
   return (
     <>
-      <PcBar/>
-      {showMobileLogin&&<MobileLoginSheet/>}
+      {pcBar}
+
+      {showMobileLogin&&(
+        <>
+          <div className="mobile-login-modal-overlay" onClick={()=>setShowMobileLogin(false)}/>
+          <div className="mobile-login-sheet" onClick={e=>e.stopPropagation()}>
+            <div className="mlo-header">
+              <div className="mlo-glow"/>
+              <div className="mlo-handle"/>
+              <div className="mlo-logo-row">
+                <div className="mlo-logo-mark">S</div>
+                <div><div className="mlo-logo-text">Season Finance</div><div className="mlo-logo-sub">통합 자산관리</div></div>
+              </div>
+              {!session?.user&&<><div className="mlo-headline">클라우드에<br/>연결하세요 ☁️</div><div className="mlo-sub">여러 기기에서 데이터를 동기화하고<br/>안전하게 보관하세요.</div></>}
+              {session?.user&&<><div className="mlo-headline">연결되었어요 ✓</div><div className="mlo-sub">클라우드에 자동으로 동기화 중입니다.</div></>}
+            </div>
+            <div className="mlo-body">
+              {session?.user ? (
+                <>
+                  <div className="mlo-session-bar">
+                    <div className="mlo-session-avatar">{session.user.email[0].toUpperCase()}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div className="mlo-session-email">{session.user.email}</div>
+                      <div className="mlo-session-status">● 연결됨 {syncLabel&&`· ${syncLabel}`}</div>
+                    </div>
+                  </div>
+                  <div className="mlo-action-row">
+                    <button className="mlo-action-btn" onClick={()=>{onLoadCloud();setShowMobileLogin(false)}}>📥 불러오기</button>
+                    <button className="mlo-action-btn" onClick={()=>{onSaveCloud();setShowMobileLogin(false)}}>☁️ 저장</button>
+                    <button className="mlo-action-btn danger" onClick={()=>{supabase.auth.signOut();setShowMobileLogin(false)}}>로그아웃</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mlo-field">
+                    <label>이메일</label>
+                    <div className="mlo-input-wrap">
+                      <span className="mlo-input-icon">✉️</span>
+                      <input
+                        className="mlo-input"
+                        type="email"
+                        placeholder="your@email.com"
+                        value={email}
+                        onChange={e=>setEmail(e.target.value)}
+                        autoComplete="email"
+                      />
+                    </div>
+                  </div>
+                  <div className="mlo-field">
+                    <label>비밀번호</label>
+                    <div className="mlo-input-wrap">
+                      <span className="mlo-input-icon">🔒</span>
+                      <input
+                        className="mlo-input"
+                        type="password"
+                        placeholder="••••••••"
+                        value={pw}
+                        onChange={e=>setPw(e.target.value)}
+                        onKeyDown={e=>e.key==="Enter"&&runAuth("signin")}
+                        autoComplete="current-password"
+                      />
+                    </div>
+                  </div>
+                  {msg&&<div className={`mlo-msg ${msgOk?"ok":""}`}>{msg}</div>}
+                  <div className="mlo-btn-row">
+                    <button className="mlo-btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>{busy?"로그인 중...":"로그인"}</button>
+                    <button className="mlo-btn-secondary" onClick={()=>runAuth("signup")} disabled={busy}>{busy?"처리 중...":"처음이에요, 계정 만들기"}</button>
+                  </div>
+                  <div className="mlo-divider">또는</div>
+                  <button className="mlo-local-chip" onClick={()=>setShowMobileLogin(false)}>
+                    <div className="mlo-local-icon">📱</div>
+                    <div><div style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>로컬 모드로 계속하기</div><div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>기기에만 저장 · 동기화 없음</div></div>
+                  </button>
+                </>
+              )}
+            </div>
+            <div style={{height:16}}/>
+          </div>
+        </>
+      )}
+
       {/* 모바일 동기화 버튼은 mobile-header에 주입 (데이터만 노출) */}
       <div id="__authbar_mobile_state" data-session={session?.user?.email||""} data-sync={syncLabel} data-show-login={String(showMobileLogin)} style={{display:"none"}} onClick={()=>setShowMobileLogin(v=>!v)}/>
     </>
   );
 }
+
+
 
 // ─── Field ─────────────────────────────────────────────────────────────────
 
