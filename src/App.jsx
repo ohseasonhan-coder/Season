@@ -1392,6 +1392,92 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .apple-cfo-undo-toast button{border:none;border-radius:999px;padding:7px 11px;background:var(--accent-bg);color:var(--accent2);font-size:12px;font-weight:950}
 @media(max-width:680px){.apple-cfo-modal{padding:18px;border-radius:24px}.apple-cfo-preview-grid{grid-template-columns:1fr}.apple-cfo-modal-actions{grid-template-columns:1fr}.apple-cfo-undo-toast{left:16px;right:16px;transform:none;justify-content:space-between}}
 
+/* CFO execution modal viewport-safe fix v21 */
+.apple-cfo-modal-overlay{
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+  overflow:hidden;
+}
+.apple-cfo-modal.cfo-input-modal{
+  width:min(680px,calc(100vw - 32px));
+  max-height:calc(100dvh - 32px);
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+}
+.apple-cfo-modal.cfo-input-modal .apple-cfo-modal-head{
+  position:sticky;
+  top:-22px;
+  z-index:5;
+  padding-top:4px;
+  padding-bottom:10px;
+  background:linear-gradient(180deg,rgba(28,31,39,.98) 78%,rgba(28,31,39,0));
+  backdrop-filter:blur(16px) saturate(150%);
+  -webkit-backdrop-filter:blur(16px) saturate(150%);
+}
+.apple-cfo-modal.cfo-input-modal .apple-cfo-modal-actions{
+  position:sticky;
+  bottom:-22px;
+  z-index:6;
+  margin-left:-2px;
+  margin-right:-2px;
+  padding:12px 2px 4px;
+  background:linear-gradient(0deg,rgba(28,31,39,.98) 78%,rgba(28,31,39,0));
+  backdrop-filter:blur(16px) saturate(150%);
+  -webkit-backdrop-filter:blur(16px) saturate(150%);
+}
+.cfo-verification-panel{
+  margin-top:14px;
+  padding:14px;
+  border-radius:20px;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.075);
+}
+.cfo-verification-panel strong{font-size:13px;color:var(--text)}
+.cfo-verification-panel p{font-size:11.5px;color:var(--text3);margin-top:3px;line-height:1.45}
+.cfo-verification-grid{display:flex;flex-direction:column;gap:7px;margin-top:12px}
+.cfo-verification-row{
+  display:grid;
+  grid-template-columns:minmax(86px,1fr) minmax(86px,auto) 16px minmax(86px,auto);
+  align-items:center;
+  gap:8px;
+  padding:9px 10px;
+  border-radius:13px;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.055);
+}
+.cfo-verification-row span{font-size:11.5px;color:var(--text3);font-weight:800}
+.cfo-verification-row b{font-size:11.5px;color:var(--text);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.cfo-verification-row em{font-style:normal;color:var(--text3);font-weight:900;text-align:center}
+.cfo-force-run{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:12px;font-weight:800;color:var(--text)}
+@media(max-width:680px){
+  .apple-cfo-modal-overlay{
+    align-items:flex-end;
+    padding:0;
+  }
+  .apple-cfo-modal.cfo-input-modal{
+    width:100vw;
+    max-height:92dvh;
+    border-radius:24px 24px 0 0;
+    padding:18px 16px 16px;
+  }
+  .apple-cfo-modal.cfo-input-modal .apple-cfo-modal-head{top:-18px}
+  .apple-cfo-modal.cfo-input-modal .apple-cfo-modal-actions{
+    bottom:-16px;
+    grid-template-columns:1fr;
+    padding-bottom:max(12px,env(safe-area-inset-bottom));
+  }
+  .cfo-verification-row{
+    grid-template-columns:1fr;
+    gap:4px;
+  }
+  .cfo-verification-row b{text-align:left;white-space:normal}
+  .cfo-verification-row em{text-align:left;transform:rotate(90deg);width:14px}
+}
+
+
 /* CFO execution history + per-item rollback v20 */
 .cfo-history-panel{margin-top:14px;padding:14px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.075)}
 .cfo-history-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
