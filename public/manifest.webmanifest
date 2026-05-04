@@ -1,0 +1,10 @@
+{
+  "name": "Season 개인 CFO 자산관리",
+  "short_name": "Season CFO",
+  "description": "개인 CFO형 자산관리 앱",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d0f14",
+  "theme_color": "#0d0f14",
+  "lang": "ko"
+}
