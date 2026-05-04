@@ -10507,7 +10507,7 @@ function DataTab({ data, update, validations, calculationAudit }) {
 
   const importJSON = async (file) => {
     const rd = new FileReader();
-    rd.onload = () => {
+    rd.onload = async () => {
       const result = validateImportedAppData(rd.result);
       if (!result.ok) return showToast(`복원 실패: ${result.error}`, 'error');
       if (!(await showConfirm("업로드한 파일로 복원할까요?"))) return;
