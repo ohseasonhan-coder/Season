@@ -2280,6 +2280,29 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 /* Calculation Validation Center */
 .calc-audit-hero{background:linear-gradient(135deg,var(--surface),rgba(52,213,138,.07));border-color:rgba(52,213,138,.20)}
 .calc-audit-hero .backup-health-box{background:rgba(52,213,138,.09);border-color:rgba(52,213,138,.20)}
+
+/* Split input / confirmation enhancements */
+.qa-mode-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.qa-mode-btn{padding:10px 8px;border-radius:14px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);font-size:12px;font-weight:800;transition:.15s ease}
+.qa-mode-btn.active{background:var(--accent-bg);color:var(--accent2);border-color:rgba(108,125,255,.35);box-shadow:inset 0 0 0 1px rgba(108,125,255,.12)}
+.qa-split-panel{padding:12px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);margin-bottom:12px}
+.qa-split-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 12px}
+.qa-split-metric{padding:10px;border-radius:12px;background:var(--surface2);border:1px solid var(--border);font-size:11px;color:var(--text3)}
+.qa-split-metric strong{display:block;font-size:14px;color:var(--text);margin-top:4px;font-variant-numeric:tabular-nums}
+.qa-preview-list{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.qa-preview-row{display:grid;grid-template-columns:1fr auto;gap:10px;padding:10px 12px;border-radius:12px;background:var(--surface2);border:1px solid var(--border);font-size:12px}
+.qa-preview-row strong{color:var(--text)}
+.qa-preview-row span{color:var(--text3)}
+.qa-confirm-box{padding:13px;border-radius:16px;border:1px solid rgba(108,125,255,.24);background:var(--accent-bg);margin-bottom:12px}
+.qa-confirm-box h4{font-size:13px;margin-bottom:6px;color:var(--text)}
+.qa-confirm-box p{font-size:12px;line-height:1.55;color:var(--text2)}
+.qa-validation-list{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.qa-validation-item{padding:8px 10px;border-radius:10px;font-size:11.5px;font-weight:800;border:1px solid var(--border);background:var(--surface2)}
+.qa-validation-item.error{color:var(--red);border-color:rgba(255,92,114,.28);background:var(--red-bg)}
+.qa-validation-item.warn{color:var(--amber);border-color:rgba(240,180,41,.28);background:var(--amber-bg)}
+.qa-validation-item.ok{color:var(--green);border-color:rgba(52,213,138,.25);background:var(--green-bg)}
+@media(max-width:560px){.qa-mode-row{grid-template-columns:1fr}.qa-split-summary{grid-template-columns:1fr}.qa-form-grid{grid-template-columns:1fr}}
+
 /* Backup / Restore Center */
 .backup-hero-card{background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.08));border-color:rgba(108,125,255,.22)}
 .backup-health-box{min-width:132px;padding:18px;border-radius:20px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.08);text-align:center}
@@ -5723,28 +5746,129 @@ function LegalFooter() {
   );
 }
 
-// ─── 글로벌 간편입력 모달 ─────────────────────────────────────────────────────
+// ─── 글로벌 간편입력 모달 v2: 일반거래 + 분배입력 + 저장 전 확인 ────────────────
+function getAccountByKeyword(accounts = [], keywords = []) {
+  const active = (accounts || []).filter(a => a.active !== false);
+  const words = Array.isArray(keywords) ? keywords : [keywords];
+  return active.find(a => words.some(k => String(a.name || "").includes(k) || String(a.type || "").includes(k)))?.name
+    || active[0]?.name
+    || "";
+}
+
+function getIsaUsedThisYear(transactions = [], year = new Date().getFullYear()) {
+  return (transactions || [])
+    .filter(t => String(t.date || "").slice(0, 4) === String(year))
+    .filter(t => /ISA|개인종합자산관리|isa/i.test(`${t.inAccount || ""} ${t.outAccount || ""} ${t.cat1 || ""} ${t.cat2 || ""} ${t.content || ""} ${t.memo || ""}`))
+    .filter(t => t.type === "자산이동" || t.type === "지출")
+    .reduce((sum, t) => sum + n(t.amount), 0);
+}
+
+function validateTransactionRows(rows = [], data = {}) {
+  const issues = [];
+  const accounts = new Set((data.accounts || []).map(a => a.name).filter(Boolean));
+  rows.forEach((r, idx) => {
+    const label = r.content || r.cat2 || `#${idx + 1}`;
+    if (!r.date) issues.push({ level:"error", text:`${label}: 날짜가 없습니다.` });
+    if (!r.type) issues.push({ level:"error", text:`${label}: 거래유형이 없습니다.` });
+    if (n(r.amount) <= 0) issues.push({ level:"error", text:`${label}: 금액은 0원보다 커야 합니다.` });
+    if (r.type === "수입" && !r.inAccount) issues.push({ level:"error", text:`${label}: 입금계좌가 필요합니다.` });
+    if (r.type === "지출" && !r.outAccount) issues.push({ level:"error", text:`${label}: 출금계좌가 필요합니다.` });
+    if (r.type === "자산이동") {
+      if (!r.inAccount || !r.outAccount) issues.push({ level:"error", text:`${label}: 입금계좌와 출금계좌가 모두 필요합니다.` });
+      if (r.inAccount && r.outAccount && r.inAccount === r.outAccount) issues.push({ level:"error", text:`${label}: 입금계좌와 출금계좌가 같습니다.` });
+    }
+    if (r.inAccount && accounts.size && !accounts.has(r.inAccount)) issues.push({ level:"warn", text:`${label}: 입금계좌가 계좌 목록에 없습니다.` });
+    if (r.outAccount && accounts.size && !accounts.has(r.outAccount)) issues.push({ level:"warn", text:`${label}: 출금계좌가 계좌 목록에 없습니다.` });
+  });
+
+  const year = new Date().getFullYear();
+  const isaRows = rows.filter(r => /ISA|isa/i.test(`${r.inAccount || ""} ${r.cat1 || ""} ${r.cat2 || ""} ${r.content || ""}`));
+  const isaNew = isaRows.reduce((sum, r) => sum + n(r.amount), 0);
+  const isaLimit = n(data.settings?.isaAnnualLimit || 0);
+  const isaUsed = getIsaUsedThisYear(data.transactions || [], year);
+  if (isaLimit > 0 && isaUsed + isaNew > isaLimit) {
+    issues.push({ level:"error", text:`ISA 연간 한도 초과: 기존 ${fmt(isaUsed)}원 + 신규 ${fmt(isaNew)}원 > 한도 ${fmt(isaLimit)}원` });
+  } else if (isaLimit > 0 && isaNew > 0) {
+    issues.push({ level:"ok", text:`ISA 한도 확인: 저장 후 잔여 ${fmt(Math.max(isaLimit - isaUsed - isaNew, 0))}원` });
+  }
+
+  if (!issues.some(i => i.level === "error" || i.level === "warn")) {
+    issues.push({ level:"ok", text:"필수 입력값과 계좌 규칙이 정상입니다." });
+  }
+  return issues;
+}
+
+function buildSplitTransactions({ split, data, accountNamesIn = [], accountNamesOut = [] }) {
+  const date = split.date || todayISO();
+  const source = split.outAccount || getAccountByKeyword(data.accounts, ["급여", "은행", "카카오"]);
+  const isaAccount = split.isaAccount || getAccountByKeyword(data.accounts, ["ISA"]);
+  const pensionAccount = split.pensionAccount || getAccountByKeyword(data.accounts, ["연금저축", "연금"]);
+  const irpAccount = split.irpAccount || getAccountByKeyword(data.accounts, ["IRP"]);
+  const emergencyAccount = split.emergencyAccount || getAccountByKeyword(data.accounts, ["KOFR", "파킹", "카카오", "현금"]);
+  const taxableAccount = split.taxableAccount || getAccountByKeyword(data.accounts, ["증권", "일반", "투자"]);
+  const livingAccount = split.livingAccount || getAccountByKeyword(data.accounts, ["카드", "생활", "급여"]);
+  const mk = (amount, inAccount, cat2, content, memo) => n(amount) > 0 ? {
+    id: uid(), date, type:"자산이동", cat1:"투자", cat2, amount:n(amount),
+    inAccount, outAccount:source, content, memo,
+    planGroupId: split.planGroupId, createdBy:"split-quick-add-v2",
+  } : null;
+  return [
+    mk(split.emergencyAmount, emergencyAccount, "비상금적립", "비상금 분리 적립", "분배입력: 안전자금"),
+    mk(split.isaAmount, isaAccount, "ISA납입", "ISA 투자금 분리 납입", "분배입력: ISA 연간 한도 반영"),
+    mk(split.pensionAmount, pensionAccount, "연금저축납입", "연금저축 납입", "분배입력: 세액공제 계좌"),
+    mk(split.irpAmount, irpAccount, "IRP납입", "IRP 납입", "분배입력: 세액공제 계좌"),
+    mk(split.taxableInvestAmount, taxableAccount, "일반투자", "일반 투자금 분리", "분배입력: 일반계좌"),
+    mk(split.livingAmount, livingAccount, "생활비분리", "생활비 계좌 분리", "분배입력: 소비예산"),
+  ].filter(Boolean);
+}
+
 function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose }) {
   const EMPTY = { id:"", date:todayISO(), type:"지출", cat1:"", cat2:"", amount:"", inAccount:"", outAccount:"", content:"", memo:"" };
+  const DEFAULT_SPLIT = {
+    date: todayISO(), totalAmount: 2000000,
+    emergencyAmount: 500000, isaAmount: 1500000, pensionAmount: 0, irpAmount: 0, taxableInvestAmount: 0, livingAmount: 0,
+    outAccount: getAccountByKeyword(data.accounts, ["급여", "우리", "은행"]),
+    emergencyAccount: getAccountByKeyword(data.accounts, ["KOFR", "파킹", "카카오", "현금"]),
+    isaAccount: getAccountByKeyword(data.accounts, ["ISA"]),
+    pensionAccount: getAccountByKeyword(data.accounts, ["연금저축", "연금"]),
+    irpAccount: getAccountByKeyword(data.accounts, ["IRP"]),
+    taxableAccount: getAccountByKeyword(data.accounts, ["증권", "일반"]),
+    livingAccount: getAccountByKeyword(data.accounts, ["카드", "생활"]),
+    planGroupId: uid(),
+  };
+
+  const [mode, setMode] = useState("split");
   const [form, setForm] = useState(EMPTY);
+  const [split, setSplit] = useState(DEFAULT_SPLIT);
+  const [pendingRows, setPendingRows] = useState([]);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
   const txTemplates = Array.isArray(data.settings?.transactionTemplates) ? data.settings.transactionTemplates : [];
   const cat1Opts = Object.keys(data.categories[form.type] || {});
   const cat2Opts = (data.categories[form.type] || {})[form.cat1] || [];
+  const activeAccounts = (data.accounts || []).filter(a => a.active !== false).map(a => a.name).filter(Boolean);
+  const incomeAccounts = accountNamesIn?.length ? accountNamesIn : activeAccounts;
+  const outAccounts = accountNamesOut?.length ? accountNamesOut : activeAccounts;
+
+  const splitAllocated = n(split.emergencyAmount) + n(split.isaAmount) + n(split.pensionAmount) + n(split.irpAmount) + n(split.taxableInvestAmount) + n(split.livingAmount);
+  const splitDiff = n(split.totalAmount) - splitAllocated;
+  const splitRows = useMemo(() => buildSplitTransactions({ split, data, accountNamesIn:incomeAccounts, accountNamesOut:outAccounts }), [split, data, incomeAccounts, outAccounts]);
+  const rowsToValidate = mode === "split" ? splitRows : [{ ...form, amount:n(form.amount), id:form.id || uid() }];
+  const validationIssues = validateTransactionRows(rowsToValidate, data);
+  const hasError = validationIssues.some(i => i.level === "error") || (mode === "split" && splitDiff !== 0);
 
   const normalizedForm = { ...form, amount: n(form.amount) };
-
-  const canSave = (() => {
+  const canSaveNormal = (() => {
     const f = normalizedForm;
     if (!f.date || !f.type || !f.cat1 || !f.cat2 || f.amount <= 0) return false;
     if (f.type === "수입" && !f.inAccount) return false;
     if (f.type === "지출" && !f.outAccount) return false;
-    if (f.type === "자산이동" && (!f.inAccount || !f.outAccount)) return false;
-    return true;
+    if (f.type === "자산이동" && (!f.inAccount || !f.outAccount || f.inAccount === f.outAccount)) return false;
+    return !validateTransactionRows([{ ...f, id:uid() }], data).some(i => i.level === "error");
   })();
+  const canSaveSplit = splitRows.length > 0 && splitDiff === 0 && !hasError;
 
-  // 스마트 추천 - 같은 유형의 최근 거래에서 추출
   const smartSuggestions = useMemo(() => {
     const tx = (data.transactions || []).filter(t => t.type === form.type);
     const sameCat1 = tx.filter(t => !form.cat1 || t.cat1 === form.cat1);
@@ -5768,35 +5892,38 @@ function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose 
     };
   }, [data.transactions, form.type, form.cat1, form.cat2]);
 
-  // 빠른 금액 선택지
-  const QUICK_AMOUNTS = form.type === "수입"
-    ? [300000, 1000000, 3000000, 5000000]
-    : [10000, 30000, 50000, 100000, 300000];
+  const QUICK_AMOUNTS = form.type === "수입" ? [300000, 1000000, 3000000, 5000000] : [10000, 30000, 50000, 100000, 300000];
+  const updateSplit = (key, value) => setSplit(prev => ({ ...prev, [key]: value }));
 
   const applyTemplate = (tpl) => {
+    setMode("normal");
     setForm({ ...EMPTY, date: todayISO(), type: tpl.type||"지출", cat1: tpl.cat1||"", cat2: tpl.cat2||"", amount: tpl.amount||"", inAccount: tpl.inAccount||"", outAccount: tpl.outAccount||"", content: tpl.content||tpl.name||"", memo: tpl.memo||"" });
   };
 
-  const handleSave = () => {
-    if (!canSave) return;
-    update(d => {
-      const row = { ...form, amount: n(form.amount), id: uid() };
-      return { ...d, transactions: [...d.transactions, row] };
-    });
+  const openConfirm = () => {
+    const rows = mode === "split" ? splitRows : [{ ...form, amount:n(form.amount), id:uid() }];
+    const bad = validateTransactionRows(rows, data).some(i => i.level === "error");
+    if (bad || (mode === "split" && splitDiff !== 0)) return;
+    setPendingRows(rows);
+    setConfirmOpen(true);
+  };
+
+  const commitRows = () => {
+    if (!pendingRows.length) return;
+    update(d => ({ ...d, transactions: [...(d.transactions || []), ...pendingRows.map(r => ({ ...r, id:r.id || uid() }))] }));
+    setConfirmOpen(false);
+    setPendingRows([]);
     setShowSuccess(true);
     setTimeout(() => {
       setShowSuccess(false);
-      setForm({ ...EMPTY, type: form.type }); // 같은 타입 유지
+      if (mode === "normal") setForm({ ...EMPTY, type: form.type });
+      if (mode === "split") setSplit(prev => ({ ...prev, planGroupId: uid() }));
     }, 900);
   };
 
   const typeClass = form.type === "수입" ? "income" : form.type === "지출" ? "expense" : "transfer";
-  const typeBtnClass = (t) => {
-    if (form.type !== t) return "";
-    if (t === "수입") return "active-income";
-    if (t === "지출") return "active-expense";
-    return "active-transfer";
-  };
+  const typeBtnClass = (t) => form.type !== t ? "" : t === "수입" ? "active-income" : t === "지출" ? "active-expense" : "active-transfer";
+  const previewRows = confirmOpen ? pendingRows : (mode === "split" ? splitRows : (canSaveNormal ? [{ ...form, amount:n(form.amount), id:"preview" }] : []));
 
   return (
     <>
@@ -5804,146 +5931,108 @@ function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose 
       <div className="qa-sheet" onClick={e=>e.stopPropagation()}>
         <div className="qa-handle"/>
         <div className="qa-header">
-          <span className="qa-title">간편 입력</span>
+          <span className="qa-title">간편 입력 v2</span>
           <button className="qa-close" onClick={onClose}>✕</button>
         </div>
         <div className="qa-body">
-          {/* 템플릿 빠른 선택 */}
-          {txTemplates.length > 0 && (
-            <div className="qa-template-section">
-              <div className="qa-template-title">템플릿</div>
-              <div className="qa-template-list">
-                {txTemplates.map(t => (
-                  <button key={t.id} className="qa-template-chip" onClick={() => applyTemplate(t)}>
-                    {t.name}
-                  </button>
-                ))}
+          <div className="qa-mode-row">
+            <button className={`qa-mode-btn ${mode === "split" ? "active" : ""}`} onClick={()=>setMode("split")}>🧩 분배입력</button>
+            <button className={`qa-mode-btn ${mode === "normal" ? "active" : ""}`} onClick={()=>setMode("normal")}>✍️ 일반거래</button>
+            <button className={`qa-mode-btn ${mode === "guide" ? "active" : ""}`} onClick={()=>setMode("guide")}>🛡️ 검증안내</button>
+          </div>
+
+          {mode === "guide" && (
+            <div className="qa-confirm-box">
+              <h4>저장 전 검증 기준</h4>
+              <p>금액 0원 초과, 계좌 누락, 입출금 동일 계좌, ISA 연간 한도, 분배 합계 불일치를 저장 전에 막습니다. SMS 자동인식도 바로 저장하지 말고 가져오기 화면의 미리보기에서 확인 후 반영하는 구조로 사용하세요.</p>
+              <div className="qa-validation-list">
+                <div className="qa-validation-item ok">비상금·ISA·연금·생활비를 각각 별도 거래로 저장</div>
+                <div className="qa-validation-item ok">저장 직전 미리보기 확인 후 반영</div>
+                <div className="qa-validation-item warn">세금·투자 추천은 참고용이며 실제 판단은 별도 확인 필요</div>
               </div>
             </div>
           )}
 
-          {/* 수입 / 지출 / 자산이동 */}
-          <div className="qa-type-row">
-            {["지출","수입","자산이동"].map(t => (
-              <button key={t} className={`qa-type-btn ${typeBtnClass(t)}`} onClick={() => setForm({...form, type:t, cat1:"", cat2:""})}>
-                {t === "지출" ? "💳 지출" : t === "수입" ? "💰 수입" : "🔄 이동"}
-              </button>
-            ))}
-          </div>
-
-          {/* 금액 */}
-          <div className="qa-amount-wrap">
-            <input
-              className="qa-amount-input"
-              type="number"
-              inputMode="numeric"
-              placeholder="0"
-              value={form.amount}
-              onChange={e => setForm({...form, amount:e.target.value})}
-              autoFocus
-            />
-            <span className="qa-amount-unit">원</span>
-          </div>
-
-          {/* 빠른 금액 + 추천 금액 */}
-          <div className="qa-quick-amounts">
-            {(smartSuggestions.amount.length > 0 ? smartSuggestions.amount : QUICK_AMOUNTS).map(v => (
-              <button key={v} className="qa-quick-amount" onClick={() => setForm({...form, amount:v})}>
-                {fmt(v)}
-              </button>
-            ))}
-          </div>
-
-          {/* 날짜 + 내용 */}
-          <div className="qa-form-grid">
-            <div className="qa-field">
-              <label className="qa-label">날짜</label>
-              <input className="qa-input" type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/>
-            </div>
-            <div className="qa-field">
-              <label className="qa-label">내용</label>
-              <input className="qa-input" value={form.content} onChange={e=>setForm({...form,content:e.target.value})} placeholder="무엇에 썼나요?"/>
-              {smartSuggestions.content.length > 0 && (
-                <div className="qa-suggestion-row">
-                  {smartSuggestions.content.map(v => (
-                    <button key={v} className="qa-suggestion-chip" onClick={() => setForm({...form,content:v})}>{v}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 대분류 + 소분류 */}
-          <div className="qa-form-grid">
-            <div className="qa-field">
-              <label className="qa-label">대분류</label>
-              <select className="qa-select" value={form.cat1} onChange={e=>setForm({...form,cat1:e.target.value,cat2:""})}>
-                <option value="">선택</option>
-                {cat1Opts.map(x=><option key={x}>{x}</option>)}
-              </select>
-              {smartSuggestions.cat1.length > 0 && (
-                <div className="qa-suggestion-row">
-                  {smartSuggestions.cat1.map(v => (
-                    <button key={v} className="qa-suggestion-chip" onClick={()=>setForm({...form,cat1:v,cat2:""})}>{v}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="qa-field">
-              <label className="qa-label">소분류</label>
-              <select className="qa-select" value={form.cat2} onChange={e=>setForm({...form,cat2:e.target.value})} disabled={!form.cat1}>
-                <option value="">선택</option>
-                {cat2Opts.map(x=><option key={x}>{x}</option>)}
-              </select>
-              {smartSuggestions.cat2.length > 0 && (
-                <div className="qa-suggestion-row">
-                  {smartSuggestions.cat2.map(v => (
-                    <button key={v} className="qa-suggestion-chip" onClick={()=>setForm({...form,cat2:v})}>{v}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 계좌 */}
-          <div className="qa-form-grid">
-            {(form.type === "수입" || form.type === "자산이동") && (
-              <div className="qa-field">
-                <label className="qa-label">입금계좌</label>
-                <select className="qa-select" value={form.inAccount} onChange={e=>setForm({...form,inAccount:e.target.value})}>
-                  <option value="">선택</option>
-                  {accountNamesIn.map(x=><option key={x}>{x}</option>)}
-                </select>
+          {mode === "split" && (
+            <>
+              <div className="qa-confirm-box">
+                <h4>이번 달 저축/투자 분배</h4>
+                <p>예: 총 200만원을 비상금 50만원, ISA 150만원으로 나누면 각각 별도 거래로 저장되고 CFO 점수·비상금·ISA 한도 계산에 따로 반영됩니다.</p>
               </div>
-            )}
-            {(form.type === "지출" || form.type === "자산이동") && (
-              <div className="qa-field">
-                <label className="qa-label">출금계좌</label>
-                <select className="qa-select" value={form.outAccount} onChange={e=>setForm({...form,outAccount:e.target.value})}>
-                  <option value="">선택</option>
-                  {accountNamesOut.map(x=><option key={x}>{x}</option>)}
-                </select>
+              <div className="qa-form-grid">
+                <div className="qa-field"><label className="qa-label">날짜</label><input className="qa-input" type="date" value={split.date} onChange={e=>updateSplit("date", e.target.value)}/></div>
+                <div className="qa-field"><label className="qa-label">출금계좌</label><select className="qa-select" value={split.outAccount} onChange={e=>updateSplit("outAccount", e.target.value)}><option value="">선택</option>{outAccounts.map(x=><option key={x}>{x}</option>)}</select></div>
               </div>
-            )}
-          </div>
+              <div className="qa-amount-wrap">
+                <input className="qa-amount-input" type="number" inputMode="numeric" value={split.totalAmount} onChange={e=>updateSplit("totalAmount", e.target.value)} placeholder="총 분배금액" />
+                <span className="qa-amount-unit">원</span>
+              </div>
+              <div className="qa-split-summary">
+                <div className="qa-split-metric">총 금액<strong>{fmt(split.totalAmount)}원</strong></div>
+                <div className="qa-split-metric">배분 합계<strong>{fmt(splitAllocated)}원</strong></div>
+                <div className="qa-split-metric">차액<strong className={splitDiff === 0 ? "text-green" : "text-red"}>{fmt(splitDiff)}원</strong></div>
+              </div>
+              <div className="qa-split-panel">
+                <div className="qa-form-grid">
+                  <div className="qa-field"><label className="qa-label">비상금</label><input className="qa-input" type="number" value={split.emergencyAmount} onChange={e=>updateSplit("emergencyAmount", e.target.value)}/></div>
+                  <div className="qa-field"><label className="qa-label">비상금 계좌</label><select className="qa-select" value={split.emergencyAccount} onChange={e=>updateSplit("emergencyAccount", e.target.value)}><option value="">선택</option>{incomeAccounts.map(x=><option key={x}>{x}</option>)}</select></div>
+                  <div className="qa-field"><label className="qa-label">ISA</label><input className="qa-input" type="number" value={split.isaAmount} onChange={e=>updateSplit("isaAmount", e.target.value)}/></div>
+                  <div className="qa-field"><label className="qa-label">ISA 계좌</label><select className="qa-select" value={split.isaAccount} onChange={e=>updateSplit("isaAccount", e.target.value)}><option value="">선택</option>{incomeAccounts.map(x=><option key={x}>{x}</option>)}</select></div>
+                  <div className="qa-field"><label className="qa-label">연금저축</label><input className="qa-input" type="number" value={split.pensionAmount} onChange={e=>updateSplit("pensionAmount", e.target.value)}/></div>
+                  <div className="qa-field"><label className="qa-label">연금저축 계좌</label><select className="qa-select" value={split.pensionAccount} onChange={e=>updateSplit("pensionAccount", e.target.value)}><option value="">선택</option>{incomeAccounts.map(x=><option key={x}>{x}</option>)}</select></div>
+                  <div className="qa-field"><label className="qa-label">IRP</label><input className="qa-input" type="number" value={split.irpAmount} onChange={e=>updateSplit("irpAmount", e.target.value)}/></div>
+                  <div className="qa-field"><label className="qa-label">IRP 계좌</label><select className="qa-select" value={split.irpAccount} onChange={e=>updateSplit("irpAccount", e.target.value)}><option value="">선택</option>{incomeAccounts.map(x=><option key={x}>{x}</option>)}</select></div>
+                  <div className="qa-field"><label className="qa-label">일반투자</label><input className="qa-input" type="number" value={split.taxableInvestAmount} onChange={e=>updateSplit("taxableInvestAmount", e.target.value)}/></div>
+                  <div className="qa-field"><label className="qa-label">일반투자 계좌</label><select className="qa-select" value={split.taxableAccount} onChange={e=>updateSplit("taxableAccount", e.target.value)}><option value="">선택</option>{incomeAccounts.map(x=><option key={x}>{x}</option>)}</select></div>
+                  <div className="qa-field"><label className="qa-label">생활비</label><input className="qa-input" type="number" value={split.livingAmount} onChange={e=>updateSplit("livingAmount", e.target.value)}/></div>
+                  <div className="qa-field"><label className="qa-label">생활비 계좌</label><select className="qa-select" value={split.livingAccount} onChange={e=>updateSplit("livingAccount", e.target.value)}><option value="">선택</option>{incomeAccounts.map(x=><option key={x}>{x}</option>)}</select></div>
+                </div>
+              </div>
+            </>
+          )}
 
-          {/* 저장 버튼 */}
-          <button
-            className={`qa-save-btn ${typeClass}`}
-            onClick={handleSave}
-            disabled={!canSave}
-          >
-            {canSave
-              ? `${form.type === "수입" ? "💰" : form.type === "지출" ? "💳" : "🔄"} ${form.type} ${form.amount ? fmt(n(form.amount))+"원" : ""} 저장`
-              : "필수 항목을 입력해 주세요"
-            }
-          </button>
+          {mode === "normal" && (
+            <>
+              {txTemplates.length > 0 && <div className="qa-template-section"><div className="qa-template-title">템플릿</div><div className="qa-template-list">{txTemplates.map(t => <button key={t.id} className="qa-template-chip" onClick={() => applyTemplate(t)}>{t.name}</button>)}</div></div>}
+              <div className="qa-type-row">{["지출","수입","자산이동"].map(t => <button key={t} className={`qa-type-btn ${typeBtnClass(t)}`} onClick={() => setForm({...form, type:t, cat1:"", cat2:""})}>{t === "지출" ? "💳 지출" : t === "수입" ? "💰 수입" : "🔄 이동"}</button>)}</div>
+              <div className="qa-amount-wrap"><input className="qa-amount-input" type="number" inputMode="numeric" placeholder="0" value={form.amount} onChange={e => setForm({...form, amount:e.target.value})} autoFocus/><span className="qa-amount-unit">원</span></div>
+              <div className="qa-quick-amounts">{(smartSuggestions.amount.length > 0 ? smartSuggestions.amount : QUICK_AMOUNTS).map(v => <button key={v} className="qa-quick-amount" onClick={() => setForm({...form, amount:v})}>{fmt(v)}</button>)}</div>
+              <div className="qa-form-grid"><div className="qa-field"><label className="qa-label">날짜</label><input className="qa-input" type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></div><div className="qa-field"><label className="qa-label">내용</label><input className="qa-input" value={form.content} onChange={e=>setForm({...form,content:e.target.value})} placeholder="무엇에 썼나요?"/>{smartSuggestions.content.length > 0 && <div className="qa-suggestion-row">{smartSuggestions.content.map(v => <button key={v} className="qa-suggestion-chip" onClick={() => setForm({...form,content:v})}>{v}</button>)}</div>}</div></div>
+              <div className="qa-form-grid"><div className="qa-field"><label className="qa-label">대분류</label><select className="qa-select" value={form.cat1} onChange={e=>setForm({...form,cat1:e.target.value,cat2:""})}><option value="">선택</option>{cat1Opts.map(x=><option key={x}>{x}</option>)}</select>{smartSuggestions.cat1.length > 0 && <div className="qa-suggestion-row">{smartSuggestions.cat1.map(v => <button key={v} className="qa-suggestion-chip" onClick={()=>setForm({...form,cat1:v,cat2:""})}>{v}</button>)}</div>}</div><div className="qa-field"><label className="qa-label">소분류</label><select className="qa-select" value={form.cat2} onChange={e=>setForm({...form,cat2:e.target.value})} disabled={!form.cat1}><option value="">선택</option>{cat2Opts.map(x=><option key={x}>{x}</option>)}</select>{smartSuggestions.cat2.length > 0 && <div className="qa-suggestion-row">{smartSuggestions.cat2.map(v => <button key={v} className="qa-suggestion-chip" onClick={()=>setForm({...form,cat2:v})}>{v}</button>)}</div>}</div></div>
+              <div className="qa-form-grid">{(form.type === "수입" || form.type === "자산이동") && <div className="qa-field"><label className="qa-label">입금계좌</label><select className="qa-select" value={form.inAccount} onChange={e=>setForm({...form,inAccount:e.target.value})}><option value="">선택</option>{incomeAccounts.map(x=><option key={x}>{x}</option>)}</select></div>}{(form.type === "지출" || form.type === "자산이동") && <div className="qa-field"><label className="qa-label">출금계좌</label><select className="qa-select" value={form.outAccount} onChange={e=>setForm({...form,outAccount:e.target.value})}><option value="">선택</option>{outAccounts.map(x=><option key={x}>{x}</option>)}</select></div>}</div>
+            </>
+          )}
+
+          {mode !== "guide" && (
+            <>
+              <div className="qa-validation-list">
+                {mode === "split" && splitDiff !== 0 && <div className="qa-validation-item error">총 금액과 배분 합계가 맞지 않습니다. 차액 {fmt(splitDiff)}원</div>}
+                {validationIssues.map((v, i) => <div key={i} className={`qa-validation-item ${v.level}`}>{v.text}</div>)}
+              </div>
+              {previewRows.length > 0 && <div className="qa-preview-list">{previewRows.map((r, i)=><div key={i} className="qa-preview-row"><div><strong>{r.content || r.cat2}</strong><br/><span>{r.date} · {r.type} · {r.cat1}/{r.cat2} · {r.outAccount || "-"} → {r.inAccount || "-"}</span></div><strong>{fmt(r.amount)}원</strong></div>)}</div>}
+              <button className={`qa-save-btn ${mode === "normal" ? typeClass : "transfer"}`} onClick={openConfirm} disabled={mode === "split" ? !canSaveSplit : !canSaveNormal}>{mode === "split" ? "🧩 분배 내역 확인 후 저장" : "저장 전 확인"}</button>
+            </>
+          )}
         </div>
       </div>
 
-      {showSuccess && (
-        <div className="qa-success-toast">✓ 저장되었어요!</div>
+      {confirmOpen && (
+        <>
+          <div className="qa-overlay" onClick={()=>setConfirmOpen(false)} />
+          <div className="qa-sheet" onClick={e=>e.stopPropagation()} style={{zIndex:260}}>
+            <div className="qa-handle"/>
+            <div className="qa-header"><span className="qa-title">저장 전 최종 확인</span><button className="qa-close" onClick={()=>setConfirmOpen(false)}>✕</button></div>
+            <div className="qa-body">
+              <div className="qa-confirm-box"><h4>아래 {pendingRows.length}건을 거래내역에 반영합니다.</h4><p>저장 후 대시보드, CFO 점수, 비상금, ISA 한도 계산이 함께 갱신됩니다.</p></div>
+              <div className="qa-preview-list">{pendingRows.map((r, i)=><div key={i} className="qa-preview-row"><div><strong>{r.content || r.cat2}</strong><br/><span>{r.date} · {r.type} · {r.cat1}/{r.cat2} · {r.outAccount || "-"} → {r.inAccount || "-"}</span></div><strong>{fmt(r.amount)}원</strong></div>)}</div>
+              <button className="qa-save-btn transfer" onClick={commitRows}>확인하고 저장</button>
+              <button className="btn btn-ghost" style={{width:"100%",marginTop:8}} onClick={()=>setConfirmOpen(false)}>다시 수정</button>
+            </div>
+          </div>
+        </>
       )}
+
+      {showSuccess && <div className="qa-success-toast">✓ 저장되었어요!</div>}
     </>
   );
 }
