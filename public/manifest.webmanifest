@@ -1,0 +1,43 @@
+{
+  "name": "Season 개인 CFO 자산관리",
+  "short_name": "Season CFO",
+  "description": "개인 CFO형 자산관리 앱 — 거래, 포트폴리오, 세금, 시뮬레이션",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0d0f14",
+  "theme_color": "#0d0f14",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "거래 입력",
+      "short_name": "거래",
+      "description": "새 거래 빠르게 입력",
+      "url": "/?tab=transactions",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "대시보드",
+      "short_name": "대시보드",
+      "description": "재무 현황 한눈에 보기",
+      "url": "/?tab=dashboard",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    }
+  ],
+  "categories": ["finance", "productivity"],
+  "prefer_related_applications": false
+}
