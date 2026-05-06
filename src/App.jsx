@@ -315,19 +315,40 @@ function saveData(d) {
 
     const serialized = JSON.stringify(nextData);
 
-    localStorage.setItem(STORAGE_TEMP_KEY, serialized);
-    localStorage.setItem(STORAGE_KEY, serialized);
-    localStorage.removeItem(STORAGE_TEMP_KEY);
+    try {
+      localStorage.setItem(STORAGE_TEMP_KEY, serialized);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      localStorage.removeItem(STORAGE_TEMP_KEY);
+    } catch (storageErr) {
+      localStorage.removeItem(STORAGE_TEMP_KEY);
+      const isQuota =
+        storageErr instanceof DOMException &&
+        (storageErr.name === "QuotaExceededError" ||
+          storageErr.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+          storageErr.code === 22);
+      const sizeKB = Math.round(new Blob([serialized]).size / 1024);
+      const errMsg = isQuota
+        ? `저장 공간 부족 (현재 데이터 ${sizeKB}KB). 오래된 백업을 삭제하거나 데이터 관리 탭에서 내보내기 후 정리하세요.`
+        : storageErr.message || "저장 실패";
+      // 앱 상단에 경고 배너 표시
+      const bannerId = "__storage_quota_warning";
+      if (!document.getElementById(bannerId)) {
+        const banner = document.createElement("div");
+        banner.id = bannerId;
+        banner.style.cssText =
+          "position:fixed;top:0;left:0;right:0;z-index:99999;background:#ff5c72;color:#fff;font-size:13px;font-weight:700;padding:10px 20px;text-align:center;";
+        banner.innerHTML = `⚠️ ${errMsg} <button onclick="this.parentElement.remove()" style="margin-left:12px;background:rgba(255,255,255,.25);border:none;color:#fff;padding:2px 10px;border-radius:6px;cursor:pointer;font-weight:700">닫기</button>`;
+        document.body.prepend(banner);
+        setTimeout(() => banner?.remove(), 12000);
+      }
+      throw new Error(errMsg);
+    }
 
     console.info("데이터 저장 완료:", nextData.lastSavedAt);
     return { ok: true, savedAt: nextData.lastSavedAt };
   } catch (error) {
     console.error("데이터 저장 실패:", error);
-
-    try {
-      localStorage.removeItem(STORAGE_TEMP_KEY);
-    } catch {}
-
+    try { localStorage.removeItem(STORAGE_TEMP_KEY); } catch {}
     return {
       ok: false,
       error: error.message || "알 수 없는 저장 오류",
@@ -3826,6 +3847,7 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
   const [msg,setMsg]=useState("");
   const [msgOk,setMsgOk]=useState(false);
   const [showMobileLogin, setShowMobileLogin]=useState(false);
+  const [resetMode,setResetMode]=useState(false);
 
   const runAuth=async(mode)=>{
     if(!supabase){setMsg("Supabase 미설정");setMsgOk(false);return}
@@ -3836,6 +3858,19 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
       if(r.error)throw r.error;
       setMsg(mode==="signup"?"🎉 가입 완료! 이메일을 확인해주세요":"✓ 로그인 완료");setMsgOk(true);
       if(mode==="signin")setTimeout(()=>setShowMobileLogin(false),800);
+    }catch(e){setMsg(e.message||"오류가 발생했습니다");setMsgOk(false)}finally{setBusy(false)}
+  };
+
+  const runReset=async()=>{
+    if(!supabase){setMsg("Supabase 미설정");setMsgOk(false);return}
+    if(!email){setMsg("이메일을 입력해주세요");setMsgOk(false);return}
+    setBusy(true);setMsg("");
+    try{
+      const {error}=await supabase.auth.resetPasswordForEmail(email,{
+        redirectTo: window.location.origin+"/?type=recovery",
+      });
+      if(error)throw error;
+      setMsg("✓ 비밀번호 재설정 이메일을 보냈습니다. 받은편지함을 확인해주세요.");setMsgOk(true);
     }catch(e){setMsg(e.message||"오류가 발생했습니다");setMsgOk(false)}finally{setBusy(false)}
   };
 
@@ -3874,25 +3909,44 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
       <div className="auth-bar">
         <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">클라우드 동기화</span></div>
         <div className="row" style={{gap:8}}>
-          <input
-            className="auth-input"
-            type="email"
-            placeholder="이메일"
-            value={email}
-            onChange={e=>setEmail(e.target.value)}
-            autoComplete="email"
-          />
-          <input
-            className="auth-input"
-            type="password"
-            placeholder="비밀번호"
-            value={pw}
-            onChange={e=>setPw(e.target.value)}
-            onKeyDown={e=>e.key==="Enter"&&runAuth("signin")}
-            autoComplete="current-password"
-          />
-          <button className="btn btn-sm btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>로그인</button>
-          <button className="btn btn-sm btn-ghost" onClick={()=>runAuth("signup")} disabled={busy}>가입</button>
+          {resetMode ? (
+            <>
+              <input
+                className="auth-input"
+                type="email"
+                placeholder="가입한 이메일"
+                value={email}
+                onChange={e=>setEmail(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&runReset()}
+                autoComplete="email"
+              />
+              <button className="btn btn-sm btn-primary" onClick={runReset} disabled={busy}>{busy?"전송 중...":"재설정 메일 보내기"}</button>
+              <button className="btn btn-sm btn-ghost" onClick={()=>{setResetMode(false);setMsg("");}}>취소</button>
+            </>
+          ) : (
+            <>
+              <input
+                className="auth-input"
+                type="email"
+                placeholder="이메일"
+                value={email}
+                onChange={e=>setEmail(e.target.value)}
+                autoComplete="email"
+              />
+              <input
+                className="auth-input"
+                type="password"
+                placeholder="비밀번호"
+                value={pw}
+                onChange={e=>setPw(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&runAuth("signin")}
+                autoComplete="current-password"
+              />
+              <button className="btn btn-sm btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>로그인</button>
+              <button className="btn btn-sm btn-ghost" onClick={()=>runAuth("signup")} disabled={busy}>가입</button>
+              <button className="btn btn-sm btn-ghost" style={{opacity:0.6,fontSize:11}} onClick={()=>{setResetMode(true);setMsg("");}}>비밀번호 찾기</button>
+            </>
+          )}
           {msg&&<span style={{fontSize:11,color:msgOk?"var(--green)":"var(--red)"}}>{msg}</span>}
         </div>
       </div>
@@ -3965,10 +4019,39 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
                     </div>
                   </div>
                   {msg&&<div className={`mlo-msg ${msgOk?"ok":""}`}>{msg}</div>}
+                  {resetMode ? (
+                    <>
+                      <div className="mlo-field">
+                        <label>가입한 이메일</label>
+                        <div className="mlo-input-wrap">
+                          <span className="mlo-input-icon">✉️</span>
+                          <input
+                            className="mlo-input"
+                            type="email"
+                            placeholder="your@email.com"
+                            value={email}
+                            onChange={e=>setEmail(e.target.value)}
+                            onKeyDown={e=>e.key==="Enter"&&runReset()}
+                            autoComplete="email"
+                          />
+                        </div>
+                      </div>
+                      <div className="mlo-btn-row">
+                        <button className="mlo-btn-primary" onClick={runReset} disabled={busy}>{busy?"전송 중...":"재설정 메일 보내기"}</button>
+                        <button className="mlo-btn-secondary" onClick={()=>{setResetMode(false);setMsg("");}}>← 로그인으로 돌아가기</button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
                   <div className="mlo-btn-row">
                     <button className="mlo-btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>{busy?"로그인 중...":"로그인"}</button>
                     <button className="mlo-btn-secondary" onClick={()=>runAuth("signup")} disabled={busy}>{busy?"처리 중...":"처음이에요, 계정 만들기"}</button>
                   </div>
+                  <div style={{textAlign:"center",marginTop:8}}>
+                    <button onClick={()=>{setResetMode(true);setMsg("");}} style={{background:"none",border:"none",color:"var(--text3)",fontSize:11,cursor:"pointer",textDecoration:"underline"}}>비밀번호를 잊으셨나요?</button>
+                  </div>
+                    </>
+                  )}
                   <div className="mlo-divider">또는</div>
                   <button className="mlo-local-chip" onClick={()=>setShowMobileLogin(false)}>
                     <div className="mlo-local-icon">📱</div>
@@ -6562,6 +6645,16 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
     return{income,expense,net:income-expense};
   },[filtered]);
 
+  // ── 페이지네이션
+  const TX_PAGE_SIZE = 50;
+  const [txPage, setTxPage] = useState(1);
+  // 필터 변경 시 1페이지로 리셋
+  const prevFilterKey = useRef("");
+  const filterKey = `${filterMonth}|${filterType}|${filterCat1}|${search}`;
+  if (prevFilterKey.current !== filterKey) { prevFilterKey.current = filterKey; if (txPage !== 1) setTxPage(1); }
+  const txTotalPages = Math.max(1, Math.ceil(filtered.length / TX_PAGE_SIZE));
+  const pagedFiltered = filtered.slice((txPage - 1) * TX_PAGE_SIZE, txPage * TX_PAGE_SIZE);
+
   const normalizedForm=useMemo(()=>({
     ...form,
     amount:n(form.amount),
@@ -6994,7 +7087,7 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
           <table>
             <thead><tr><th>날짜</th><th>구분</th><th>대분류</th><th>소분류</th><th className="td-right">금액</th><th>입금계좌</th><th>출금계좌</th><th>내용</th><th>작업</th></tr></thead>
             <tbody>
-              {filtered.map(t=>(
+              {pagedFiltered.map(t=>(
                 <tr key={t.id}>
                   <td>{t.date}</td>
                   <td><span className={`badge ${t.type==="수입"?"badge-green":t.type==="지출"?"badge-red":"badge-muted"}`}>{t.type}</span></td>
@@ -7017,7 +7110,24 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
             </tbody>
           </table>
         </div>
-        {filtered.length>0&&<div style={{marginTop:10,fontSize:11,color:"var(--text3)",textAlign:"right"}}>{filterMonth||"전체 기간"} · {filtered.length}건 표시</div>}
+        {filtered.length>0&&(
+          <div style={{marginTop:10,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+            <span style={{fontSize:11,color:"var(--text3)"}}>{filterMonth||"전체 기간"} · 총 {filtered.length}건 ({txPage}/{txTotalPages} 페이지)</span>
+            {txTotalPages>1&&(
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <button onClick={()=>setTxPage(1)} disabled={txPage===1} style={{padding:"3px 8px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text2)",fontSize:11,cursor:txPage===1?"not-allowed":"pointer",opacity:txPage===1?0.4:1}}>«</button>
+                <button onClick={()=>setTxPage(p=>Math.max(1,p-1))} disabled={txPage===1} style={{padding:"3px 8px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text2)",fontSize:11,cursor:txPage===1?"not-allowed":"pointer",opacity:txPage===1?0.4:1}}>‹</button>
+                {Array.from({length:txTotalPages},(_,i)=>i+1).filter(p=>p===1||p===txTotalPages||Math.abs(p-txPage)<=1).reduce((acc,p,idx,arr)=>{if(idx>0&&p-arr[idx-1]>1)acc.push("…");acc.push(p);return acc;},[]).map((p,i)=>
+                  p==="…"
+                    ?<span key={`ellipsis-${i}`} style={{fontSize:11,color:"var(--text3)",padding:"0 2px"}}>…</span>
+                    :<button key={p} onClick={()=>setTxPage(p)} style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${p===txPage?"var(--accent)":"var(--border)"}`,background:p===txPage?"var(--accent-bg)":"var(--surface2)",color:p===txPage?"var(--accent)":"var(--text2)",fontSize:11,fontWeight:p===txPage?700:400,cursor:"pointer"}}>{p}</button>
+                )}
+                <button onClick={()=>setTxPage(p=>Math.min(txTotalPages,p+1))} disabled={txPage===txTotalPages} style={{padding:"3px 8px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text2)",fontSize:11,cursor:txPage===txTotalPages?"not-allowed":"pointer",opacity:txPage===txTotalPages?0.4:1}}>›</button>
+                <button onClick={()=>setTxPage(txTotalPages)} disabled={txPage===txTotalPages} style={{padding:"3px 8px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text2)",fontSize:11,cursor:txPage===txTotalPages?"not-allowed":"pointer",opacity:txPage===txTotalPages?0.4:1}}>»</button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
