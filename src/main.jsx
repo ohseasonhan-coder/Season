@@ -87,3 +87,17 @@ if (!rootEl) {
     </React.StrictMode>
   );
 }
+
+// ── 서비스워커 등록 (PWA 오프라인 지원)
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/sw.js", { scope: "/" })
+      .then((reg) => {
+        console.info("[SW] 등록 완료:", reg.scope);
+      })
+      .catch((err) => {
+        console.warn("[SW] 등록 실패:", err);
+      });
+  });
+}
