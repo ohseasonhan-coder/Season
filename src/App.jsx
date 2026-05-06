@@ -3892,15 +3892,34 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
       </div>
     );
   } else if(session?.user) {
+    const emailVerified = !!session.user.email_confirmed_at;
+    const [showResendMsg,setShowResendMsg]=useState(false);
+    const resendVerification=async()=>{
+      if(!supabase)return;
+      await supabase.auth.resend({type:"signup",email:session.user.email});
+      setShowResendMsg(true);
+      setTimeout(()=>setShowResendMsg(false),5000);
+    };
     pcBar = (
-      <div className="auth-bar">
-        <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">Season Finance</span></div>
-        <div className="row" style={{gap:8}}>
-          {syncLabel&&<span className={`auth-bar-sync ${syncClass}`}>⟳ {syncLabel}</span>}
-          <span style={{fontSize:11,color:"var(--text3)"}}>{session.user.email}</span>
-          <button className="btn btn-sm btn-ghost" onClick={onLoadCloud}>불러오기</button>
-          <button className="btn btn-sm btn-ghost" onClick={onSaveCloud}>저장</button>
-          <button className="btn btn-sm btn-ghost" onClick={()=>supabase.auth.signOut()}>로그아웃</button>
+      <div className="auth-bar" style={{flexDirection:"column",alignItems:"stretch",gap:0}}>
+        {!emailVerified&&(
+          <div style={{background:"rgba(240,180,41,.13)",borderBottom:"1px solid rgba(240,180,41,.25)",padding:"6px 20px",display:"flex",alignItems:"center",gap:10,fontSize:12}}>
+            <span style={{color:"var(--amber)",fontWeight:700}}>⚠️ 이메일 인증이 필요합니다</span>
+            <span style={{color:"var(--text2)"}}>{session.user.email}으로 인증 메일을 확인해주세요.</span>
+            <button onClick={resendVerification} style={{background:"none",border:"1px solid rgba(240,180,41,.4)",borderRadius:6,color:"var(--amber)",fontSize:11,padding:"2px 8px",cursor:"pointer",fontWeight:700,whiteSpace:"nowrap"}}>
+              {showResendMsg?"✓ 발송됨":"재발송"}
+            </button>
+          </div>
+        )}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 20px",height:44}}>
+          <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">Season Finance</span></div>
+          <div className="row" style={{gap:8}}>
+            {syncLabel&&<span className={`auth-bar-sync ${syncClass}`}>⟳ {syncLabel}</span>}
+            <span style={{fontSize:11,color:"var(--text3)"}}>{session.user.email}</span>
+            <button className="btn btn-sm btn-ghost" onClick={onLoadCloud}>불러오기</button>
+            <button className="btn btn-sm btn-ghost" onClick={onSaveCloud}>저장</button>
+            <button className="btn btn-sm btn-ghost" onClick={()=>supabase.auth.signOut()}>로그아웃</button>
+          </div>
         </div>
       </div>
     );
@@ -3945,6 +3964,14 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
               <button className="btn btn-sm btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>로그인</button>
               <button className="btn btn-sm btn-ghost" onClick={()=>runAuth("signup")} disabled={busy}>가입</button>
               <button className="btn btn-sm btn-ghost" style={{opacity:0.6,fontSize:11}} onClick={()=>{setResetMode(true);setMsg("");}}>비밀번호 찾기</button>
+              <span style={{fontSize:11,color:"var(--text3)"}}>|</span>
+              <button onClick={async()=>{if(!supabase)return;await supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:window.location.origin}});}} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text2)",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                <svg width="13" height="13" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                Google
+              </button>
+              <button onClick={async()=>{if(!supabase)return;await supabase.auth.signInWithOAuth({provider:"kakao",options:{redirectTo:window.location.origin}});}} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:8,border:"none",background:"#FEE500",color:"#3C1E1E",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                카카오
+              </button>
             </>
           )}
           {msg&&<span style={{fontSize:11,color:msgOk?"var(--green)":"var(--red)"}}>{msg}</span>}
@@ -4052,6 +4079,17 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
                   </div>
                     </>
                   )}
+                  <div className="mlo-divider">소셜 로그인</div>
+                  <div style={{display:"grid",gap:8}}>
+                    <button onClick={async()=>{if(!supabase)return;await supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:window.location.origin}});}} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 16px",borderRadius:12,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:13,fontWeight:600,cursor:"pointer",width:"100%"}}>
+                      <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                      Google로 로그인
+                    </button>
+                    <button onClick={async()=>{if(!supabase)return;await supabase.auth.signInWithOAuth({provider:"kakao",options:{redirectTo:window.location.origin}});}} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 16px",borderRadius:12,border:"none",background:"#FEE500",color:"#3C1E1E",fontSize:13,fontWeight:700,cursor:"pointer",width:"100%"}}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="#3C1E1E"><path d="M12 3C7.03 3 3 6.36 3 10.5c0 2.64 1.64 4.96 4.13 6.35L6.1 20.2a.3.3 0 0 0 .43.34l4.3-2.86c.38.05.76.07 1.17.07 4.97 0 9-3.36 9-7.5S16.97 3 12 3z"/></svg>
+                      카카오로 로그인
+                    </button>
+                  </div>
                   <div className="mlo-divider">또는</div>
                   <button className="mlo-local-chip" onClick={()=>setShowMobileLogin(false)}>
                     <div className="mlo-local-icon">📱</div>
@@ -7035,12 +7073,27 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
       <div className="card">
         <div className="card-title">
           <h3>거래 목록 <span style={{fontSize:12,fontWeight:400,color:"var(--text3)",marginLeft:6}}>전체 {data.transactions.length}건 중 {filtered.length}건</span></h3>
-          {activeFilterCount>0&&(
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{display:"inline-flex",alignItems:"center",padding:"3px 9px",borderRadius:99,background:"var(--accent-bg)",color:"var(--accent)",fontSize:11,fontWeight:600}}>필터 {activeFilterCount}개 적용</span>
-              <button onClick={resetFilters} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:99,border:"none",cursor:"pointer",background:"var(--surface3)",color:"var(--text2)",fontSize:11,fontWeight:600}}>✕ 초기화</button>
-            </div>
-          )}
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            {activeFilterCount>0&&(
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{display:"inline-flex",alignItems:"center",padding:"3px 9px",borderRadius:99,background:"var(--accent-bg)",color:"var(--accent)",fontSize:11,fontWeight:600}}>필터 {activeFilterCount}개 적용</span>
+                <button onClick={resetFilters} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:99,border:"none",cursor:"pointer",background:"var(--surface3)",color:"var(--text2)",fontSize:11,fontWeight:600}}>✕ 초기화</button>
+              </div>
+            )}
+            <button onClick={()=>{
+              const header="날짜,구분,대분류,소분류,금액,입금계좌,출금계좌,내용,메모";
+              const rows=filtered.map(t=>[t.date,t.type,t.cat1,t.cat2,n(t.amount),t.inAccount||"",t.outAccount||"",String(t.content||"").replace(/,/g,"，"),String(t.memo||"").replace(/,/g,"，")].join(","));
+              const csv="\uFEFF"+[header,...rows].join("\n");
+              const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+              const url=URL.createObjectURL(blob);
+              const a=document.createElement("a");
+              a.href=url;a.download=`season_transactions_${filterMonth||"all"}_${filtered.length}건.csv`;
+              document.body.appendChild(a);a.click();
+              setTimeout(()=>{URL.revokeObjectURL(url);document.body.removeChild(a);},500);
+            }} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 12px",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text2)",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+              ⬇ CSV 내보내기
+            </button>
+          </div>
         </div>
 
         {/* 검색 + 월 */}
@@ -11519,15 +11572,41 @@ export default function App() {
     return()=>subscription.unsubscribe();
   },[]);
 
+  const [conflictData,setConflictData]=useState(null); // {remote, remoteUpdatedAt, localUpdatedAt}
+
   const loadCloudData=async()=>{
     if(!supabase||!session?.user)return;
     setSyncState("불러오는 중...");
-    const {data:row,error}=await supabase.from(CLOUD_TABLE).select("data").eq("user_id",session.user.id).maybeSingle();
+    const {data:row,error}=await supabase.from(CLOUD_TABLE).select("data,updated_at").eq("user_id",session.user.id).maybeSingle();
     if(error){setSyncState("불러오기 실패");return;}
-    if(row?.data){skipCloudSaveRef.current=true;setData(migrateData(row.data));setSyncState("불러오기 완료");}
-    else setSyncState("신규 계정");
+    if(row?.data){
+      const remoteUpdatedAt=row.updated_at||"";
+      const localUpdatedAt=data.lastSavedAt||"";
+      // 로컬에 데이터가 있고, 로컬이 더 최신이면 충돌 확인
+      const localHasData=data.transactions.length>0||data.assets.length>0||data.portfolio.length>0;
+      const localIsNewer=localHasData&&localUpdatedAt&&remoteUpdatedAt&&localUpdatedAt>remoteUpdatedAt;
+      if(localIsNewer){
+        setConflictData({remote:migrateData(row.data),remoteUpdatedAt,localUpdatedAt});
+        setSyncState("충돌 감지");
+        setCloudReady(true);
+        return;
+      }
+      skipCloudSaveRef.current=true;
+      setData(migrateData(row.data));
+      setSyncState("불러오기 완료");
+    } else {
+      setSyncState("신규 계정");
+    }
     setCloudReady(true);
   };
+
+  const resolveConflict=(useRemote)=>{
+    if(!conflictData)return;
+    if(useRemote){skipCloudSaveRef.current=true;setData(conflictData.remote);setSyncState("서버 데이터로 복원");}
+    else{setSyncState("로컬 데이터 유지");}
+    setConflictData(null);
+  };
+
   const saveCloudData=async(manual=true)=>{
     if(!supabase||!session?.user)return;
     setSyncState("저장 중...");
@@ -11572,7 +11651,7 @@ export default function App() {
     const totalLiabs=data.assets.filter(a=>a.kind==="부채").reduce((s,a)=>s+n(a.current),0);
     const portValue=data.portfolio.reduce((s,p)=>s+n(p.qty)*n(p.currentPrice||p.avgPrice),0);
     return{month,income,expense,net:income-expense,totalAssets,totalLiabs,portValue,netWorth:totalAssets-totalLiabs+portValue};
-  },[data]);
+  },[data.transactions,data.assets,data.portfolio]);
 
   const validations=useMemo(()=>{
     const accountNames = data.accounts.map(a=>String(a.name||"").trim()).filter(Boolean);
@@ -11608,7 +11687,7 @@ export default function App() {
       {item:"예산 금액 오류",count:data.budgets.filter(b=>n(b.budget)<0||n(b.targetWeight)<0||n(b.targetWeight)>1).length,where:"예산",desc:"예산은 0 이상, 목표비중은 0~100%여야 합니다"},
       {item:"목표 이벤트 금액 오류",count:data.events.filter(e=>n(e.amountNeeded)<0||n(e.currentPrepared)<0||n(e.currentPrepared)>n(e.amountNeeded)&&n(e.amountNeeded)>0).length,where:"목표",desc:"목표금액·준비금액의 음수 또는 초과값을 확인하세요"},
     ];
-  },[data]);
+  },[data.transactions,data.accounts,data.assets,data.portfolio,data.budgets,data.events,data.settings]);
 
   const budgetAnalysis=useMemo(()=>{
     const month=thisMonthISO();
@@ -11618,7 +11697,7 @@ export default function App() {
       const rate=b.budget>0?(spent/b.budget)*100:0;
       return{...b,spent,rate,status:rate>=100?"초과":rate>=80?"주의":"정상",recommendedBudget:totalIncome*n(b.targetWeight)};
     });
-  },[data]);
+  },[data.transactions,data.budgets]);
 
   const monthlySeries=useMemo(()=>{
     const m=new Map();
@@ -11722,7 +11801,7 @@ export default function App() {
     const totalValidationIssues=validations.reduce((s,v)=>s+n(v.count),0);
     const retirementRow=futureSim.length?futureSim[futureSim.length-1]:null;
     return{emergencyFund,liquidAssets,avgIncome,avgExpense,avgNet,accountBalances,assetCategoryBreakdown,budgetSummary:{over,warn},topExpenseCats,recentTx,totalValidationIssues,retirementRow};
-  },[data,monthlySeries,budgetAnalysis,validations,futureSim]);
+  },[data.transactions,data.assets,data.accounts,data.portfolio,monthlySeries,budgetAnalysis,validations,futureSim]);
 
   const dashboardChartData=useMemo(()=>{
     const assetBuckets=new Map();
@@ -11747,6 +11826,33 @@ export default function App() {
       {/* ── 온보딩 위자드 (최초 방문 시만) ── */}
       {showOnboarding && (
         <OnboardingWizard onComplete={handleOnboardingComplete}/>
+      )}
+
+      {/* ── 클라우드 동기화 충돌 다이얼로그 ── */}
+      {conflictData&&(
+        <div style={{position:"fixed",inset:0,zIndex:99990,background:"rgba(0,0,0,.65)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:20,padding:28,maxWidth:440,width:"100%",boxShadow:"0 24px 80px rgba(0,0,0,.4)"}}>
+            <div style={{fontSize:22,fontWeight:800,marginBottom:8}}>⚠️ 데이터 충돌 감지</div>
+            <p style={{fontSize:13,color:"var(--text2)",lineHeight:1.6,marginBottom:20}}>
+              이 기기의 로컬 데이터와 서버 데이터가 다릅니다.<br/>어느 쪽을 사용할지 선택해주세요.
+            </p>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+              <div style={{padding:"12px 14px",borderRadius:12,border:"1px solid var(--border)",background:"var(--surface2)"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"var(--text3)",marginBottom:4}}>📱 이 기기 (로컬)</div>
+                <div style={{fontSize:12,color:"var(--text2)"}}>{conflictData.localUpdatedAt?.slice(0,16).replace("T"," ")||"시간 알 수 없음"}</div>
+              </div>
+              <div style={{padding:"12px 14px",borderRadius:12,border:"1px solid var(--border)",background:"var(--surface2)"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"var(--text3)",marginBottom:4}}>☁️ 서버 (클라우드)</div>
+                <div style={{fontSize:12,color:"var(--text2)"}}>{conflictData.remoteUpdatedAt?.slice(0,16).replace("T"," ")||"시간 알 수 없음"}</div>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <button onClick={()=>resolveConflict(false)} style={{padding:"12px",borderRadius:12,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:13,fontWeight:700,cursor:"pointer"}}>📱 로컬 유지</button>
+              <button onClick={()=>resolveConflict(true)} style={{padding:"12px",borderRadius:12,border:"none",background:"var(--accent)",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>☁️ 서버로 덮어쓰기</button>
+            </div>
+            <p style={{fontSize:11,color:"var(--text3)",marginTop:12,textAlign:"center"}}>선택 후 자동으로 동기화됩니다. 선택하지 않은 쪽은 JSON 백업으로 보관하세요.</p>
+          </div>
+        </div>
       )}
 
       {/* ── 모바일 전용 헤더 ── */}
