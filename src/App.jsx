@@ -3965,6 +3965,7 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
               <button className="btn btn-sm btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>로그인</button>
               <button className="btn btn-sm btn-ghost" onClick={()=>runAuth("signup")} disabled={busy}>가입</button>
               <button className="btn btn-sm btn-ghost" style={{opacity:0.6,fontSize:11}} onClick={()=>{setResetMode(true);setMsg("");}}>비밀번호 찾기</button>
+
             </>
           )}
           {msg&&<span style={{fontSize:11,color:msgOk?"var(--green)":"var(--red)"}}>{msg}</span>}
