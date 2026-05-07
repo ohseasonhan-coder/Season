@@ -2,6 +2,39 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
 
+// ── 전역 JS 오류를 화면에 표시 (배포 환경 디버깅용)
+window.addEventListener("error", (e) => {
+  const existing = document.getElementById("__global_error_overlay");
+  if (existing) return;
+  const div = document.createElement("div");
+  div.id = "__global_error_overlay";
+  div.style.cssText = "position:fixed;inset:0;z-index:999999;background:#0d0f14;color:#f0f1f3;padding:32px;font-family:monospace;overflow:auto;";
+  div.innerHTML = `
+    <h2 style="color:#ff5c72;margin:0 0 16px">⚠️ 앱 로드 오류</h2>
+    <p style="color:#9ba3b5;margin:0 0 12px;font-family:sans-serif">아래 오류 내용을 개발자에게 전달해주세요.</p>
+    <pre style="background:#161920;border:1px solid #2a2d36;padding:16px;border-radius:12px;white-space:pre-wrap;color:#ffb4c0;font-size:13px">${e.message}\n\n${e.filename}:${e.lineno}:${e.colno}</pre>
+    <button onclick="location.reload()" style="margin-top:16px;padding:10px 20px;background:#6c7dff;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">새로고침</button>
+    <button onclick="this.parentElement.remove()" style="margin-top:16px;margin-left:8px;padding:10px 20px;background:#2a2d36;color:#9ba3b5;border:none;border-radius:10px;font-size:14px;cursor:pointer">닫기</button>
+  `;
+  document.body.appendChild(div);
+});
+
+window.addEventListener("unhandledrejection", (e) => {
+  const existing = document.getElementById("__global_error_overlay");
+  if (existing) return;
+  const div = document.createElement("div");
+  div.id = "__global_error_overlay";
+  div.style.cssText = "position:fixed;inset:0;z-index:999999;background:#0d0f14;color:#f0f1f3;padding:32px;font-family:monospace;overflow:auto;";
+  div.innerHTML = `
+    <h2 style="color:#ff5c72;margin:0 0 16px">⚠️ 앱 Promise 오류</h2>
+    <p style="color:#9ba3b5;margin:0 0 12px;font-family:sans-serif">아래 오류 내용을 개발자에게 전달해주세요.</p>
+    <pre style="background:#161920;border:1px solid #2a2d36;padding:16px;border-radius:12px;white-space:pre-wrap;color:#ffb4c0;font-size:13px">${String(e.reason?.message || e.reason)}</pre>
+    <button onclick="location.reload()" style="margin-top:16px;padding:10px 20px;background:#6c7dff;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">새로고침</button>
+    <button onclick="this.parentElement.remove()" style="margin-top:16px;margin-left:8px;padding:10px 20px;background:#2a2d36;color:#9ba3b5;border:none;border-radius:10px;font-size:14px;cursor:pointer">닫기</button>
+  `;
+  document.body.appendChild(div);
+});
+
 class RootErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
