@@ -68,6 +68,10 @@ const DEFAULT_SETTINGS = {
   compareRetireAge:60,
   fxUsdKrw:0,
   fxAsOf:"",
+  fxJpyKrw:0,
+  fxEurKrw:0,
+  fxCnyKrw:0,
+  reportEmail:"",
   marketDataLastUpdated:"",
   marketDataMode:"auto",
   autoUpdateMarketDataOnStart:false,
@@ -184,6 +188,9 @@ function migrateData(d) {
   x.settings.triggerMonthlyInvestAmount = n(x.settings.triggerMonthlyInvestAmount || x.settings.monthlyInvestDefault || x.settings.monthlyInvestStage1 || 0);
   x.settings.triggerCashAvailable = n(x.settings.triggerCashAvailable || 0);
   x.settings.fxUsdKrw = n(x.settings.fxUsdKrw || 0);
+  x.settings.fxJpyKrw = n(x.settings.fxJpyKrw || 0);
+  x.settings.fxEurKrw = n(x.settings.fxEurKrw || 0);
+  x.settings.fxCnyKrw = n(x.settings.fxCnyKrw || 0);
   x.settings.fxAsOf = x.settings.fxAsOf || "";
   x.settings.marketDataLastUpdated = x.settings.marketDataLastUpdated || "";
   x.settings.marketDataMode = x.settings.marketDataMode || "auto";
@@ -5510,7 +5517,7 @@ function rollbackCFOActionFromData(data, historyId) {
 
 
 // ─── Dashboard Tab ────────────────────────────────────────────────────────────
-function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChartData, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, taxAnalysis, futureSim }) {
+function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChartData, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, taxAnalysis, futureSim, anomalyAlerts }) {
   const recentTx=dashboardDetail.recentTx||[];
   const topExp=dashboardDetail.topExpenseCats||[];
 
@@ -5551,6 +5558,11 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
     if(budgetOver>0) issueCards.push({icon:"💸",title:"예산 초과",text:`${budgetOver}개 항목이 예산을 초과했습니다.`,tone:"warn"});
     if(expenseChange>20) issueCards.push({icon:"📈",title:"지출 급증",text:`전월 대비 지출이 ${fmtPct(expenseChange)} 증가했습니다.`,tone:"warn"});
     if(dashboardDetail.totalValidationIssues>0) issueCards.push({icon:"🔍",title:"입력 점검",text:`거래 입력 이슈 ${dashboardDetail.totalValidationIssues}건을 확인하세요.`,tone:"info"});
+    if(anomalyAlerts&&anomalyAlerts.length>0){
+      anomalyAlerts.slice(0,3).forEach(a=>{
+        issueCards.push({icon:a.level==="danger"?"🚨":"⚠️",title:`${a.cat} 이상 지출`,text:a.msg,tone:a.level==="danger"?"red":"warn"});
+      });
+    }
     if(issueCards.length===0) issueCards.push({icon:"✅",title:"특이 이슈 없음",text:"이번 달 주요 재무 이상 신호가 크지 않습니다.",tone:"green"});
 
     const actions=[];
@@ -6930,6 +6942,54 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
           <h3>{form.id?"거래 수정":"입력센터"} <span style={{fontSize:12,fontWeight:400,color:"var(--text3)",marginLeft:6}}>자동 검증 · 템플릿 · 고정거래</span></h3>
           <div style={{display:"flex",gap:8}}>
             <button className="btn btn-sm btn-ghost" onClick={()=>setShowImport(true)}>📥 문자/CSV 가져오기</button>
+            <label style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text2)",fontSize:12,fontWeight:600,cursor:"pointer"}} title="영수증 사진으로 자동 입력">
+              📷 영수증 OCR
+              <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={async(e)=>{
+                const file=e.target.files?.[0]; if(!file)return;
+                const reader=new FileReader();
+                reader.onload=async(ev)=>{
+                  const base64=ev.target.result.split(",")[1];
+                  try{
+                    showToast("영수증 분석 중...","info");
+                    const res=await fetch("https://api.anthropic.com/v1/messages",{
+                      method:"POST",
+                      headers:{"Content-Type":"application/json"},
+                      body:JSON.stringify({
+                        model:"claude-sonnet-4-20250514",
+                        max_tokens:400,
+                        messages:[{role:"user",content:[
+                          {type:"image",source:{type:"base64",media_type:file.type||"image/jpeg",data:base64}},
+                          {type:"text",text:`이 영수증 이미지에서 아래 정보를 추출해 JSON으로만 응답하세요(다른 텍스트 없이):
+{"date":"YYYY-MM-DD","amount":숫자,"content":"가게명또는내용","cat1":"식비|교통|생활|취미여행|기타지출 중 하나","memo":""}
+날짜가 없으면 오늘(${todayISO()})으로, 금액은 최종 결제금액으로.`}
+                        ]}]
+                      })
+                    });
+                    const j=await res.json();
+                    const txt=j?.content?.[0]?.text||"";
+                    const parsed=JSON.parse(txt.replace(/```json|```/g,"").trim());
+                    if(parsed.amount>0){
+                      setForm(f=>({...f,
+                        date:parsed.date||todayISO(),
+                        amount:String(parsed.amount),
+                        content:parsed.content||f.content,
+                        cat1:parsed.cat1||"기타지출",
+                        memo:parsed.memo||"",
+                        type:"지출",
+                      }));
+                      setShowForm(true);
+                      showToast(`영수증 파싱 완료: ${parsed.content} ${fmt(parsed.amount)}원`,"success");
+                    } else {
+                      showToast("금액을 인식하지 못했습니다. 직접 입력해주세요.","warn");
+                    }
+                  }catch(err){
+                    showToast("영수증 분석 실패: "+err.message,"error");
+                  }
+                };
+                reader.readAsDataURL(file);
+                e.target.value="";
+              }}/>
+            </label>
             <button onClick={()=>setShowForm(v=>!v)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:12,padding:"2px 6px"}}>{showForm?"▲ 접기":"▼ 펼치기"}</button>
           </div>
         </div>
@@ -7508,7 +7568,16 @@ function normalizeStockQuery(v){ return String(v||"").toLowerCase().replace(/\s+
 function buildServerSymbolFromRow(row){ if(row.symbol) return row.symbol; if((row.market==="KRX"||row.market==="KRX ETF")&&/^\d{6}$/.test(String(row.code||row.ticker||""))) return `${String(row.code||row.ticker).padStart(6,"0")}.KS`; return String(row.ticker||row.code||"").trim().toUpperCase(); }
 function normalizeCurrency(v){ return String(v||"KRW").trim().toUpperCase(); }
 function getFxUsdKrw(settings){ return n(settings?.fxUsdKrw||0)>0?n(settings.fxUsdKrw):0; }
-function priceToKRW(row, settings){ const price=n(row.currentPrice||row.avgPrice); const fx=getFxUsdKrw(settings); return normalizeCurrency(row.currency)==="USD" ? (fx>0?price*fx:0) : price; }
+function getFxRate(currency, settings){
+  const c=normalizeCurrency(currency);
+  if(c==="KRW")return 1;
+  if(c==="USD")return n(settings?.fxUsdKrw)||0;
+  if(c==="JPY")return n(settings?.fxJpyKrw)||0;
+  if(c==="EUR")return n(settings?.fxEurKrw)||0;
+  if(c==="CNY")return n(settings?.fxCnyKrw)||0;
+  return 0;
+}
+function priceToKRW(row, settings){ const price=n(row.currentPrice||row.avgPrice); const rate=getFxRate(row.currency,settings); return normalizeCurrency(row.currency)==="KRW"?price:(rate>0?price*rate:0); }
 function investedToKRW(row, settings){ const price=n(row.avgPrice); const fx=getFxUsdKrw(settings); return normalizeCurrency(row.currency)==="USD" ? (fx>0?price*fx:0) : price; }
 function loadMarketCache(){ try{ return JSON.parse(localStorage.getItem(MARKET_CACHE_KEY)||'{"quotes":{},"fx":null}'); }catch{ return {quotes:{},fx:null}; } }
 function saveMarketCache(cache){ try{ localStorage.setItem(MARKET_CACHE_KEY, JSON.stringify({quotes:{},fx:null,...cache,updatedAt:new Date().toISOString()})); }catch(error){ console.warn("시세 캐시 저장 실패:", error); } }
@@ -7687,8 +7756,24 @@ function PortfolioTab({ data, update, accountOptions, financialAnalysis }) {
     setFxBusy(true); setMarketMsg(""); setQErr("");
     try{
       const fx=await fetchFxUsdKrw(data.settings||{});
-      update(d=>({...d,settings:{...d.settings,fxUsdKrw:fx.rate,fxAsOf:fx.asOf,marketDataLastUpdated:new Date().toISOString()}}));
-      setMarketMsg(`${fx.stale?"환율 API 실패 · 기존/캐시 환율 유지":"환율 갱신 완료"}: 1 USD = ${fmt(fx.rate)} KRW`);
+      // 다중 통화 병렬 조회
+      const [jpyRes,eurRes,cnyRes]=await Promise.allSettled([
+        fetch("/api/fx?base=JPY&quote=KRW").then(r=>r.json()),
+        fetch("/api/fx?base=EUR&quote=KRW").then(r=>r.json()),
+        fetch("/api/fx?base=CNY&quote=KRW").then(r=>r.json()),
+      ]);
+      const fxJpy=jpyRes.status==="fulfilled"&&jpyRes.value?.ok?jpyRes.value.rate:0;
+      const fxEur=eurRes.status==="fulfilled"&&eurRes.value?.ok?eurRes.value.rate:0;
+      const fxCny=cnyRes.status==="fulfilled"&&cnyRes.value?.ok?cnyRes.value.rate:0;
+      update(d=>({...d,settings:{...d.settings,
+        fxUsdKrw:fx.rate,fxAsOf:fx.asOf,
+        ...(fxJpy>0?{fxJpyKrw:fxJpy}:{}),
+        ...(fxEur>0?{fxEurKrw:fxEur}:{}),
+        ...(fxCny>0?{fxCnyKrw:fxCny}:{}),
+        marketDataLastUpdated:new Date().toISOString(),
+      }}));
+      const extras=[fxJpy>0?`JPY ${fxJpy.toFixed(2)}`:null,fxEur>0?`EUR ${fmt(fxEur)}`:null,fxCny>0?`CNY ${fxCny.toFixed(1)}`:null].filter(Boolean).join(" / ");
+      setMarketMsg(`${fx.stale?"환율 API 실패 · 기존/캐시 환율 유지":"환율 갱신 완료"}: 1 USD = ${fmt(fx.rate)} KRW${extras?" | "+extras:""}`);
       if(fx.stale) setQErr("환율 API가 실패하여 마지막 정상 환율을 사용했습니다. 환율 기준시각을 확인하세요.");
     }catch{
       setQErr("환율 자동 조회 실패. 기존 환율도 없어 USD 자산 평가는 차단됩니다. 설정에서 USD/KRW 환율을 직접 입력하세요.");
@@ -9726,6 +9811,45 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
 
   const printReport=()=>window.print();
 
+  const [emailSending,setEmailSending]=useState(false);
+  const sendReportEmail=async()=>{
+    const email=data.settings?.reportEmail||"";
+    if(!email){
+      showToast("설정 탭 → 리포트 수신 이메일을 먼저 입력해주세요.","warn");
+      return;
+    }
+    setEmailSending(true);
+    try{
+      const body={
+        to:email,
+        month,
+        subject:`[Season CFO] ${month} 월간 재무 리포트`,
+        html:`
+<h2 style="color:#1a1a2e">📊 ${month} 월간 재무 리포트</h2>
+<table style="width:100%;border-collapse:collapse;margin:16px 0">
+  <tr style="background:#f5f5f5"><td style="padding:8px 12px;font-weight:700">수입</td><td style="padding:8px 12px;color:#2d6a4f;font-weight:700">${fmt(report.income)}원</td></tr>
+  <tr><td style="padding:8px 12px;font-weight:700">지출</td><td style="padding:8px 12px;color:#c62828;font-weight:700">${fmt(report.expense)}원</td></tr>
+  <tr style="background:#f5f5f5"><td style="padding:8px 12px;font-weight:700">순저축</td><td style="padding:8px 12px;font-weight:700">${fmt(report.net)}원</td></tr>
+  <tr><td style="padding:8px 12px;font-weight:700">저축률</td><td style="padding:8px 12px">${fmtPct(report.savingsRate)}</td></tr>
+</table>
+<h3>📝 이번 달 요약</h3>
+<p style="line-height:1.7;color:#333">${report.headline}</p>
+<p style="line-height:1.7;color:#333">${report.summaryText}</p>
+<h3>⚠️ 주요 이슈</h3>
+<ul>${report.issues.map(i=>`<li style="margin-bottom:6px"><strong>${i.title}</strong>: ${i.text}</li>`).join("")}</ul>
+<h3>✅ 다음 달 액션</h3>
+<ul>${report.nextSteps.map(s=>`<li style="margin-bottom:6px"><strong>${s.title}</strong>: ${s.text}</li>`).join("")}</ul>
+<p style="color:#999;font-size:12px;margin-top:24px">Season 개인 CFO 자산관리 앱에서 자동 발송된 리포트입니다.</p>
+`
+      };
+      const res=await fetch("/api/send-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      if(res.ok){showToast(`${email}로 리포트를 발송했습니다.`,"success");}
+      else{const e=await res.json();showToast("발송 실패: "+e.error,"error");}
+    }catch(e){
+      showToast("발송 오류: "+e.message,"error");
+    }finally{setEmailSending(false);}
+  };
+
   return (
     <div className="stack monthly-report">
       <div className="card report-hero">
@@ -9739,6 +9863,7 @@ function MonthlyReportTab({ data, monthlySeries, budgetAnalysis, financialAnalys
             {(months.length?months:[thisMonthISO()]).map(m=><option key={m} value={m}>{m}</option>)}
           </select>
           <button className="btn btn-sm btn-ghost" onClick={copyReport}>요약 복사</button>
+          <button className="btn btn-sm btn-ghost" onClick={sendReportEmail} disabled={emailSending}>{emailSending?"발송 중...":"📧 이메일 발송"}</button>
           <button className="btn btn-sm btn-primary" onClick={printReport}>출력/PDF</button>
         </div>
       </div>
@@ -10342,14 +10467,22 @@ function SettingsTab({ data, update }) {
         {(s.marketDataMode || "auto") === "manual" ? (
           <div className="form-grid-3" style={{marginTop:12}}>
             <Field label="수동 USD/KRW 환율"><input value={s.fxUsdKrw||""} onChange={e=>set("fxUsdKrw",n(e.target.value))} placeholder="예: 1380"/></Field>
+            <Field label="수동 JPY/KRW 환율"><input value={s.fxJpyKrw||""} onChange={e=>set("fxJpyKrw",n(e.target.value))} placeholder="예: 9.2 (100엔→KRW)"/></Field>
+            <Field label="수동 EUR/KRW 환율"><input value={s.fxEurKrw||""} onChange={e=>set("fxEurKrw",n(e.target.value))} placeholder="예: 1520"/></Field>
+            <Field label="수동 CNY/KRW 환율"><input value={s.fxCnyKrw||""} onChange={e=>set("fxCnyKrw",n(e.target.value))} placeholder="예: 190"/></Field>
             <Field label="수동 환율 기준시각"><input value={s.fxAsOf?String(s.fxAsOf).replace("T"," ").slice(0,19):""} onChange={e=>set("fxAsOf",e.target.value)} placeholder="예: 2026-04-29 12:30"/></Field>
             <div className="alert alert-warn" style={{alignSelf:"end"}}>수동 모드는 API 실패·오프라인 검증용입니다.</div>
           </div>
         ) : (
           <div className="alert alert-info" style={{marginTop:12}}>
-            자동 모드에서는 환율과 기준시각을 직접 입력하지 않습니다. API가 실패하면 마지막 정상 환율 또는 캐시값을 사용하고, 실패 사실을 화면에 표시합니다.
+            자동 모드에서는 USD/KRW 환율만 자동 조회됩니다. JPY·EUR·CNY는 설정에서 수동 입력하거나 수동 모드로 전환하세요.
           </div>
         )}
+        <div style={{marginTop:16}}>
+          <Field label="📧 월간 리포트 수신 이메일">
+            <input type="email" value={s.reportEmail||""} onChange={e=>set("reportEmail",e.target.value)} placeholder="example@email.com"/>
+          </Field>
+        </div>
       </div>
       <InvestmentTargetSettings settings={s} set={set}/>
       <div className="g2">
@@ -11606,6 +11739,28 @@ export default function App() {
     return()=>clearTimeout(t);
   },[data,session?.user?.id,cloudReady]);
 
+  // ── Web Push 알림: 예산 초과 감지 시 브라우저 알림
+  useEffect(()=>{
+    if(!budgetAnalysis||budgetAnalysis.length===0)return;
+    const overItems=budgetAnalysis.filter(b=>b.status==="초과");
+    if(overItems.length===0)return;
+    if(!("Notification" in window))return;
+    if(Notification.permission==="default"){
+      Notification.requestPermission();
+      return;
+    }
+    if(Notification.permission!=="granted")return;
+    const lastNotifyKey="season_budget_notify_"+thisMonthISO();
+    const alreadyNotified=localStorage.getItem(lastNotifyKey);
+    if(alreadyNotified)return;
+    try{
+      const title="💸 예산 초과 알림";
+      const body=overItems.slice(0,3).map(b=>`${b.cat1}: ${fmt(b.spent)} (예산 ${fmt(b.budget)})`).join("\n");
+      new Notification(title,{body,icon:"/icon.svg",tag:"season-budget-alert",requireInteraction:false});
+      localStorage.setItem(lastNotifyKey,"1");
+    }catch(e){console.warn("Push 알림 실패:",e);}
+  },[budgetAnalysis]);
+
   const update=(fn)=>setData(prev=>migrateData(fn(prev)));
 
   // ── 온보딩 완료 핸들러
@@ -11687,6 +11842,38 @@ export default function App() {
     data.transactions.forEach(t=>{const k=monthOf(t.date);if(!k)return;if(!m.has(k))m.set(k,{month:k,income:0,expense:0});const row=m.get(k);if(t.type==="수입")row.income+=n(t.amount);if(t.type==="지출")row.expense+=n(t.amount);});
     return[...m.values()].sort((a,b)=>a.month.localeCompare(b.month)).map(r=>({...r,net:r.income-r.expense}));
   },[data.transactions]);
+
+  // ── 이상 지출 탐지: 전달 대비 카테고리별 150% 이상 급증 감지
+  const anomalyAlerts=useMemo(()=>{
+    if(monthlySeries.length<2)return[];
+    const months=[...new Set(data.transactions.map(t=>monthOf(t.date)).filter(Boolean))].sort();
+    if(months.length<2)return[];
+    const cur=months[months.length-1];
+    const prev=months[months.length-2];
+    const catMap=(month)=>{
+      const m={};
+      data.transactions.filter(t=>monthOf(t.date)===month&&t.type==="지출").forEach(t=>{
+        m[t.cat1]=(m[t.cat1]||0)+n(t.amount);
+      });
+      return m;
+    };
+    const curCats=catMap(cur);
+    const prevCats=catMap(prev);
+    const alerts=[];
+    Object.entries(curCats).forEach(([cat,curAmt])=>{
+      const prevAmt=prevCats[cat]||0;
+      if(prevAmt<=0||curAmt<=0)return;
+      const ratio=curAmt/prevAmt;
+      if(ratio>=1.5&&curAmt>=50000){
+        alerts.push({
+          cat,curAmt,prevAmt,ratio,
+          level:ratio>=2?"danger":"warn",
+          msg:`${cat} 지출이 전달보다 ${Math.round((ratio-1)*100)}% 증가했습니다 (${fmt(prevAmt)}→${fmt(curAmt)})`,
+        });
+      }
+    });
+    return alerts.sort((a,b)=>b.ratio-a.ratio);
+  },[data.transactions,monthlySeries]);
 
   const financialAnalysis=useMemo(()=>{
     const rows=data.portfolio.map(p=>({...p,value:n(p.qty)*priceToKRW(p,data.settings),invested:n(p.qty)*investedToKRW(p,data.settings),currency:normalizeCurrency(p.currency)}));
@@ -11914,7 +12101,7 @@ export default function App() {
                   <div className="mobile-more-section">{group.section}</div>
                   <div className="mobile-more-grid">
                     {items.map(item=>(
-                      <button key={item.id} className={`mobile-more-item ${tab===item.id?"active":""}`} onClick={()=>{setTab(item.id);setShowMobileMore(false);}}>
+                      <button key={item.id} className={`mobile-more-item ${tab===item.id?"active":""}`} onClick={()=>{setTab(item.id);setShowMobileMore(false);}} aria-label={item.label} aria-current={tab===item.id?"page":undefined}>
                         <div className="mobile-more-icon">{item.icon}</div>
                         <span>{item.label}</span>
                         {item.id==="data"&&totalIssues>0&&<span style={{fontSize:9,color:"var(--red)",fontWeight:900}}>●</span>}
@@ -11944,7 +12131,7 @@ export default function App() {
           {NAV.map((item,i)=>{
             if(item.section) return <div key={i} className="nav-section">{item.section}</div>;
             return (
-              <button key={item.id} className={`nav-item ${tab===item.id?"active":""}`} data-tip={item.label} title={sidebarOpen ? "" : item.label} onClick={()=>setTab(item.id)}>
+              <button key={item.id} className={`nav-item ${tab===item.id?"active":""}`} data-tip={item.label} title={sidebarOpen ? "" : item.label} onClick={()=>setTab(item.id)} aria-label={item.label} aria-current={tab===item.id?"page":undefined}>
                 <span className="nav-icon">{item.icon}</span>
                 <span className="nav-label">{item.label}</span>
                 {item.id==="data"&&totalIssues>0&&<span className="nav-dot"/>}
@@ -11977,7 +12164,7 @@ export default function App() {
           </div>
 
           <div className="page">
-            {tab==="dashboard"&&<DashboardTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} dashboardChartData={dashboardChartData} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} monthlySeries={monthlySeries} eventAnalysis={eventAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
+            {tab==="dashboard"&&<DashboardTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} dashboardChartData={dashboardChartData} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} monthlySeries={monthlySeries} eventAnalysis={eventAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim} anomalyAlerts={anomalyAlerts}/>}
             {tab==="goals"&&<GoalFundingTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} futureSim={futureSim}/>}
             {tab==="cfo"&&<CFOCenterTab data={data} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
             {tab==="automation"&&<AutomationSystemTab data={data} update={update} dashboard={dashboard} dashboardDetail={dashboardDetail} financialAnalysis={financialAnalysis} budgetAnalysis={budgetAnalysis} taxAnalysis={taxAnalysis} futureSim={futureSim}/>}
