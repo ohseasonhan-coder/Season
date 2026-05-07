@@ -3848,6 +3848,8 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
   const [msgOk,setMsgOk]=useState(false);
   const [showMobileLogin, setShowMobileLogin]=useState(false);
   const [resetMode,setResetMode]=useState(false);
+  // ── 이메일 인증 배너 (훅은 항상 최상단에 무조건 선언)
+  const [showResendMsg,setShowResendMsg]=useState(false);
 
   const runAuth=async(mode)=>{
     if(!supabase){setMsg("Supabase 미설정");setMsgOk(false);return}
@@ -3893,7 +3895,6 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
     );
   } else if(session?.user) {
     const emailVerified = !!session.user.email_confirmed_at;
-    const [showResendMsg,setShowResendMsg]=useState(false);
     const resendVerification=async()=>{
       if(!supabase)return;
       await supabase.auth.resend({type:"signup",email:session.user.email});
@@ -11816,6 +11817,18 @@ export default function App() {
   const calculationAudit=useMemo(()=>buildCalculationAudit({data,dashboard,financialAnalysis,monthlySeries,budgetAnalysis,taxAnalysis,futureSim}),[data,dashboard,financialAnalysis,monthlySeries,budgetAnalysis,taxAnalysis,futureSim]);
 
   const totalIssues=validations.reduce((s,v)=>s+n(v.count),0);
+
+  // ── authLoading guard: Supabase 세션 확인 전에는 빈 화면 대신 스피너
+  if(authLoading){
+    return(
+      <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"var(--bg)",gap:16}}>
+        <style>{STYLES}</style>
+        <div style={{width:48,height:48,borderRadius:"50%",border:"4px solid var(--border)",borderTopColor:"var(--accent)",animation:"spin 0.8s linear infinite"}}/>
+        <div style={{fontSize:14,color:"var(--text3)"}}>앱을 불러오는 중...</div>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      </div>
+    );
+  }
 
   return (
     <ToastProvider>
