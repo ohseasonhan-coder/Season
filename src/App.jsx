@@ -2846,6 +2846,100 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .disclaimer-banner a:hover{text-decoration:underline}
 /* ── 전역 면책 푸터 ── */
 .legal-footer{text-align:center;font-size:10px;color:var(--text3);padding:16px 20px 8px;line-height:1.6;border-top:1px solid var(--border);margin-top:24px}
+
+
+/* ─────────────────────────────────────────────
+   MOBILE SCROLL HARD FIX
+   모바일에서 화면이 안 내려가는 문제 방지용 최종 패치
+   - 부모 요소의 고정 높이/overflow 제한을 해제
+   - 실제 스크롤은 body와 .app에서 자연스럽게 발생
+   - 하단 탭바에 가려지지 않도록 page 하단 여백 확보
+───────────────────────────────────────────── */
+@media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    position: static !important;
+    touch-action: pan-y !important;
+    overscroll-behavior-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  body {
+    display: block !important;
+    min-height: 100svh !important;
+    min-height: 100dvh !important;
+    height: auto !important;
+    position: static !important;
+    overflow-y: auto !important;
+  }
+
+  .app,
+  .shell,
+  .main {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    transform: none !important;
+  }
+
+  .main {
+    margin-left: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .page {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 16px 14px calc(128px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .page > * {
+    max-width: 100% !important;
+  }
+
+  .mobile-header {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 90 !important;
+  }
+
+  .mobile-tabbar {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 95 !important;
+  }
+
+  .modal-sheet,
+  .qa-sheet,
+  .mobile-more-sheet {
+    max-height: 86dvh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+}
 `;
 
 
@@ -3945,9 +4039,16 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
 
   if(!supabase) {
     pcBar = (
-      <div className="auth-bar">
-        <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">Season Finance</span></div>
-        <span style={{fontSize:11,color:"var(--text3)"}}>로컬 전용 모드</span>
+      <div className="auth-bar auth-bar-login-required">
+        <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">계정 동기화</span></div>
+        <div className="row" style={{gap:8,flexWrap:"wrap"}}>
+          <input className="auth-input" type="text" placeholder="아이디" value={accountId} onChange={e=>setAccountId(e.target.value)} autoComplete="username" inputMode="text" />
+          <input className="auth-input" type="password" placeholder="비밀번호" value={pw} onChange={e=>setPw(e.target.value)} autoComplete="current-password" />
+          <button className="btn btn-sm btn-primary" onClick={()=>setMsg("Supabase 연결값이 없어 아직 계정 동기화를 시작할 수 없습니다. Vercel 환경변수 VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY를 먼저 등록해주세요.")} type="button">로그인</button>
+          <button className="btn btn-sm btn-ghost" onClick={()=>setMsg("Supabase 연결값이 없어 아직 계정 생성이 비활성화되어 있습니다.")} type="button">계정 만들기</button>
+          <span style={{fontSize:11,color:"var(--amber)",fontWeight:700}}>⚠ 동기화 설정 필요</span>
+          {msg&&<span style={{fontSize:11,color:"var(--amber)"}}>{msg}</span>}
+        </div>
       </div>
     );
   } else if(session?.user) {
@@ -4009,7 +4110,7 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
                 <div className="mlo-logo-mark">S</div>
                 <div><div className="mlo-logo-text">Season Finance</div><div className="mlo-logo-sub">통합 자산관리</div></div>
               </div>
-              {!session?.user&&<><div className="mlo-headline">계정으로<br/>동기화하세요 ☁️</div><div className="mlo-sub">이메일 인증 없이 아이디와 비밀번호로<br/>여러 기기에서 데이터를 동기화합니다.</div></>}
+              {!session?.user&&<><div className="mlo-headline">계정으로<br/>동기화하세요 ☁️</div><div className="mlo-sub">이메일 인증 없이 아이디와 비밀번호로<br/>여러 기기에서 데이터를 동기화합니다.</div>{!supabase&&<div style={{marginTop:12,padding:"10px 12px",borderRadius:14,border:"1px solid rgba(255,190,90,.28)",background:"rgba(255,190,90,.10)",color:"var(--amber)",fontSize:12,fontWeight:800}}>Supabase 환경변수 등록 전이라 로그인은 아직 비활성화 상태입니다.</div>}</>}
               {session?.user&&<><div className="mlo-headline">연결되었어요 ✓</div><div className="mlo-sub">클라우드에 자동으로 동기화 중입니다.</div></>}
             </div>
             <div className="mlo-body">
@@ -12043,7 +12144,7 @@ export default function App() {
               {dashboard.net>=0?"▲":"▼"} {fmt(Math.abs(dashboard.net)/10000)}만
             </span>
           )}
-          <button className="mobile-header-sync" onClick={()=>{const el=document.getElementById("__authbar_mobile_state");if(el)el.click();}}>
+          <button className={`mobile-header-sync ${!session?.user?"offline":""}`} onClick={()=>{const el=document.getElementById("__authbar_mobile_state");if(el)el.click();}}>
             ☁️ <span>{session?.user?"연결됨":"로그인"}</span>
           </button>
           <button className="mobile-header-theme" onClick={toggleTheme} aria-label="테마 전환">
