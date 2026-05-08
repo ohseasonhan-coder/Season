@@ -2507,3 +2507,155 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 
 
 // ─── 온보딩 위자드 ────────────────────────────────────────────────────────────
+
+
+/* ─────────────────────────────────────────────
+   MOBILE_SCROLL_FORCE_FIX_V5
+   PC/모바일 공통: 앱 전체가 한 화면에 고정되는 문제 방지
+   - body, #root, .app, .shell, .main, .page의 고정 높이/overflow hidden을 최종 override
+   - 실제 세로 스크롤은 브라우저 문서(body) 기준으로 동작
+   - fixed 하단 탭바 때문에 마지막 카드가 가려지지 않도록 여백 확보
+───────────────────────────────────────────── */
+html,
+body,
+#root {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 100% !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  position: static !important;
+  overscroll-behavior-y: auto !important;
+  touch-action: pan-y !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+body {
+  display: block !important;
+  min-height: 100dvh !important;
+  height: auto !important;
+}
+
+.app,
+.scroll-safe-root {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 100dvh !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  position: relative !important;
+}
+
+.shell,
+.main,
+.page {
+  min-width: 0 !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+}
+
+.shell {
+  min-height: 100dvh !important;
+  height: auto !important;
+}
+
+.main {
+  min-height: 100dvh !important;
+  height: auto !important;
+  padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+.page {
+  height: auto !important;
+  min-height: auto !important;
+  padding-bottom: calc(144px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+@media (max-width: 900px) {
+  html,
+  body,
+  #root {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    position: static !important;
+  }
+
+  .app,
+  .scroll-safe-root,
+  .shell,
+  .main,
+  .page,
+  .content,
+  .dashboard,
+  .mobile-page {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    position: relative !important;
+    transform: none !important;
+  }
+
+  .shell {
+    min-height: 100dvh !important;
+    flex-direction: column !important;
+  }
+
+  .main {
+    margin-left: 0 !important;
+    min-height: 100dvh !important;
+    padding-top: 0 !important;
+    padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .page {
+    padding: 16px 14px calc(164px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .mobile-header {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 90 !important;
+  }
+
+  .auth-bar,
+  .season-login-panel {
+    display: flex !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: sticky !important;
+    top: 52px !important;
+    z-index: 88 !important;
+  }
+
+  .mobile-tabbar,
+  .bottom-tab,
+  .mobile-bottom-nav {
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 95 !important;
+  }
+
+  .modal-sheet,
+  .qa-sheet,
+  .mobile-more-sheet,
+  .mobile-login-sheet {
+    max-height: 86dvh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+}
