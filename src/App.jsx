@@ -11781,28 +11781,6 @@ export default function App() {
     return()=>clearTimeout(t);
   },[data,session?.user?.id,cloudReady]);
 
-  // ── Web Push 알림: 예산 초과 감지 시 브라우저 알림
-  useEffect(()=>{
-    if(!budgetAnalysis||budgetAnalysis.length===0)return;
-    const overItems=budgetAnalysis.filter(b=>b.status==="초과");
-    if(overItems.length===0)return;
-    if(!("Notification" in window))return;
-    if(Notification.permission==="default"){
-      Notification.requestPermission();
-      return;
-    }
-    if(Notification.permission!=="granted")return;
-    const lastNotifyKey="season_budget_notify_"+thisMonthISO();
-    const alreadyNotified=localStorage.getItem(lastNotifyKey);
-    if(alreadyNotified)return;
-    try{
-      const title="💸 예산 초과 알림";
-      const body=overItems.slice(0,3).map(b=>`${b.cat1}: ${fmt(b.spent)} (예산 ${fmt(b.budget)})`).join("\n");
-      new Notification(title,{body,icon:"/icon.svg",tag:"season-budget-alert",requireInteraction:false});
-      localStorage.setItem(lastNotifyKey,"1");
-    }catch(e){console.warn("Push 알림 실패:",e);}
-  },[budgetAnalysis]);
-
   const update=(fn)=>setData(prev=>migrateData(fn(prev)));
 
   // ── 온보딩 완료 핸들러
@@ -11878,6 +11856,28 @@ export default function App() {
       return{...b,spent,rate,status:rate>=100?"초과":rate>=80?"주의":"정상",recommendedBudget:totalIncome*n(b.targetWeight)};
     });
   },[data.transactions,data.budgets]);
+
+  // ── Web Push 알림: 예산 초과 감지 시 브라우저 알림
+  useEffect(()=>{
+    if(!budgetAnalysis||budgetAnalysis.length===0)return;
+    const overItems=budgetAnalysis.filter(b=>b.status==="초과");
+    if(overItems.length===0)return;
+    if(!("Notification" in window))return;
+    if(Notification.permission==="default"){
+      Notification.requestPermission();
+      return;
+    }
+    if(Notification.permission!=="granted")return;
+    const lastNotifyKey="season_budget_notify_"+thisMonthISO();
+    const alreadyNotified=localStorage.getItem(lastNotifyKey);
+    if(alreadyNotified)return;
+    try{
+      const title="💸 예산 초과 알림";
+      const body=overItems.slice(0,3).map(b=>`${b.cat1}: ${fmt(b.spent)} (예산 ${fmt(b.budget)})`).join("\n");
+      new Notification(title,{body,icon:"/icon.svg",tag:"season-budget-alert",requireInteraction:false});
+      localStorage.setItem(lastNotifyKey,"1");
+    }catch(e){console.warn("Push 알림 실패:",e);}
+  },[budgetAnalysis]);
 
   const monthlySeries=useMemo(()=>{
     const m=new Map();
