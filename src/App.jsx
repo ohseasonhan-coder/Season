@@ -568,7 +568,7 @@ export default function App() {
   // ── authLoading guard: Supabase 세션 확인 전에는 빈 화면 대신 스피너
   if(authLoading){
     return(
-      <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"var(--bg)",gap:16}}>
+      <div style={{minHeight:"100dvh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"var(--bg)",gap:16}}>
         <style>{STYLES}</style>
         <div style={{width:48,height:48,borderRadius:"50%",border:"4px solid var(--border)",borderTopColor:"var(--accent)",animation:"spin 0.8s linear infinite"}}/>
         <div style={{fontSize:14,color:"var(--text3)"}}>앱을 불러오는 중...</div>
@@ -579,7 +579,7 @@ export default function App() {
 
   return (
     <ToastProvider>
-    <div className="app">
+    <div className="app scroll-safe-root" data-scroll-fix="MOBILE_SCROLL_FORCE_FIX_V5">
       <script dangerouslySetInnerHTML={{__html:`(function(){try{var t=localStorage.getItem('season-theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})()`}}/>
       <style>{STYLES}</style>
 
