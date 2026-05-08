@@ -1,0 +1,59 @@
+{
+  "name": "season-asset-app",
+  "private": true,
+  "version": "12.0.0",
+  "type": "module",
+  "description": "Season 개인 CFO 자산관리 앱 - 상용 서비스 준비형 전체 교체 패키지",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "clean": "rimraf dist release node_modules/.vite",
+    "electron": "electron .",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.21",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "rimraf": "^6.0.1",
+    "wait-on": "^8.0.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "build": {
+    "appId": "com.season.asset.app",
+    "productName": "Season 개인 CFO 자산관리",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Season 개인 CFO 자산관리"
+    }
+  }
+}
