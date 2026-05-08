@@ -1,7 +1,7 @@
 {
-  "buildCommand": "npm install --include=dev && npm run build",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "installCommand": "npm install --include=dev",
+  "installCommand": "npm install",
   "framework": "vite",
   "rewrites": [
     {
@@ -18,3 +18,4 @@
     }
   ]
 }
+
