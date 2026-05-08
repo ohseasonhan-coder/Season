@@ -20,7 +20,18 @@ const MAX_MARKET_CACHE_AGE_DAYS = 14;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const CLOUD_TABLE = "asset_app_profiles";
+const AUTH_ID_DOMAIN = "season.local";
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const normalizeLoginId = (value) => String(value ?? "").trim().toLowerCase().replace(/\s+/g, "");
+const isValidLoginId = (value) => /^[a-z0-9._-]{3,32}$/.test(normalizeLoginId(value));
+const loginIdToAuthEmail = (value) => `${normalizeLoginId(value)}@${AUTH_ID_DOMAIN}`;
+const displayAccountName = (user) => {
+  const metaId = user?.user_metadata?.login_id || user?.user_metadata?.account_id;
+  const email = user?.email || "";
+  if (metaId) return metaId;
+  if (email.endsWith(`@${AUTH_ID_DOMAIN}`)) return email.replace(`@${AUTH_ID_DOMAIN}`, "");
+  return email || "계정";
+};
 
 // ─── Utils ───────────────────────────────────────────────────────────────────
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -489,7 +500,7 @@ const STYLES = `
   --shadow:0 2px 12px rgba(0,0,0,0.4);
   --shadow-lg:0 8px 32px rgba(0,0,0,0.5);
 }
-body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+html,body,#root{min-height:100%;height:auto;overflow-x:hidden} body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;min-height:100dvh;overflow-y:auto;-webkit-font-smoothing:antialiased;-webkit-overflow-scrolling:touch}
 button{font-family:inherit;cursor:pointer}
 input,select,textarea{font-family:inherit}
 
@@ -499,11 +510,11 @@ input,select,textarea{font-family:inherit}
 *::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
 
 /* Layout */
-.app{min-height:100vh;display:flex;flex-direction:column}
-.shell{display:flex;flex:1;overflow:hidden;height:100vh}
+.app{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;overflow-x:hidden}
+.shell{display:flex;flex:1;overflow:visible;min-height:100vh;min-height:100dvh}
 
 /* Sidebar Nav */
-.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 12px;gap:4px;overflow-y:auto;position:fixed;height:100vh;z-index:50}
+.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 12px;gap:4px;overflow-y:auto;position:fixed;height:100vh;height:100dvh;z-index:50}
 .sidebar-logo{padding:8px 12px 20px;display:flex;align-items:center;gap:10px}
 .logo-mark{width:32px;height:32px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;color:#fff;flex-shrink:0}
 .logo-text{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-.02em}
@@ -667,7 +678,7 @@ input,select,textarea{font-family:inherit}
 }
 
 /* Main content */
-.main{flex:1;margin-left:220px;overflow-y:auto;height:100vh}
+.main{flex:1;margin-left:220px;overflow-y:visible;min-height:100vh;min-height:100dvh}
 .page{padding:28px 32px;max-width:1400px}
 
 /* Top bar */
@@ -2744,9 +2755,10 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
   .mobile-tabbar{display:flex}
   .mobile-header{display:flex}
   /* main 전체 너비 */
-  .main{margin-left:0!important;height:auto;min-height:100vh;overflow:visible}
-  .shell{height:auto;overflow:visible;flex-direction:column}
-  .app{overflow-x:hidden}
+  html,body,#root{height:auto!important;min-height:100%!important;overflow-y:auto!important}
+  .main{margin-left:0!important;height:auto!important;min-height:100dvh!important;overflow:visible!important}
+  .shell{height:auto!important;min-height:100dvh!important;overflow:visible!important;flex-direction:column}
+  .app{min-height:100dvh!important;height:auto!important;overflow-x:hidden;overflow-y:visible!important}
   /* 페이지 패딩 (탭바+헤더 고려) */
   .page{
     padding:16px 14px 104px;
@@ -3881,48 +3893,53 @@ function buildAnalysisNLP(monthlySeries, dashboardDetail) {
 
 // ─── Auth Panel ───────────────────────────────────────────────────────────────
 function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
-  const [email,setEmail]=useState("");
+  const [accountId,setAccountId]=useState("");
   const [pw,setPw]=useState("");
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState("");
   const [msgOk,setMsgOk]=useState(false);
   const [showMobileLogin, setShowMobileLogin]=useState(false);
-  const [resetMode,setResetMode]=useState(false);
-  // ── 이메일 인증 배너 (훅은 항상 최상단에 무조건 선언)
-  const [showResendMsg,setShowResendMsg]=useState(false);
+
+  const accountLabel = session?.user ? displayAccountName(session.user) : "";
 
   const runAuth=async(mode)=>{
     if(!supabase){setMsg("Supabase 미설정");setMsgOk(false);return}
-    if(!email||!pw){setMsg("이메일과 비밀번호를 입력해주세요");setMsgOk(false);return}
+    const loginId = normalizeLoginId(accountId);
+    if(!loginId||!pw){setMsg("아이디와 비밀번호를 입력해주세요");setMsgOk(false);return}
+    if(!isValidLoginId(loginId)){setMsg("아이디는 영문 소문자·숫자·._- 조합 3~32자로 입력해주세요");setMsgOk(false);return}
+    if(pw.length<6){setMsg("비밀번호는 6자 이상 입력해주세요");setMsgOk(false);return}
+    const authEmail = loginIdToAuthEmail(loginId);
     setBusy(true);setMsg("");
     try{
-      const r=mode==="signup"?await supabase.auth.signUp({email,password:pw}):await supabase.auth.signInWithPassword({email,password:pw});
-      if(r.error)throw r.error;
-      setMsg(mode==="signup"?"🎉 가입 완료! 이메일을 확인해주세요":"✓ 로그인 완료");setMsgOk(true);
-      if(mode==="signin")setTimeout(()=>setShowMobileLogin(false),800);
-    }catch(e){setMsg(e.message||"오류가 발생했습니다");setMsgOk(false)}finally{setBusy(false)}
-  };
-
-  const runReset=async()=>{
-    if(!supabase){setMsg("Supabase 미설정");setMsgOk(false);return}
-    if(!email){setMsg("이메일을 입력해주세요");setMsgOk(false);return}
-    setBusy(true);setMsg("");
-    try{
-      const {error}=await supabase.auth.resetPasswordForEmail(email,{
-        redirectTo: window.location.origin+"/?type=recovery",
-      });
-      if(error)throw error;
-      setMsg("✓ 비밀번호 재설정 이메일을 보냈습니다. 받은편지함을 확인해주세요.");setMsgOk(true);
-    }catch(e){setMsg(e.message||"오류가 발생했습니다");setMsgOk(false)}finally{setBusy(false)}
+      if(mode==="signup"){
+        const { error: signUpError } = await supabase.auth.signUp({
+          email: authEmail,
+          password: pw,
+          options: { data: { login_id: loginId, account_id: loginId, display_name: loginId } }
+        });
+        if(signUpError) throw signUpError;
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email: authEmail, password: pw });
+        if(signInError) {
+          setMsg("계정은 생성됐지만 Supabase 이메일 확인 설정이 켜져 있어 바로 로그인할 수 없습니다. Supabase Auth의 Confirm email을 꺼주세요.");
+          setMsgOk(false);
+          return;
+        }
+        setMsg("🎉 계정 생성 및 로그인 완료");setMsgOk(true);
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: pw });
+        if(error) throw error;
+        setMsg("✓ 로그인 완료");setMsgOk(true);
+      }
+      setTimeout(()=>setShowMobileLogin(false),800);
+    }catch(e){
+      const raw = e.message || "오류가 발생했습니다";
+      const friendly = raw.includes("Invalid login credentials") ? "아이디 또는 비밀번호가 맞지 않습니다" : raw;
+      setMsg(friendly);setMsgOk(false)
+    }finally{setBusy(false)}
   };
 
   const syncLabel = syncState || "";
   const syncClass = syncLabel.includes("완료")?"":"syncing";
-
-  // 중요:
-  // 기존 버전은 AuthBar 내부에서 PcBar, MobileLoginSheet 컴포넌트를 새로 선언한 뒤 <PcBar/>처럼 렌더링했습니다.
-  // 이 구조는 email/pw 상태가 한 글자 바뀔 때마다 하위 컴포넌트 타입이 새로 생성되어 input이 remount되고 포커스가 끊길 수 있습니다.
-  // 그래서 로그인 UI를 별도 nested component로 만들지 않고 AuthBar 안에서 직접 JSX로 렌더링합니다.
 
   let pcBar = null;
 
@@ -3934,80 +3951,43 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
       </div>
     );
   } else if(session?.user) {
-    const emailVerified = !!session.user.email_confirmed_at;
-    const resendVerification=async()=>{
-      if(!supabase)return;
-      await supabase.auth.resend({type:"signup",email:session.user.email});
-      setShowResendMsg(true);
-      setTimeout(()=>setShowResendMsg(false),5000);
-    };
     pcBar = (
-      <div className="auth-bar" style={{flexDirection:"column",alignItems:"stretch",gap:0}}>
-        {!emailVerified&&(
-          <div style={{background:"rgba(240,180,41,.13)",borderBottom:"1px solid rgba(240,180,41,.25)",padding:"6px 20px",display:"flex",alignItems:"center",gap:10,fontSize:12}}>
-            <span style={{color:"var(--amber)",fontWeight:700}}>⚠️ 이메일 인증이 필요합니다</span>
-            <span style={{color:"var(--text2)"}}>{session.user.email}으로 인증 메일을 확인해주세요.</span>
-            <button onClick={resendVerification} style={{background:"none",border:"1px solid rgba(240,180,41,.4)",borderRadius:6,color:"var(--amber)",fontSize:11,padding:"2px 8px",cursor:"pointer",fontWeight:700,whiteSpace:"nowrap"}}>
-              {showResendMsg?"✓ 발송됨":"재발송"}
-            </button>
-          </div>
-        )}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 20px",height:44}}>
-          <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">Season Finance</span></div>
-          <div className="row" style={{gap:8}}>
-            {syncLabel&&<span className={`auth-bar-sync ${syncClass}`}>⟳ {syncLabel}</span>}
-            <span style={{fontSize:11,color:"var(--text3)"}}>{session.user.email}</span>
-            <button className="btn btn-sm btn-ghost" onClick={onLoadCloud}>불러오기</button>
-            <button className="btn btn-sm btn-ghost" onClick={onSaveCloud}>저장</button>
-            <button className="btn btn-sm btn-ghost" onClick={()=>supabase.auth.signOut()}>로그아웃</button>
-          </div>
+      <div className="auth-bar">
+        <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">Season Finance</span></div>
+        <div className="row" style={{gap:8}}>
+          {syncLabel&&<span className={`auth-bar-sync ${syncClass}`}>⟳ {syncLabel}</span>}
+          <span style={{fontSize:11,color:"var(--text3)"}}>👤 {accountLabel}</span>
+          <button className="btn btn-sm btn-ghost" onClick={onLoadCloud}>불러오기</button>
+          <button className="btn btn-sm btn-ghost" onClick={onSaveCloud}>저장</button>
+          <button className="btn btn-sm btn-ghost" onClick={()=>supabase.auth.signOut()}>로그아웃</button>
         </div>
       </div>
     );
   } else {
     pcBar = (
       <div className="auth-bar">
-        <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">클라우드 동기화</span></div>
+        <div className="auth-bar-logo-row"><div className="auth-bar-logo">S</div><span className="auth-bar-brand">계정 동기화</span></div>
         <div className="row" style={{gap:8}}>
-          {resetMode ? (
-            <>
-              <input
-                className="auth-input"
-                type="email"
-                placeholder="가입한 이메일"
-                value={email}
-                onChange={e=>setEmail(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&runReset()}
-                autoComplete="email"
-              />
-              <button className="btn btn-sm btn-primary" onClick={runReset} disabled={busy}>{busy?"전송 중...":"재설정 메일 보내기"}</button>
-              <button className="btn btn-sm btn-ghost" onClick={()=>{setResetMode(false);setMsg("");}}>취소</button>
-            </>
-          ) : (
-            <>
-              <input
-                className="auth-input"
-                type="email"
-                placeholder="이메일"
-                value={email}
-                onChange={e=>setEmail(e.target.value)}
-                autoComplete="email"
-              />
-              <input
-                className="auth-input"
-                type="password"
-                placeholder="비밀번호"
-                value={pw}
-                onChange={e=>setPw(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&runAuth("signin")}
-                autoComplete="current-password"
-              />
-              <button className="btn btn-sm btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>로그인</button>
-              <button className="btn btn-sm btn-ghost" onClick={()=>runAuth("signup")} disabled={busy}>가입</button>
-              <button className="btn btn-sm btn-ghost" style={{opacity:0.6,fontSize:11}} onClick={()=>{setResetMode(true);setMsg("");}}>비밀번호 찾기</button>
-
-            </>
-          )}
+          <input
+            className="auth-input"
+            type="text"
+            placeholder="아이디"
+            value={accountId}
+            onChange={e=>setAccountId(e.target.value)}
+            autoComplete="username"
+            inputMode="text"
+          />
+          <input
+            className="auth-input"
+            type="password"
+            placeholder="비밀번호"
+            value={pw}
+            onChange={e=>setPw(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&runAuth("signin")}
+            autoComplete="current-password"
+          />
+          <button className="btn btn-sm btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>{busy?"처리 중...":"로그인"}</button>
+          <button className="btn btn-sm btn-ghost" onClick={()=>runAuth("signup")} disabled={busy}>계정 만들기</button>
           {msg&&<span style={{fontSize:11,color:msgOk?"var(--green)":"var(--red)"}}>{msg}</span>}
         </div>
       </div>
@@ -4029,16 +4009,16 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
                 <div className="mlo-logo-mark">S</div>
                 <div><div className="mlo-logo-text">Season Finance</div><div className="mlo-logo-sub">통합 자산관리</div></div>
               </div>
-              {!session?.user&&<><div className="mlo-headline">클라우드에<br/>연결하세요 ☁️</div><div className="mlo-sub">여러 기기에서 데이터를 동기화하고<br/>안전하게 보관하세요.</div></>}
+              {!session?.user&&<><div className="mlo-headline">계정으로<br/>동기화하세요 ☁️</div><div className="mlo-sub">이메일 인증 없이 아이디와 비밀번호로<br/>여러 기기에서 데이터를 동기화합니다.</div></>}
               {session?.user&&<><div className="mlo-headline">연결되었어요 ✓</div><div className="mlo-sub">클라우드에 자동으로 동기화 중입니다.</div></>}
             </div>
             <div className="mlo-body">
               {session?.user ? (
                 <>
                   <div className="mlo-session-bar">
-                    <div className="mlo-session-avatar">{session.user.email[0].toUpperCase()}</div>
+                    <div className="mlo-session-avatar">{accountLabel[0]?.toUpperCase()||"S"}</div>
                     <div style={{flex:1,minWidth:0}}>
-                      <div className="mlo-session-email">{session.user.email}</div>
+                      <div className="mlo-session-email">{accountLabel}</div>
                       <div className="mlo-session-status">● 연결됨 {syncLabel&&`· ${syncLabel}`}</div>
                     </div>
                   </div>
@@ -4051,16 +4031,17 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
               ) : (
                 <>
                   <div className="mlo-field">
-                    <label>이메일</label>
+                    <label>아이디</label>
                     <div className="mlo-input-wrap">
-                      <span className="mlo-input-icon">✉️</span>
+                      <span className="mlo-input-icon">👤</span>
                       <input
                         className="mlo-input"
-                        type="email"
-                        placeholder="your@email.com"
-                        value={email}
-                        onChange={e=>setEmail(e.target.value)}
-                        autoComplete="email"
+                        type="text"
+                        placeholder="예: season123"
+                        value={accountId}
+                        onChange={e=>setAccountId(e.target.value)}
+                        autoComplete="username"
+                        inputMode="text"
                       />
                     </div>
                   </div>
@@ -4071,7 +4052,7 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
                       <input
                         className="mlo-input"
                         type="password"
-                        placeholder="••••••••"
+                        placeholder="6자 이상"
                         value={pw}
                         onChange={e=>setPw(e.target.value)}
                         onKeyDown={e=>e.key==="Enter"&&runAuth("signin")}
@@ -4080,39 +4061,10 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
                     </div>
                   </div>
                   {msg&&<div className={`mlo-msg ${msgOk?"ok":""}`}>{msg}</div>}
-                  {resetMode ? (
-                    <>
-                      <div className="mlo-field">
-                        <label>가입한 이메일</label>
-                        <div className="mlo-input-wrap">
-                          <span className="mlo-input-icon">✉️</span>
-                          <input
-                            className="mlo-input"
-                            type="email"
-                            placeholder="your@email.com"
-                            value={email}
-                            onChange={e=>setEmail(e.target.value)}
-                            onKeyDown={e=>e.key==="Enter"&&runReset()}
-                            autoComplete="email"
-                          />
-                        </div>
-                      </div>
-                      <div className="mlo-btn-row">
-                        <button className="mlo-btn-primary" onClick={runReset} disabled={busy}>{busy?"전송 중...":"재설정 메일 보내기"}</button>
-                        <button className="mlo-btn-secondary" onClick={()=>{setResetMode(false);setMsg("");}}>← 로그인으로 돌아가기</button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
                   <div className="mlo-btn-row">
                     <button className="mlo-btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>{busy?"로그인 중...":"로그인"}</button>
                     <button className="mlo-btn-secondary" onClick={()=>runAuth("signup")} disabled={busy}>{busy?"처리 중...":"처음이에요, 계정 만들기"}</button>
                   </div>
-                  <div style={{textAlign:"center",marginTop:8}}>
-                    <button onClick={()=>{setResetMode(true);setMsg("");}} style={{background:"none",border:"none",color:"var(--text3)",fontSize:11,cursor:"pointer",textDecoration:"underline"}}>비밀번호를 잊으셨나요?</button>
-                  </div>
-                    </>
-                  )}
                   <div className="mlo-divider">또는</div>
                   <button className="mlo-local-chip" onClick={()=>setShowMobileLogin(false)}>
                     <div className="mlo-local-icon">📱</div>
@@ -4127,7 +4079,7 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
       )}
 
       {/* 모바일 동기화 버튼은 mobile-header에 주입 (데이터만 노출) */}
-      <div id="__authbar_mobile_state" data-session={session?.user?.email||""} data-sync={syncLabel} data-show-login={String(showMobileLogin)} style={{display:"none"}} onClick={()=>setShowMobileLogin(v=>!v)}/>
+      <div id="__authbar_mobile_state" data-session={accountLabel||""} data-sync={syncLabel} data-show-login={String(showMobileLogin)} style={{display:"none"}} onClick={()=>setShowMobileLogin(v=>!v)}/>
     </>
   );
 }
