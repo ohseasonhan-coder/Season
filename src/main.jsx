@@ -121,16 +121,21 @@ if (!rootEl) {
   );
 }
 
-// ── 서비스워커 등록 (PWA 오프라인 지원)
+// ── 안정화 버전: 기존 서비스워커/PWA 캐시 제거
+// 이전 배포의 service worker가 오래된 index.html 또는 JS 해시 파일을 캐시하면
+// Vercel에서 JS 요청이 index.html로 되돌아와 검은 화면/MIME 오류가 발생할 수 있습니다.
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("/sw.js", { scope: "/" })
-      .then((reg) => {
-        console.info("[SW] 등록 완료:", reg.scope);
-      })
-      .catch((err) => {
-        console.warn("[SW] 등록 실패:", err);
-      });
+  window.addEventListener("load", async () => {
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((reg) => reg.unregister()));
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.filter((key) => key.startsWith("season-cfo")).map((key) => caches.delete(key)));
+      }
+      console.info("[SW] 기존 서비스워커와 앱 캐시를 정리했습니다.");
+    } catch (err) {
+      console.warn("[SW] 정리 실패:", err);
+    }
   });
 }

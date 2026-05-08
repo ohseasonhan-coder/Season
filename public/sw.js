@@ -1,7 +1,7 @@
 // Season CFO Service Worker
 // 전략: 앱 셸(HTML/CSS/JS) → Cache First / API 요청 → Network First
 
-const CACHE_NAME = "season-cfo-v1";
+const CACHE_NAME = "season-cfo-v20260508-stable";
 const OFFLINE_PAGE = "/";
 
 // 설치 시 앱 셸 사전 캐시
@@ -39,6 +39,9 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // http/https GET 요청만 처리합니다. chrome-extension:, data:, blob: 등은 캐시하지 않습니다.
+  if (request.method !== "GET" || !["http:", "https:"].includes(url.protocol)) return;
+
   // API 요청: Network First (실패 시 캐시 없음 → 오프라인 JSON 응답)
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(
@@ -71,8 +74,6 @@ self.addEventListener("fetch", (event) => {
   }
 
   // 앱 셸 / 정적 자산: Cache First → Network Fallback
-  if (request.method !== "GET") return;
-
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
