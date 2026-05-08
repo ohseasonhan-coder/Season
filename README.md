@@ -59,3 +59,8 @@ npm run build
 ```bash
 build-check.bat
 ```
+
+
+## 2026-05-08 Modular v4
+
+코드를 `src/modules` 기준으로 더 세분화했습니다. 자세한 구조는 `docs/07_DETAILED_MODULAR_STRUCTURE.md`를 확인하세요.

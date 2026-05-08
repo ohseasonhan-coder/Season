@@ -1,0 +1,28 @@
+// Auto-split facade: grouped exports from the stable legacy core.
+export {
+  normalizeReturnRate,
+  calcCFOScoreFromMetrics,
+  buildCFOScoreSimulation,
+  modelSafeScore,
+  buildCFODecisionModel,
+  getEmergencyFundFromCFOData,
+  getYearlyIsaContributionFromCFOData,
+  buildNextCFOFlowAction,
+  buildCFOActionPreview,
+  detectCFOActionKind,
+  defaultCFOActionForm,
+  getCFOActionRuleKey,
+  getCFOExecutionKey,
+  getCFOExecutionDuplicateInfo,
+  getAccountAssetCurrent,
+  getPortfolioMarketValue,
+  buildCFOExecutionVerification,
+  findAssetIndexByAccountName,
+  ensureAssetRow,
+  addToAssetCurrent,
+  buildCFOInvestmentAllocation,
+  applyPortfolioBuy,
+  applyCFOActionToData,
+  undoPortfolioBuy,
+  rollbackCFOActionFromData
+} from "../seasonCore.jsx";
