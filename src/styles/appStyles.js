@@ -1232,19 +1232,14 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
   .card,.kpi-card,.card-sm{break-inside:avoid;background:#fff!important;color:#111!important;border-color:#ddd!important}
 }
 `;
-/* =========================================================
-   Mobile popup scroll fix
-   적용 위치: src/styles/appStyles.js 파일의 STYLES 문자열 맨 아래
-   목적: 모바일에서 첫 안내 팝업이 화면 아래로 내려가지 않아 입력을 못 하는 문제 해결
-========================================================= */
-
+/* ✅ 모바일 첫 안내 팝업 스크롤 수정 */
 @media (max-width: 768px) {
   .apple-cfo-modal-overlay {
     align-items: flex-end !important;
     justify-content: center !important;
     padding: 0 !important;
 
-    /* 핵심: overlay 자체도 스크롤 가능하게 변경 */
+    /* 핵심: overlay 자체도 스크롤 가능 */
     overflow-y: auto !important;
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch !important;
@@ -1258,7 +1253,7 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
     width: 100vw !important;
     max-width: 100vw !important;
 
-    /* 핵심: 팝업 내부 스크롤 허용 */
+    /* 핵심: 팝업 내부 스크롤 */
     max-height: 92dvh !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
