@@ -9602,7 +9602,6 @@ export {
   buildSplitTransactions,
   QuickAddModal,
   EmptyState,
-  FabTooltipHint,
   KOREAN_FINANCIAL_INSTITUTIONS,
   CARD_INSTITUTION_HINTS,
   SMS_CATEGORY_RULE_STORAGE_KEY,
