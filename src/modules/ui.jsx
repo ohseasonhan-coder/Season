@@ -16,5 +16,6 @@ export {
   CountUpNumber,
   Badge,
   MetricCard,
-  EmptyState
+  EmptyState,
+  CommandPalette
 } from "../seasonCore.jsx";
