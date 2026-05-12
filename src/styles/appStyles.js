@@ -876,17 +876,19 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .tax-cal-nav-btn{width:36px;height:36px;border-radius:12px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:18px;font-weight:900;display:flex;align-items:center;justify-content:center;transition:.15s ease}
 .tax-cal-nav-btn:hover{background:rgba(108,125,255,.14);border-color:rgba(108,125,255,.28);color:var(--accent2);transform:translateY(-1px)}
 .tax-cal-input{height:36px;border:1px solid var(--border2);border-radius:12px;background:var(--surface2);color:var(--text);padding:0 10px;font-size:13px;font-weight:800;outline:none}
-.tax-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.tax-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:0;row-gap:0;position:relative}
 .tax-cal-weekday{font-size:11px;font-weight:900;color:var(--text3);text-align:center;padding:6px 0;letter-spacing:.04em}
-.tax-cal-day{min-height:112px;border:1px solid var(--border);border-radius:14px;background:var(--surface2);padding:9px;display:flex;flex-direction:column;gap:7px;transition:.15s ease;overflow:hidden}
-.tax-cal-day:hover{border-color:rgba(108,125,255,.28);transform:translateY(-1px)}
+.tax-cal-day{min-height:112px;border:1px solid var(--border);border-radius:0;background:var(--surface2);padding:9px;display:flex;flex-direction:column;gap:7px;transition:.15s ease;overflow:hidden;position:relative;padding-top:28px}
+.tax-cal-day:hover{border-color:rgba(108,125,255,.28)}
 .tax-cal-day.outside{opacity:.35;background:rgba(255,255,255,.025)}
-.tax-cal-day.today{box-shadow:inset 0 0 0 1px rgba(108,125,255,.45);border-color:rgba(108,125,255,.45)}
+.tax-cal-day.today{box-shadow:inset 0 0 0 1.5px rgba(108,125,255,.5);border-color:rgba(108,125,255,.45)}
 .tax-cal-date{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:900;color:var(--text)}
 .tax-cal-events{display:flex;flex-direction:column;gap:5px}
 .tax-cal-event{border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:6px;background:rgba(255,255,255,.04)}
 .tax-cal-event strong{display:block;font-size:11.5px;color:var(--text);line-height:1.25;margin-top:4px}
 .tax-cal-event p{font-size:10.5px;color:var(--text3);line-height:1.35;margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tax-gantt-inline-bar{z-index:2;height:22px;margin:3px 1px 0;display:flex;align-items:center;pointer-events:auto;cursor:default;overflow:hidden;position:relative;align-self:start;justify-self:stretch}
+.tax-gantt-inline-label{font-size:9.5px;font-weight:800;padding:0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1}
 .tax-update-box{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-top:14px;padding:14px;border-radius:14px;border:1px solid rgba(108,125,255,.20);background:rgba(108,125,255,.08)}
 .tax-update-box strong{font-size:13px;color:var(--text)}
 .tax-update-box p{font-size:12px;color:var(--text2);line-height:1.5;margin-top:4px}
