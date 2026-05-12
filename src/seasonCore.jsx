@@ -3135,161 +3135,75 @@ function rollbackCFOActionFromData(data, historyId) {
 // ─── Dashboard Tab ────────────────────────────────────────────────────────────
 
 function DashboardQuickEntryPanel({ data, update }) {
+  const [quickModal, setQuickModal] = useState(null);
   const activeAccounts = (data?.accounts || []).filter(a => a.active !== false).map(a => a.name).filter(Boolean);
-  const defaultOut = getAccountByKeyword(data?.accounts || [], ["카드", "생활", "토스", "은행"]) || activeAccounts[0] || "";
-  const defaultIn = getAccountByKeyword(data?.accounts || [], ["급여", "입출금", "은행"]) || activeAccounts[0] || "";
-  const defaultEmergency = getAccountByKeyword(data?.accounts || [], ["KOFR", "파킹", "비상", "카카오"]) || activeAccounts[0] || "";
-  const defaultIsa = getAccountByKeyword(data?.accounts || [], ["ISA"]) || activeAccounts[0] || "";
-  const expenseCats = data?.categories?.["지출"] || {};
-  const incomeCats = data?.categories?.["수입"] || {};
-  const expenseCat1 = Object.keys(expenseCats)[0] || "기타지출";
-  const expenseCat2 = (expenseCats[expenseCat1] || ["기타"])[0] || "기타";
-  const incomeCat1 = Object.keys(incomeCats)[0] || "기타수입";
-  const incomeCat2 = (incomeCats[incomeCat1] || ["기타"])[0] || "기타";
+  const transactions = Array.isArray(data?.transactions) ? data.transactions : [];
+  const thisMonth = todayISO().slice(0, 7);
+  const monthRows = transactions.filter(t => String(t.date || "").slice(0, 7) === thisMonth);
+  const monthExpense = monthRows.filter(t => t.type === "지출").reduce((sum, t) => sum + n(t.amount), 0);
+  const monthIncome = monthRows.filter(t => t.type === "수입").reduce((sum, t) => sum + n(t.amount), 0);
+  const recentRows = transactions.slice(-3).reverse();
 
-  const [mode, setMode] = useState("expense");
-  const [form, setForm] = useState({
-    date: todayISO(),
-    amount: "",
-    content: "",
-    cat1: expenseCat1,
-    cat2: expenseCat2,
-    outAccount: defaultOut,
-    inAccount: defaultIn,
-  });
-  const [split, setSplit] = useState({
-    date: todayISO(),
-    totalAmount: 2000000,
-    emergencyAmount: 500000,
-    isaAmount: 1500000,
-    pensionAmount: 0,
-    irpAmount: 0,
-    taxableInvestAmount: 0,
-    livingAmount: 0,
-    outAccount: defaultIn || defaultOut,
-    emergencyAccount: defaultEmergency,
-    isaAccount: defaultIsa,
-    pensionAccount: getAccountByKeyword(data?.accounts || [], ["연금저축", "연금"]) || "",
-    irpAccount: getAccountByKeyword(data?.accounts || [], ["IRP"]) || "",
-    taxableAccount: getAccountByKeyword(data?.accounts || [], ["증권", "일반"]) || "",
-    livingAccount: defaultOut,
-    planGroupId: uid(),
-  });
-  const [saved, setSaved] = useState("");
-
-  const setField = (patch) => setForm(prev => ({ ...prev, ...patch }));
-  const setSplitField = (key, value) => setSplit(prev => ({ ...prev, [key]: value }));
-
-  const currentCats = mode === "income" ? incomeCats : expenseCats;
-  const cat1List = Object.keys(currentCats);
-  const cat2List = currentCats[form.cat1] || [];
-
-  const splitAllocated = n(split.emergencyAmount) + n(split.isaAmount) + n(split.pensionAmount) + n(split.irpAmount) + n(split.taxableInvestAmount) + n(split.livingAmount);
-  const splitDiff = n(split.totalAmount) - splitAllocated;
-
-  const resetAfterSave = (message) => {
-    setSaved(message);
-    setTimeout(() => setSaved(""), 1400);
-  };
-
-  const saveBasic = () => {
-    const amount = n(form.amount);
-    if (!amount || amount <= 0) return;
-    const type = mode === "income" ? "수입" : "지출";
-    const row = {
-      id: uid(),
-      date: form.date || todayISO(),
-      type,
-      cat1: form.cat1 || (type === "수입" ? incomeCat1 : expenseCat1),
-      cat2: form.cat2 || (type === "수입" ? incomeCat2 : expenseCat2),
-      amount,
-      inAccount: type === "수입" ? form.inAccount : "",
-      outAccount: type === "지출" ? form.outAccount : "",
-      content: form.content || (type === "수입" ? "간편 수입" : "간편 지출"),
-      memo: "메인 대시보드 빠른 입력",
-    };
-    const hasError = validateTransactionRows([row], data).some(i => i.level === "error");
-    if (hasError) return;
-    update(d => ({ ...d, transactions: [...(d.transactions || []), row] }));
-    setField({ amount:"", content:"" });
-    resetAfterSave(`${type} 저장 완료`);
-  };
-
-  const saveSplit = () => {
-    if (splitDiff !== 0 || n(split.totalAmount) <= 0) return;
-    const rows = buildSplitTransactions({ split, data, accountNamesIn: activeAccounts, accountNamesOut: activeAccounts });
-    if (!rows.length || validateTransactionRows(rows, data).some(i => i.level === "error")) return;
-    update(d => ({ ...d, transactions: [...(d.transactions || []), ...rows.map(r => ({ ...r, id:r.id || uid() }))] }));
-    setSplit(prev => ({ ...prev, planGroupId: uid() }));
-    resetAfterSave(`${rows.length}건 분리 저장 완료`);
-  };
-
-  const canSaveBasic = n(form.amount) > 0 && (mode === "income" ? !!form.inAccount : !!form.outAccount) && !!form.cat1 && !!form.cat2;
-  const canSaveSplit = n(split.totalAmount) > 0 && splitDiff === 0 && !!split.outAccount && (!!split.emergencyAccount || !!split.isaAccount || !!split.pensionAccount || !!split.irpAccount || !!split.taxableAccount || !!split.livingAccount);
+  const openQuick = (config) => setQuickModal(config);
 
   return (
-    <div className="dashboard-quick-entry card">
-      <div className="dq-head">
-        <div>
-          <span className="dq-eyebrow">빠른 입력</span>
-          <h3>가계부·투자 바로 기록</h3>
-          <p>메뉴 이동 없이 지출, 수입, 비상금·ISA 분배를 메인에서 바로 저장합니다.</p>
+    <>
+      <div className="dashboard-quick-entry card compact">
+        <div className="dq-head">
+          <div>
+            <span className="dq-eyebrow">빠른 입력</span>
+            <h3>메인에서 바로 기록하고, 상세 입력은 터치로 열기</h3>
+            <p>자주 쓰는 입력은 한 번에 열고, 세부 분류·계좌·분배 내역은 전용 입력창에서 확인 후 저장합니다.</p>
+          </div>
+          <button className="dq-all-btn" onClick={() => openQuick({ mode:"split" })}>전체 입력 열기</button>
         </div>
-        {saved && <span className="dq-saved">✓ {saved}</span>}
+
+        <div className="dq-action-grid">
+          <button className="dq-action-card expense" onClick={() => openQuick({ mode:"normal", type:"지출" })}>
+            <span className="dq-action-icon">💳</span>
+            <strong>지출 입력</strong>
+            <em>식비·쇼핑·카드 사용</em>
+            <b>이번 달 {fmt(monthExpense)}원</b>
+          </button>
+          <button className="dq-action-card income" onClick={() => openQuick({ mode:"normal", type:"수입" })}>
+            <span className="dq-action-icon">💰</span>
+            <strong>수입 입력</strong>
+            <em>급여·배당·환급</em>
+            <b>이번 달 {fmt(monthIncome)}원</b>
+          </button>
+          <button className="dq-action-card split" onClick={() => openQuick({ mode:"split" })}>
+            <span className="dq-action-icon">🧩</span>
+            <strong>비상금·투자 분배</strong>
+            <em>비상금 / ISA / 연금 / 생활비</em>
+            <b>분리 저장</b>
+          </button>
+        </div>
+
+        <div className="dq-mini-footer">
+          <div>
+            <span>최근 입력</span>
+            {recentRows.length === 0 ? (
+              <p>아직 입력된 거래가 없습니다.</p>
+            ) : (
+              <p>{recentRows.map(t => `${t.type || "거래"} ${fmt(t.amount)}원`).join(" · ")}</p>
+            )}
+          </div>
+          <button className="dq-detail-link" onClick={() => openQuick({ mode:"guide" })}>입력 검증 기준 보기</button>
+        </div>
       </div>
 
-      <div className="dq-tabs">
-        <button className={mode === "expense" ? "active expense" : ""} onClick={() => { setMode("expense"); setField({ cat1: expenseCat1, cat2: expenseCat2 }); }}>지출</button>
-        <button className={mode === "income" ? "active income" : ""} onClick={() => { setMode("income"); setField({ cat1: incomeCat1, cat2: incomeCat2 }); }}>수입</button>
-        <button className={mode === "split" ? "active split" : ""} onClick={() => setMode("split")}>비상금·투자</button>
-      </div>
-
-      {mode !== "split" ? (
-        <div className="dq-grid">
-          <div className="dq-amount">
-            <input type="number" inputMode="numeric" placeholder="금액" value={form.amount} onChange={e => setField({ amount:e.target.value })} />
-            <span>원</span>
-          </div>
-          <input className="dq-input" type="date" value={form.date} onChange={e => setField({ date:e.target.value })} />
-          <input className="dq-input dq-wide" value={form.content} onChange={e => setField({ content:e.target.value })} placeholder={mode === "income" ? "예: 급여, 배당금, 환급" : "예: 점심, 주유, 쿠팡"} />
-          <select className="dq-input" value={form.cat1} onChange={e => setField({ cat1:e.target.value, cat2:(currentCats[e.target.value] || [""])[0] || "" })}>
-            {cat1List.map(x => <option key={x} value={x}>{x}</option>)}
-          </select>
-          <select className="dq-input" value={form.cat2} onChange={e => setField({ cat2:e.target.value })}>
-            {cat2List.map(x => <option key={x} value={x}>{x}</option>)}
-          </select>
-          <select className="dq-input dq-wide" value={mode === "income" ? form.inAccount : form.outAccount} onChange={e => mode === "income" ? setField({ inAccount:e.target.value }) : setField({ outAccount:e.target.value })}>
-            <option value="">{mode === "income" ? "입금계좌 선택" : "출금계좌 선택"}</option>
-            {activeAccounts.map(x => <option key={x} value={x}>{x}</option>)}
-          </select>
-          <button className={`dq-save ${mode}`} disabled={!canSaveBasic} onClick={saveBasic}>바로 저장</button>
-        </div>
-      ) : (
-        <div className="dq-split">
-          <div className="dq-split-top">
-            <div className="dq-amount">
-              <input type="number" inputMode="numeric" value={split.totalAmount} onChange={e => setSplitField("totalAmount", e.target.value)} />
-              <span>원</span>
-            </div>
-            <select className="dq-input" value={split.outAccount} onChange={e => setSplitField("outAccount", e.target.value)}>
-              <option value="">출금계좌</option>
-              {activeAccounts.map(x => <option key={x} value={x}>{x}</option>)}
-            </select>
-          </div>
-          <div className="dq-split-rows">
-            <label><span>비상금</span><input type="number" value={split.emergencyAmount} onChange={e => setSplitField("emergencyAmount", e.target.value)} /><select value={split.emergencyAccount} onChange={e => setSplitField("emergencyAccount", e.target.value)}><option value="">계좌</option>{activeAccounts.map(x => <option key={x}>{x}</option>)}</select></label>
-            <label><span>ISA</span><input type="number" value={split.isaAmount} onChange={e => setSplitField("isaAmount", e.target.value)} /><select value={split.isaAccount} onChange={e => setSplitField("isaAccount", e.target.value)}><option value="">계좌</option>{activeAccounts.map(x => <option key={x}>{x}</option>)}</select></label>
-            <label><span>연금저축</span><input type="number" value={split.pensionAmount} onChange={e => setSplitField("pensionAmount", e.target.value)} /><select value={split.pensionAccount} onChange={e => setSplitField("pensionAccount", e.target.value)}><option value="">계좌</option>{activeAccounts.map(x => <option key={x}>{x}</option>)}</select></label>
-            <label><span>생활비</span><input type="number" value={split.livingAmount} onChange={e => setSplitField("livingAmount", e.target.value)} /><select value={split.livingAccount} onChange={e => setSplitField("livingAccount", e.target.value)}><option value="">계좌</option>{activeAccounts.map(x => <option key={x}>{x}</option>)}</select></label>
-          </div>
-          <div className="dq-split-foot">
-            <span>배분 합계 <b>{fmt(splitAllocated)}원</b></span>
-            <span className={splitDiff === 0 ? "text-green" : "text-red"}>차액 <b>{fmt(splitDiff)}원</b></span>
-            <button className="dq-save split" disabled={!canSaveSplit} onClick={saveSplit}>분리 저장</button>
-          </div>
-        </div>
+      {quickModal && (
+        <QuickAddModal
+          data={data}
+          update={update}
+          accountNamesIn={activeAccounts}
+          accountNamesOut={activeAccounts}
+          initialMode={quickModal.mode || "split"}
+          initialType={quickModal.type || "지출"}
+          onClose={() => setQuickModal(null)}
+        />
       )}
-    </div>
+    </>
   );
 }
 
@@ -3762,7 +3676,7 @@ function buildSplitTransactions({ split, data, accountNamesIn = [], accountNames
   ].filter(Boolean);
 }
 
-function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose }) {
+function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose, initialMode="split", initialType="지출" }) {
   const EMPTY = { id:"", date:todayISO(), type:"지출", cat1:"", cat2:"", amount:"", inAccount:"", outAccount:"", content:"", memo:"" };
   const DEFAULT_SPLIT = {
     date: todayISO(), totalAmount: 2000000,
@@ -3777,8 +3691,10 @@ function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose 
     planGroupId: uid(),
   };
 
-  const [mode, setMode] = useState("split");
-  const [form, setForm] = useState(EMPTY);
+  const initialCat1 = Object.keys(data.categories?.[initialType || "지출"] || {})[0] || "";
+  const initialCat2 = ((data.categories?.[initialType || "지출"] || {})[initialCat1] || [""])[0] || "";
+  const [mode, setMode] = useState(initialMode || "split");
+  const [form, setForm] = useState({ ...EMPTY, type: initialType || "지출", cat1: initialCat1, cat2: initialCat2 });
   const [split, setSplit] = useState(DEFAULT_SPLIT);
   const [pendingRows, setPendingRows] = useState([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
