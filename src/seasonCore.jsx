@@ -478,7 +478,8 @@ const OB_KEY = "season-onboarding-done-v1";
 const OB_DISCLAIMER_KEY = "season-disclaimer-agreed-v1";
 
 function OnboardingWizard({ onComplete }) {
-  const [step, setStep] = useState(1);
+  // step 0 = 면책동의, 1 = 기본정보, 2 = 투자성향, 3 = 자산입력
+  const [step, setStep] = useState(0);
 
   /* 면책 동의 */
   const [disclaimerAgreed, setDisclaimerAgreed] = useState(false);
@@ -550,24 +551,38 @@ function OnboardingWizard({ onComplete }) {
     onComplete({ newSettings, newAssets, userName: name.trim() });
   };
 
-  /* 건너뛰기 */
-  const handleSkip = () => { localStorage.setItem(OB_KEY, "1"); localStorage.setItem(OB_DISCLAIMER_KEY, "1"); onComplete({}); };
+  /* 빠른 시작 (동의만 하고 바로 진입) */
+  const handleQuickStart = () => {
+    localStorage.setItem(OB_KEY, "1");
+    localStorage.setItem(OB_DISCLAIMER_KEY, "1");
+    onComplete({});
+  };
 
   /* 유효성 */
   const ok1 = toNum(age) >= 18 && toNum(retireAge) > toNum(age);
   const ok2 = !!investStyle;
 
-  /* 스텝 진행 바 */
+  /* 진행률 */
+  const TOTAL_STEPS = 3; // step 1~3
+  const pct = step === 0 ? 0 : Math.round(((step - 1) / TOTAL_STEPS) * 100);
+
+  /* 스텝 진행 바 (step 1~3) */
   const Stepper = () => (
-    <div className="ob-stepper">
-      {[1,2,3].map((s,i) => (
-        <React.Fragment key={s}>
-          {i > 0 && <div className={`ob-st-line ${step > s-1 ? "done" : step === s-1 ? "active" : ""}`}/>}
-          <div className={`ob-st-dot ${step > s ? "done" : step === s ? "active" : ""}`}>
-            {step > s ? "✓" : s}
-          </div>
-        </React.Fragment>
-      ))}
+    <div className="ob-stepper-wrap">
+      <div className="ob-progress-bar">
+        <div className="ob-progress-fill" style={{width: `${pct}%`}}/>
+      </div>
+      <div className="ob-stepper">
+        {[1,2,3].map((s,i) => (
+          <React.Fragment key={s}>
+            {i > 0 && <div className={`ob-st-line ${step > s ? "done" : step >= s ? "active" : ""}`}/>}
+            <div className={`ob-st-dot ${step > s ? "done" : step === s ? "active" : ""}`}>
+              {step > s ? "✓" : s}
+            </div>
+          </React.Fragment>
+        ))}
+      </div>
+      <div className="ob-progress-label">{pct}% 완료</div>
     </div>
   );
 
@@ -590,59 +605,79 @@ function OnboardingWizard({ onComplete }) {
           <span className="ob-logo-name">Season Finance</span>
         </div>
 
-        <Stepper/>
+        {step > 0 && <Stepper/>}
 
-        {/* ──────── STEP 1: 기본 정보 ──────── */}
-        {step === 1 && (
+        {/* ──────── STEP 0: 면책 동의 (단독 화면) ──────── */}
+        {step === 0 && (
           <>
-            <div className="ob-eyebrow">Step 1 · 기본 정보</div>
-            <div className="ob-h">안녕하세요 👋<br/>기본 정보를 알려주세요</div>
-            <div className="ob-sub">맞춤 재무 계산을 시작합니다. 언제든 설정에서 변경할 수 있어요.</div>
+            <div className="ob-h" style={{fontSize:20}}>시작하기 전에<br/>꼭 확인해주세요 📋</div>
+            <div className="ob-sub">Season Finance를 안전하게 사용하기 위한 안내입니다.</div>
 
-            {/* ── 면책 동의 박스 ── */}
-            <div style={{
-              padding: "14px 16px",
-              borderRadius: 12,
-              background: "rgba(240,180,41,.08)",
-              border: "1px solid rgba(240,180,41,.28)",
-              marginBottom: 16,
-            }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--amber)", marginBottom: 8 }}>
-                ⚠️ 이용 전 필수 동의
-              </div>
-              <p style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.65, margin: "0 0 12px" }}>
-                Season Finance는 <strong>투자자문업 미등록 개인 재무 현황 계산기</strong>입니다.
-                제공되는 모든 수치·분석·제안은 사용자가 직접 입력한 데이터를 기반으로 한 <strong>참고용</strong>이며,
-                실제 투자·세무 결정의 근거로 사용하지 마세요.
-                실제 투자 결정은 반드시 공인 금융전문가 또는 세무사와 상담하시기 바랍니다.
+            <div className="ob-disclaimer-box">
+              <div className="ob-disclaimer-icon">⚠️</div>
+              <div className="ob-disclaimer-title">투자자문업 미등록 서비스 안내</div>
+              <p className="ob-disclaimer-body">
+                이 앱은 <strong>개인 재무 현황 계산기</strong>로,
+                투자자문업에 등록되지 않은 서비스입니다.<br/><br/>
+                제공되는 모든 수치·분석·제안은 사용자가 직접 입력한 데이터를 기반으로 한
+                <strong> 참고용</strong>이며, 실제 투자·세무 결정의 근거로 사용하지 마세요.<br/><br/>
+                실제 투자·세금 결정은 반드시 공인 금융전문가 또는 세무사와 상담하시기 바랍니다.
               </p>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
+              <label className="ob-disclaimer-check">
                 <input
                   type="checkbox"
                   checked={disclaimerAgreed}
                   onChange={e => setDisclaimerAgreed(e.target.checked)}
                   style={{ width: 16, height: 16, accentColor: "var(--accent)", flexShrink: 0 }}
                 />
-                위 내용을 확인했으며, 이 앱이 참고용 계산기임을 이해합니다.
+                <span>위 내용을 이해했으며, 이 앱이 <strong>참고용 계산기</strong>임에 동의합니다.</span>
               </label>
             </div>
+
+            <div className="ob-footer" style={{flexDirection:"column", gap:10}}>
+              <button
+                className="ob-btn primary"
+                style={{width:"100%", justifyContent:"center"}}
+                onClick={() => setStep(1)}
+                disabled={!disclaimerAgreed}
+              >
+                맞춤 설정 시작하기 →
+              </button>
+              <button
+                className="ob-btn ghost ob-quickstart-btn"
+                onClick={handleQuickStart}
+                disabled={!disclaimerAgreed}
+              >
+                ⚡ 기본값으로 빠르게 시작
+                <span className="ob-quickstart-sub">나중에 설정에서 변경 가능해요</span>
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ──────── STEP 1: 기본 정보 ──────── */}
+        {step === 1 && (
+          <>
+            <div className="ob-eyebrow">Step 1 · 기본 정보</div>
+            <div className="ob-h">안녕하세요 👋<br/>기본 정보를 알려주세요</div>
+            <div className="ob-sub">맞춤 재무 계산에 사용돼요. 언제든 설정에서 변경할 수 있어요.</div>
 
             <div className="ob-fstack">
               <div className="ob-f">
                 <label>이름 (선택)</label>
                 <input placeholder="홍길동" value={name} onChange={e=>setName(e.target.value)} maxLength={20}/>
+                <span className="ob-hint">대시보드에 표시됩니다</span>
               </div>
 
               <div className="ob-row2">
                 <div className="ob-f">
-                  <label>현재 나이</label>
+                  <label>현재 나이 (만)</label>
                   <input type="number" placeholder="36" value={age} onChange={e=>setAge(e.target.value)} min={18} max={80}/>
-                  <span className="ob-hint">만 나이</span>
                 </div>
                 <div className="ob-f">
                   <label>목표 은퇴 나이</label>
                   <input type="number" placeholder="55" value={retireAge} onChange={e=>setRetireAge(e.target.value)} min={30} max={80}/>
-                  {!ok1 && toNum(age)>0 && <span className="ob-hint" style={{color:"var(--red)"}}>은퇴 나이는 현재 나이보다 커야 해요</span>}
+                  {!ok1 && toNum(age)>0 && <span className="ob-hint" style={{color:"var(--red)"}}>은퇴 나이 &gt; 현재 나이여야 해요</span>}
                 </div>
               </div>
 
@@ -668,9 +703,9 @@ function OnboardingWizard({ onComplete }) {
             </div>
 
             <div className="ob-footer">
-              <button className="ob-skip" onClick={handleSkip}>나중에 할게요</button>
-              <button className="ob-btn primary" onClick={()=>setStep(2)} disabled={!ok1 || !disclaimerAgreed}>
-                다음 단계 →
+              <button className="ob-btn ghost" onClick={()=>setStep(0)}>← 이전</button>
+              <button className="ob-btn primary" onClick={()=>setStep(2)} disabled={!ok1}>
+                다음 →
               </button>
             </div>
           </>
@@ -686,16 +721,23 @@ function OnboardingWizard({ onComplete }) {
             <div className="ob-fstack">
               <div className="ob-f">
                 <label>투자 성향</label>
-                <div className="ob-tags">
+                <div className="ob-style-cards">
                   {[
-                    ["안정형",  "배당 비중 높게"],
-                    ["균형형",  "나스닥+배당 Mix"],
-                    ["성장형",  "나스닥 집중"],
-                  ].map(([v, d]) => (
-                    <div key={v} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-                      <Tag val={v} sel={investStyle===v} onClick={()=>setInvestStyle(v)}>{v}</Tag>
-                      <span style={{fontSize:10,color:"var(--text3)",textAlign:"center"}}>{d}</span>
-                    </div>
+                    ["안정형",  "🛡️", "배당 위주", "나스닥 25% / 배당 60%"],
+                    ["균형형",  "⚖️", "나스닥+배당", "나스닥 45% / 배당 10%"],
+                    ["성장형",  "🚀", "나스닥 집중", "나스닥 60% / 배당 5%"],
+                  ].map(([v, icon, sub, detail]) => (
+                    <button
+                      key={v}
+                      type="button"
+                      className={`ob-style-card ${investStyle===v ? "sel" : ""}`}
+                      onClick={()=>setInvestStyle(v)}
+                    >
+                      <span className="ob-style-icon">{icon}</span>
+                      <span className="ob-style-name">{v}</span>
+                      <span className="ob-style-sub">{sub}</span>
+                      <span className="ob-style-detail">{detail}</span>
+                    </button>
                   ))}
                 </div>
                 {!ok2 && <span className="ob-hint" style={{color:"var(--amber)"}}>투자 성향을 하나 선택해주세요</span>}
@@ -705,7 +747,7 @@ function OnboardingWizard({ onComplete }) {
                 <div className="ob-f">
                   <label>월 투자금 (만원)</label>
                   <input type="number" placeholder="200" value={monthlyInv} onChange={e=>setMonthlyInv(e.target.value)} min={0}/>
-                  <span className="ob-hint">현재 여력 기준</span>
+                  <span className="ob-hint">현재 여력 기준 · 나중에 조정 가능</span>
                 </div>
                 <div className="ob-f">
                   <label>은퇴 목표자산 (억원)</label>
@@ -724,7 +766,7 @@ function OnboardingWizard({ onComplete }) {
             <div className="ob-footer">
               <button className="ob-btn ghost" onClick={()=>setStep(1)}>← 이전</button>
               <button className="ob-btn primary" onClick={()=>setStep(3)} disabled={!ok2}>
-                다음 단계 →
+                다음 →
               </button>
             </div>
           </>
@@ -735,7 +777,7 @@ function OnboardingWizard({ onComplete }) {
           <>
             <div className="ob-eyebrow">Step 3 · 자산 입력</div>
             <div className="ob-h">주요 자산을<br/>입력해주세요</div>
-            <div className="ob-sub">대략적인 금액도 괜찮아요. 나중에 자산 탭에서 수정할 수 있어요.</div>
+            <div className="ob-sub">대략적인 금액도 괜찮아요. 나중에 자산 탭에서 언제든 수정할 수 있어요.</div>
 
             <div className="ob-fstack">
               <div className="ob-row2">
@@ -746,6 +788,7 @@ function OnboardingWizard({ onComplete }) {
                 <div className="ob-f">
                   <label>ISA 계좌 (만원)</label>
                   <input type="number" placeholder="1500" value={isaBal} onChange={e=>setIsaBal(e.target.value)} min={0}/>
+                  <span className="ob-hint">개인종합자산관리계좌</span>
                 </div>
               </div>
 
@@ -3310,8 +3353,34 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
   const healthColor=advanced.tone==="green"?"var(--green)":advanced.tone==="accent"?"var(--accent)":advanced.tone==="amber"?"var(--amber)":"var(--red)";
   const healthBg=advanced.tone==="green"?"var(--green-bg)":advanced.tone==="accent"?"var(--accent-bg)":advanced.tone==="amber"?"var(--amber-bg)":"var(--red-bg)";
 
+  const hasAnyData = data.transactions.length > 0 || data.assets.length > 0 || data.portfolio.length > 0;
+  const userName = data.settings?.userName || "";
+
   return (
     <div className="stack dashboard-pro">
+      {/* 사용자 이름 인사 */}
+      {userName && (
+        <div className="dashboard-greeting">
+          안녕하세요, <strong>{userName}</strong>님의 재무 현황이에요 👋
+        </div>
+      )}
+
+      {/* 빈 상태 가이드 — 데이터가 없을 때만 표시 */}
+      {!hasAnyData && (
+        <div className="empty-state-banner">
+          <div className="esb-icon">🌱</div>
+          <div className="esb-body">
+            <div className="esb-title">아직 데이터가 없어요</div>
+            <div className="esb-desc">거래를 입력하거나 자산을 등록하면 여기에 분석이 표시돼요.</div>
+            <div className="esb-steps">
+              <div className="esb-step"><span className="esb-num">1</span>오른쪽 아래 <strong>+</strong> 버튼으로 첫 거래 입력</div>
+              <div className="esb-step"><span className="esb-num">2</span><strong>자산·부채</strong> 탭에서 은행·투자 잔고 등록</div>
+              <div className="esb-step"><span className="esb-num">3</span><strong>거래내역 → SMS 가져오기</strong>로 한 번에 불러오기</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <DashboardAdvicePanel nlp={dashboardNLP} />
       <CFODecisionDashboard model={cfoDecisionModel} data={data} onExecuteAction={handleCFOExecuteAction} onUndoAction={handleCFOUndoAction} undoState={cfoUndoState} onRollbackHistory={handleCFORollbackHistory} />
       <AICoachPanel coach={buildIntegratedCoach({ area:"대시보드", data, dashboard, dashboardDetail, financialAnalysis, budgetAnalysis, taxAnalysis, futureSim, eventAnalysis, monthlySeries })}/>
@@ -3353,10 +3422,10 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
       </div>
 
       <div className="kpi-grid">
-        <KpiCard label="순자산" value={dashboard.netWorth} unit="원" accent/>
-        <KpiCard label="이번달 현금흐름" value={dashboard.net} unit="원" tone={dashboard.net>=0?"green":"red"}/>
-        <KpiCard label="총 투자자산" value={financialAnalysis.total} unit="원"/>
-        <KpiCard label="비상금" value={dashboardDetail.emergencyFund} unit="원"/>
+        <KpiCard label="순자산" value={dashboard.netWorth} unit="원" accent tooltip="총 자산에서 부채를 뺀 나의 실질 재산 (자산+투자-부채)"/>
+        <KpiCard label="이번달 현금흐름" value={dashboard.net} unit="원" tone={dashboard.net>=0?"green":"red"} tooltip="이번달 수입에서 지출을 뺀 금액. 플러스면 흑자, 마이너스면 적자"/>
+        <KpiCard label="총 투자자산" value={financialAnalysis.total} unit="원" tooltip="포트폴리오에 등록된 주식·ETF의 현재가 기준 총 평가금액"/>
+        <KpiCard label="비상금" value={dashboardDetail.emergencyFund} unit="원" tooltip="즉시 인출 가능한 현금성 자산. 월 지출의 3~6개월치 보유를 권장해요"/>
       </div>
 
       <div className="g3">
@@ -3466,12 +3535,56 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
   );
 }
 
-function KpiCard({ label, value, unit, tone, accent }) {
+/* ─── EmptyState: 데이터 없는 탭에 친절한 안내 표시 ─────────────────────────── */
+function EmptyState({ icon, title, desc, actions = [] }) {
+  return (
+    <div className="empty-state-wrap">
+      <div className="empty-state-icon">{icon}</div>
+      <div className="empty-state-title">{title}</div>
+      <div className="empty-state-desc">{desc}</div>
+      {actions.length > 0 && (
+        <div className="empty-state-actions">
+          {actions.map((a, i) => (
+            <button key={i} className={`empty-state-btn ${a.primary ? "primary" : "ghost"}`} onClick={a.onClick}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── FabTooltip: FAB 첫 방문 안내 말풍선 ─────────────────────────────────── */
+function FabTooltipHint() {
+  const KEY = "season-fab-hint-shown";
+  const [visible, setVisible] = useState(() => !localStorage.getItem(KEY));
+  useEffect(() => {
+    if (!visible) return;
+    const t = setTimeout(() => {
+      localStorage.setItem(KEY, "1");
+      setVisible(false);
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [visible]);
+  if (!visible) return null;
+  return (
+    <div className="fab-hint" onClick={() => { localStorage.setItem(KEY, "1"); setVisible(false); }}>
+      <div className="fab-hint-arrow"/>
+      <div className="fab-hint-text">👆 여기서 거래를 바로 입력해요!</div>
+    </div>
+  );
+}
+
+function KpiCard({ label, value, unit, tone, accent, tooltip }) {
   const cls=accent?"kpi-card kpi-accent":tone==="green"?"kpi-card kpi-green":tone==="red"?"kpi-card kpi-red":"kpi-card";
   const valColor=tone==="green"?"var(--green)":tone==="red"?"var(--red)":accent?"var(--accent)":"var(--text)";
   return (
     <div className={cls}>
-      <div className="kpi-label">{label}</div>
+      <div className="kpi-label" style={{display:"flex",alignItems:"center",gap:5}}>
+        {label}
+        {tooltip && <InfoTooltip label="?" message={tooltip} tone="info"/>}
+      </div>
       <div>
         <span className="kpi-value" style={{color:valColor}}>{fmt(value)}</span>
         <span className="kpi-unit">{unit}</span>
@@ -4899,7 +5012,15 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
                   </td>
                 </tr>
               ))}
-              {!filtered.length&&<tr><td colSpan={9}><div className="empty">{data.transactions.length===0?"거래내역이 없습니다.":"검색 결과가 없습니다. 필터를 조정해보세요."}</div></td></tr>}
+              {!filtered.length&&<tr><td colSpan={9}><div className="empty" style={{padding:"32px 16px"}}>
+                {data.transactions.length===0 ? (
+                  <div style={{textAlign:"center"}}>
+                    <div style={{fontSize:32,marginBottom:10}}>📝</div>
+                    <div style={{fontSize:14,fontWeight:700,color:"var(--text)",marginBottom:6}}>아직 거래내역이 없어요</div>
+                    <div style={{fontSize:12,color:"var(--text3)",lineHeight:1.6,marginBottom:14}}>위 입력창에서 첫 거래를 기록하거나,<br/>오른쪽 아래 <strong style={{color:"var(--accent)"}}>+</strong> 버튼을 눌러보세요</div>
+                    <div style={{fontSize:11,color:"var(--text3)"}}>💡 팁: SMS 가져오기로 카드·계좌 문자를 한 번에 불러올 수 있어요</div>
+                  </div>
+                ) : "검색 결과가 없습니다. 필터를 조정해보세요."}</div></td></tr>}
             </tbody>
           </table>
         </div>
@@ -9480,6 +9601,8 @@ export {
   validateTransactionRows,
   buildSplitTransactions,
   QuickAddModal,
+  EmptyState,
+  FabTooltipHint,
   KOREAN_FINANCIAL_INSTITUTIONS,
   CARD_INSTITUTION_HINTS,
   SMS_CATEGORY_RULE_STORAGE_KEY,
