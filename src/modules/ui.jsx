@@ -16,6 +16,5 @@ export {
   CountUpNumber,
   Badge,
   MetricCard,
-  EmptyState,
-  FabTooltipHint
+  EmptyState
 } from "../seasonCore.jsx";
