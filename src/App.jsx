@@ -227,7 +227,8 @@ import {
   Step2MddRiskPanel,
   NAV,
   PAGE_TITLES,
-  STYLES
+  STYLES,
+  CommandPalette,
 } from "./modules/index.js";
 
 // ─── FAB 힌트 말풍선 (첫 방문 1회만) ────────────────────────────────────────
@@ -258,6 +259,19 @@ export default function App() {
   const [showOnboarding,setShowOnboarding]=useState(()=>!localStorage.getItem(OB_KEY));
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showCmd, setShowCmd] = useState(false);
+
+  // ── Ctrl+K / ⌘K 커맨드 팔레트 단축키
+  useEffect(()=>{
+    const handler=(e)=>{
+      if((e.ctrlKey||e.metaKey)&&e.key==="k"){
+        e.preventDefault();
+        setShowCmd(v=>!v);
+      }
+    };
+    window.addEventListener("keydown",handler);
+    return ()=>window.removeEventListener("keydown",handler);
+  },[]);
 
   // ── 다크/라이트 테마
   const [theme,setTheme]=useState(()=>localStorage.getItem("season-theme")||"dark");
@@ -742,6 +756,10 @@ export default function App() {
           <div className="topbar">
             <div className="topbar-title">{PAGE_TITLES[tab]||tab}</div>
             <div className="topbar-right">
+              <button className="topbar-search-btn" onClick={()=>setShowCmd(true)} title="검색 (Ctrl+K)">
+                🔍 <span className="topbar-search-label">검색</span>
+                <kbd className="topbar-kbd">⌘K</kbd>
+              </button>
               <span style={{fontSize:12,color:"var(--text3)"}}>{thisMonthISO()}</span>
               {dashboard.net!==0&&(
                 <span className={`badge ${dashboard.net>=0?"badge-green":"badge-red"}`}>
@@ -796,6 +814,7 @@ export default function App() {
 
 
       {showPrivacy&&<PrivacyModal onClose={()=>setShowPrivacy(false)}/>}
+      {showCmd&&<CommandPalette onNavigate={setTab} onClose={()=>setShowCmd(false)} onQuickAdd={()=>setShowQuickAdd(true)}/>}
       {/* FAB 간편입력 */}
       {!showOnboarding && (
         <>
