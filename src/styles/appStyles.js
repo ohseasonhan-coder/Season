@@ -868,9 +868,9 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .theme-toggle:hover{background:var(--surface3);color:var(--text);transform:translateY(-1px)}
 
 /* Onboarding */
-.ob-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(14px);animation:obIn .3s ease}
+.ob-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(14px);animation:obIn .3s ease;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y}
 @keyframes obIn{from{opacity:0}to{opacity:1}}
-.ob-card{background:var(--surface,#161920);border:1px solid var(--border,#2a2d36);border-radius:24px;width:100%;max-width:580px;padding:36px 40px;box-shadow:0 32px 80px rgba(0,0,0,.65);animation:obUp .38s cubic-bezier(.2,.8,.2,1)}
+.ob-card{background:var(--surface,#161920);border:1px solid var(--border,#2a2d36);border-radius:24px;width:100%;max-width:580px;max-height:calc(100dvh - 40px);padding:36px 40px;box-shadow:0 32px 80px rgba(0,0,0,.65);animation:obUp .38s cubic-bezier(.2,.8,.2,1);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 @keyframes obUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
 .ob-logo-row{display:flex;align-items:center;gap:10px;margin-bottom:26px}
 .ob-logo-mark{width:34px;height:34px;background:var(--accent,#6c7dff);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:900;color:#fff;flex-shrink:0}
@@ -1111,7 +1111,46 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
   .mobile-tabbar{position:fixed!important;bottom:0!important;left:0!important;right:0!important;z-index:95!important;}
   .fab{bottom:calc(72px + env(safe-area-inset-bottom, 0px));right:16px;width:50px;height:50px;font-size:21px;}
 
-  /* 모달/시트 */
+
+
+  /* 첫 실행 온보딩 팝업: 모바일에서 내부 스크롤 가능하게 고정 */
+  .ob-overlay{
+    align-items:flex-start!important;
+    justify-content:center!important;
+    padding:12px!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    -webkit-overflow-scrolling:touch!important;
+    touch-action:pan-y!important;
+  }
+  .ob-card{
+    width:100%!important;
+    max-width:100%!important;
+    max-height:none!important;
+    min-height:auto!important;
+    margin:0 auto max(18px, env(safe-area-inset-bottom, 0px))!important;
+    padding:22px 16px 18px!important;
+    border-radius:22px!important;
+    overflow-y:visible!important;
+    overflow-x:hidden!important;
+    box-sizing:border-box!important;
+  }
+  .ob-row2{grid-template-columns:1fr!important;}
+  .ob-footer{
+    position:sticky!important;
+    bottom:-18px!important;
+    z-index:5!important;
+    margin-left:-16px!important;
+    margin-right:-16px!important;
+    margin-bottom:-18px!important;
+    padding:12px 16px calc(14px + env(safe-area-inset-bottom, 0px))!important;
+    background:linear-gradient(0deg,var(--surface,#161920) 78%,rgba(22,25,32,0))!important;
+    backdrop-filter:blur(14px)!important;
+    -webkit-backdrop-filter:blur(14px)!important;
+  }
+  .ob-btn{min-height:44px!important;}
+
+    /* 모달/시트 */
   .modal-sheet,.qa-sheet,.mobile-more-sheet,.mobile-login-sheet{max-height:86dvh!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
   .modal-sheet,.qa-sheet{border-radius:24px 24px 0 0}
   .apple-cfo-modal-overlay{align-items:flex-end!important;padding:0!important;}
@@ -1231,4 +1270,46 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
   body{background:#fff!important;color:#111!important}
   .card,.kpi-card,.card-sm{break-inside:avoid;background:#fff!important;color:#111!important;border-color:#ddd!important}
 }
+
+/* FINAL FIX: mobile onboarding popup scroll lock */
+@media (max-width: 768px){
+  .ob-overlay{
+    position:fixed!important;
+    inset:0!important;
+    height:100dvh!important;
+    min-height:100dvh!important;
+    display:block!important;
+    padding:12px!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    -webkit-overflow-scrolling:touch!important;
+    overscroll-behavior-y:contain!important;
+    touch-action:pan-y!important;
+    box-sizing:border-box!important;
+  }
+  .ob-card{
+    width:100%!important;
+    max-width:580px!important;
+    max-height:none!important;
+    min-height:auto!important;
+    margin:0 auto calc(24px + env(safe-area-inset-bottom, 0px))!important;
+    padding:22px 16px 18px!important;
+    border-radius:22px!important;
+    overflow:visible!important;
+    box-sizing:border-box!important;
+  }
+  .ob-footer{
+    position:sticky!important;
+    bottom:-18px!important;
+    z-index:10!important;
+    margin-left:-16px!important;
+    margin-right:-16px!important;
+    margin-bottom:-18px!important;
+    padding:12px 16px calc(14px + env(safe-area-inset-bottom, 0px))!important;
+    background:linear-gradient(0deg,var(--surface,#161920) 78%,rgba(22,25,32,0))!important;
+    backdrop-filter:blur(14px)!important;
+    -webkit-backdrop-filter:blur(14px)!important;
+  }
+}
+
 `;
