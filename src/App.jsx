@@ -126,6 +126,7 @@ import {
   validateTransactionRows,
   buildSplitTransactions,
   QuickAddModal,
+  FabTooltipHint,
   KOREAN_FINANCIAL_INSTITUTIONS,
   CARD_INSTITUTION_HINTS,
   SMS_CATEGORY_RULE_STORAGE_KEY,
@@ -321,10 +322,10 @@ export default function App() {
 
   // ── 온보딩 완료 핸들러
   const handleOnboardingComplete=({ newSettings={}, newAssets=[], userName="" }={})=>{
-    if(Object.keys(newSettings).length > 0 || newAssets.length > 0) {
+    if(Object.keys(newSettings).length > 0 || newAssets.length > 0 || userName) {
       update(d=>({
         ...d,
-        settings: { ...d.settings, ...newSettings },
+        settings: { ...d.settings, ...newSettings, ...(userName ? { userName } : {}) },
         assets: newAssets.length > 0
           ? [...d.assets.filter(a=>a.note!=="온보딩 입력"), ...newAssets]
           : d.assets,
@@ -781,6 +782,7 @@ export default function App() {
       {/* FAB 간편입력 */}
       {!showOnboarding && (
         <>
+          <FabTooltipHint />
           <button
             className={showQuickAdd ? 'fab fab-open' : 'fab'}
             onClick={() => setShowQuickAdd(v => !v)}
