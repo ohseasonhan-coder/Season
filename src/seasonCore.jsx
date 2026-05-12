@@ -6366,11 +6366,14 @@ function buildTaxCalendar(data, taxAnalysis, futureSim) {
   const finalFuture = Array.isArray(futureSim) && futureSim.length ? futureSim[futureSim.length - 1] : null;
   const target = n(s.retirementTargetAmount);
   const projected = n(finalFuture?.total);
-  const mk = (yyyy, month, day, type, title, amount, desc, tone) => ({
+  const mk = (yyyy, month, day, type, title, amount, desc, tone, startMonth, startDay) => ({
     year: yyyy,
     month,
     day: taxDeadlineDate(yyyy, month, day),
     date: `${yyyy}-${String(month).padStart(2,"0")}-${String(taxDeadlineDate(yyyy, month, day)).padStart(2,"0")}`,
+    startMonth: startMonth || month,
+    startDay: startDay || taxDeadlineDate(yyyy, month, day),
+    hasPeriod: !!(startMonth && startMonth !== month || startDay && startDay !== taxDeadlineDate(yyyy, month, day)),
     type,
     title,
     amount,
@@ -6381,46 +6384,51 @@ function buildTaxCalendar(data, taxAnalysis, futureSim) {
   const hasProperty = n(s.hasProperty) > 0 || (data.assets || []).some(a => a.category === "부동산");
   const hasCar = n(s.hasCar) > 0 || (data.assets || []).some(a => a.category === "자동차" || (a.name || "").includes("차"));
   const isFreelancer = s.isFreelancer || false;
-  const hasHealthInsurance = s.employmentType !== "직장인" || true; // 모든 사람에게 해당
+  const hasHealthInsurance = s.employmentType !== "직장인" || true;
 
   const events = [
-    // ── 1월
-    mk(year, 1, 31, "신고", "부가가치세 확정신고", 0, "사업자(개인·법인) 전년도 2기분 부가가치세 신고·납부", "amber"),
-    mk(year, 1, 15, "납부", "자동차세 연납 할인", 0, "1월 연납 신청 시 약 5~7% 할인 혜택 (고지서 또는 위택스)", "green"),
+    // 1월: 부가가치세 확정신고 (1/1~1/31)
+    mk(year, 1, 31, "신고", "부가가치세 확정신고", 0, "사업자(개인·법인) 전년도 2기분 부가가치세 신고·납부", "amber", 1, 1),
+    // 1월: 자동차세 연납 (1/1~1/15)
+    mk(year, 1, 15, "납부", "자동차세 연납 할인", 0, "1월 연납 신청 시 약 5~7% 할인 혜택 (고지서 또는 위택스)", "green", 1, 1),
 
-    // ── 2월
-    mk(year, 2, 28, "신고", "연말정산 서류 제출", 0, "근로소득자 연말정산 간소화 서비스 자료 제출 마감", "amber"),
+    // 2월: 연말정산 서류 제출 (1/15~2/28)
+    mk(year, 2, 28, "신고", "연말정산 서류 제출", 0, "근로소득자 연말정산 간소화 서비스 자료 제출 마감", "amber", 1, 15),
 
-    // ── 3월
-    mk(year, 3, 31, "납부", "법인세 신고·납부", 0, "12월 결산 법인 법인세 신고 마감", "info"),
+    // 3월: 법인세 신고 (3/1~3/31)
+    mk(year, 3, 31, "납부", "법인세 신고·납부", 0, "12월 결산 법인 법인세 신고 마감", "info", 3, 1),
 
-    // ── 4월
-    mk(year, 4, 30, "신고", "부가가치세 1기 예정신고", 0, "사업자 1~3월분 부가가치세 예정신고·납부", "amber"),
+    // 4월: 부가가치세 1기 예정신고 (4/1~4/25)
+    mk(year, 4, 25, "신고", "부가가치세 1기 예정신고", 0, "사업자 1~3월분 부가가치세 예정신고·납부", "amber", 4, 1),
 
-    // ── 5월
-    mk(year, 5, 31, "신고", "종합소득세 확정신고", taxableTax, taxableTax > 0 ? `일반계좌 추정 과세 노출 ${fmt(taxableTax)}원 점검` : "근로 외 소득·금융소득·사업소득 여부 확인 (프리랜서·임대·금융소득 2천만원 초과 시 필수)", "amber"),
+    // 5월: 종합소득세 (5/1~5/31)
+    mk(year, 5, 31, "신고", "종합소득세 확정신고", taxableTax, taxableTax > 0 ? `일반계좌 추정 과세 노출 ${fmt(taxableTax)}원 점검` : "근로 외 소득·금융소득·사업소득 여부 확인 (프리랜서·임대·금융소득 2천만원 초과 시 필수)", "amber", 5, 1),
 
-    // ── 6월
-    mk(year, 6, 30, "납부", "자동차세 1기", 0, "자동차세 1기분 납부 (1~6월분). 위택스·자동차세 앱 또는 고지서로 납부", "info"),
+    // 6월: 자동차세 1기 (6/16~6/30)
+    mk(year, 6, 30, "납부", "자동차세 1기", 0, "자동차세 1기분 납부 (1~6월분). 위택스·자동차세 앱 또는 고지서로 납부", "info", 6, 16),
 
-    // ── 7월
-    mk(year, 7, 31, "납부", "재산세 1기", 0, "주택 1기분·건축물분·선박·항공기 등 고지서 확인 후 납부", "info"),
-    mk(year, 7, 31, "신고", "부가가치세 1기 확정신고", 0, "사업자 1~6월분 부가가치세 확정신고·납부", "amber"),
+    // 7월: 재산세 1기 (7/16~7/31)
+    mk(year, 7, 31, "납부", "재산세 1기", 0, "주택 1기분·건축물분·선박·항공기 등 고지서 확인 후 납부", "info", 7, 16),
+    // 7월: 부가가치세 1기 확정신고 (7/1~7/25)
+    mk(year, 7, 25, "신고", "부가가치세 1기 확정신고", 0, "사업자 1~6월분 부가가치세 확정신고·납부", "amber", 7, 1),
 
-    // ── 8월
-    mk(year, 8, 31, "납부", "건강보험료 정산", 0, "전년도 소득 기준 건강보험료 연간 정산. 직장 가입자도 소득월액 변동 시 추가 납부 발생 가능", "info"),
+    // 8월: 건강보험료 정산 (8/1~8/31)
+    mk(year, 8, 31, "납부", "건강보험료 정산", 0, "전년도 소득 기준 건강보험료 연간 정산. 직장 가입자도 소득월액 변동 시 추가 납부 발생 가능", "info", 8, 1),
 
-    // ── 9월
-    mk(year, 9, 30, "납부", "재산세 2기", 0, "주택 2기분·토지분 고지서 확인 후 납부", "info"),
+    // 9월: 재산세 2기 (9/16~9/30)
+    mk(year, 9, 30, "납부", "재산세 2기", 0, "주택 2기분·토지분 고지서 확인 후 납부", "info", 9, 16),
 
-    // ── 10월
-    mk(year, 10, 31, "신고", "부가가치세 2기 예정신고", 0, "사업자 7~9월분 부가가치세 예정신고·납부", "amber"),
+    // 10월: 부가가치세 2기 예정신고 (10/1~10/25)
+    mk(year, 10, 25, "신고", "부가가치세 2기 예정신고", 0, "사업자 7~9월분 부가가치세 예정신고·납부", "amber", 10, 1),
 
-    // ── 12월
-    mk(year, 12, 15, "납부", "자동차세 2기", 0, "자동차세 2기분 납부 (7~12월분). 위택스·자동차세 앱 또는 고지서로 납부", "info"),
-    mk(year, 12, 20, "절세", "연금/IRP 한도 마감", pensionGap, pensionGap > 0 ? `세액공제 잔여 한도 ${fmt(pensionGap)}원. 연말정산 전 납입 완료 권장` : "연금 세액공제 한도 사용 완료", pensionGap > 0 ? "green" : "info"),
-    mk(year, 12, 31, "절세", "ISA 연간 한도 점검", isaGap, isaGap > 0 ? `ISA 남은 납입 여력 ${fmt(isaGap)}원` : "ISA 연간 납입 한도 사용 완료", isaGap > 0 ? "green" : "info"),
-    mk(year, 12, 31, "신고", "연말정산 준비", 0, "의료비·교육비·기부금 영수증, 주택청약 납입 내역 등 연말정산 서류 미리 준비", "accent"),
+    // 12월: 자동차세 2기 (12/16~12/31)
+    mk(year, 12, 31, "납부", "자동차세 2기", 0, "자동차세 2기분 납부 (7~12월분). 위택스·자동차세 앱 또는 고지서로 납부", "info", 12, 16),
+    // 12월: 연금/IRP 한도 (12/1~12/20)
+    mk(year, 12, 20, "절세", "연금/IRP 한도 마감", pensionGap, pensionGap > 0 ? `세액공제 잔여 한도 ${fmt(pensionGap)}원. 연말정산 전 납입 완료 권장` : "연금 세액공제 한도 사용 완료", pensionGap > 0 ? "green" : "info", 12, 1),
+    // 12월: ISA 한도 (12/1~12/31)
+    mk(year, 12, 31, "절세", "ISA 연간 한도 점검", isaGap, isaGap > 0 ? `ISA 남은 납입 여력 ${fmt(isaGap)}원` : "ISA 연간 납입 한도 사용 완료", isaGap > 0 ? "green" : "info", 12, 1),
+    // 12월: 연말정산 준비 (11/1~12/31)
+    mk(year, 12, 31, "신고", "연말정산 준비", 0, "의료비·교육비·기부금 영수증, 주택청약 납입 내역 등 연말정산 서류 미리 준비", "accent", 11, 1),
   ];
   if (isaMaturityYear === year) {
     events.push(mk(year, isaMaturityMonth, 1, "만기", "ISA 만기", 0, "연금 이전·새 ISA 재개설·일반계좌 분리 결정", "red"));
@@ -6725,6 +6733,127 @@ function TaxActionCoach({ actions, settings, onUpdateSettings }) {
   );
 }
 
+function TaxGanttChart({ calendar }) {
+  const year = calendar.year;
+  const today = new Date();
+  const todayMonth = today.getMonth() + 1;
+  const todayDay = today.getDate();
+  const daysInYear = (y) => ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
+  const totalDays = daysInYear(year);
+
+  // 날짜 → 연간 경과일수(1-based)
+  const toDayOfYear = (month, day) => {
+    const d = new Date(year, month - 1, day);
+    const start = new Date(year, 0, 1);
+    return Math.floor((d - start) / 86400000) + 1;
+  };
+
+  const todayDoy = toDayOfYear(todayMonth, todayDay);
+
+  const TONE_COLOR = {
+    amber:  { bar: "rgba(240,180,41,.22)",  border: "rgba(240,180,41,.7)",  text: "var(--amber)" },
+    green:  { bar: "rgba(52,213,138,.18)",  border: "rgba(52,213,138,.6)",  text: "var(--green)" },
+    info:   { bar: "rgba(108,125,255,.14)", border: "rgba(108,125,255,.5)", text: "var(--accent2)" },
+    accent: { bar: "rgba(108,125,255,.18)", border: "rgba(108,125,255,.6)", text: "var(--accent)" },
+    red:    { bar: "rgba(255,92,114,.16)",  border: "rgba(255,92,114,.6)",  text: "var(--red)" },
+  };
+
+  const TYPE_ICON = { 신고:"📋", 납부:"💳", 절세:"💚", 만기:"🔔", 예정:"📅", 시뮬:"🔮" };
+
+  // 마감일만 있는 이벤트는 기간 3일로 표시
+  const rows = calendar.events.map(e => {
+    const endDoy = toDayOfYear(e.month, e.day);
+    const startDoy = e.hasPeriod
+      ? toDayOfYear(e.startMonth, e.startDay)
+      : Math.max(endDoy - 2, 1);
+    const leftPct = ((startDoy - 1) / totalDays) * 100;
+    const widthPct = Math.max(((endDoy - startDoy + 1) / totalDays) * 100, 0.5);
+    const c = TONE_COLOR[e.tone] || TONE_COLOR.info;
+    const isPast = endDoy < todayDoy;
+    const isActive = startDoy <= todayDoy && todayDoy <= endDoy;
+    return { ...e, startDoy, endDoy, leftPct, widthPct, c, isPast, isActive };
+  }).sort((a, b) => a.startDoy - b.startDoy);
+
+  const todayPct = ((todayDoy - 1) / totalDays) * 100;
+  const MONTH_LABELS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+
+  const [hovered, setHovered] = useState(null);
+
+  return (
+    <div className="tax-gantt-wrap">
+      <div className="tax-gantt-header">
+        <div className="tax-gantt-label-col"/>
+        <div className="tax-gantt-track-area">
+          {MONTH_LABELS.map((lbl, i) => (
+            <div key={i} className="tax-gantt-month-col" style={{left:`${(i/12)*100}%`, width:`${100/12}%`}}>
+              <span className="tax-gantt-month-lbl">{lbl}</span>
+            </div>
+          ))}
+          {/* 오늘 선 */}
+          <div className="tax-gantt-today-line" style={{left:`${todayPct}%`}}>
+            <span className="tax-gantt-today-badge">오늘</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="tax-gantt-rows">
+        {rows.map((e, i) => (
+          <div
+            key={`${e.title}-${i}`}
+            className={`tax-gantt-row ${e.isPast ? "past" : ""} ${e.isActive ? "active" : ""}`}
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <div className="tax-gantt-label-col">
+              <span className="tax-gantt-type-icon">{TYPE_ICON[e.type] || "📌"}</span>
+              <span className="tax-gantt-title">{e.title}</span>
+            </div>
+            <div className="tax-gantt-track-area">
+              {/* 배경 격자선 */}
+              {MONTH_LABELS.map((_,mi) => (
+                <div key={mi} className="tax-gantt-grid-line" style={{left:`${(mi/12)*100}%`}}/>
+              ))}
+              {/* 오늘 선 */}
+              <div className="tax-gantt-today-line" style={{left:`${todayPct}%`}}/>
+              {/* 바 */}
+              <div
+                className="tax-gantt-bar"
+                style={{
+                  left: `${e.leftPct}%`,
+                  width: `${e.widthPct}%`,
+                  background: e.c.bar,
+                  borderColor: e.c.border,
+                  opacity: e.isPast ? 0.45 : 1,
+                }}
+              >
+                <span className="tax-gantt-bar-text" style={{color: e.c.text}}>
+                  {e.hasPeriod
+                    ? `${e.startMonth}/${e.startDay} ~ ${e.month}/${e.day}`
+                    : `~${e.month}/${e.day}`}
+                </span>
+              </div>
+              {/* 툴팁 */}
+              {hovered === i && (
+                <div className="tax-gantt-tooltip">
+                  <div className="tax-gantt-tt-title">{TYPE_ICON[e.type]} {e.title}</div>
+                  <div className="tax-gantt-tt-period">
+                    {e.hasPeriod
+                      ? `${year}.${String(e.startMonth).padStart(2,"0")}.${String(e.startDay).padStart(2,"0")} ~ ${year}.${String(e.month).padStart(2,"0")}.${String(e.day).padStart(2,"0")}`
+                      : `마감: ${e.date}`}
+                  </div>
+                  <div className="tax-gantt-tt-desc">{e.desc}</div>
+                  {e.isPast && <div className="tax-gantt-tt-past">✓ 기간 종료</div>}
+                  {e.isActive && <div className="tax-gantt-tt-active">⚡ 진행 중</div>}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
   const initial = `${calendar.year}-${String(new Date().getMonth()+1).padStart(2,"0")}`;
   const [monthValue, setMonthValue] = useState(initial);
@@ -6765,6 +6894,8 @@ function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
+    <>
+    <TaxGanttChart calendar={calendar}/>
     <div className="tax-calendar-month-card">
       <div className="tax-cal-header">
         <div className="tax-cal-title">
@@ -6828,6 +6959,7 @@ function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
