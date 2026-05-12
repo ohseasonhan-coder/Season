@@ -1312,4 +1312,116 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
   }
 }
 
+
+/* CLEAN LOGIN UI OVERRIDE: minimal premium login panel */
+.season-login-panel{
+  margin:10px 24px 0!important;
+  padding:12px 14px!important;
+  border:1px solid rgba(255,255,255,.08)!important;
+  border-radius:20px!important;
+  background:rgba(18,21,29,.72)!important;
+  backdrop-filter:blur(18px) saturate(150%)!important;
+  -webkit-backdrop-filter:blur(18px) saturate(150%)!important;
+  box-shadow:0 14px 42px rgba(0,0,0,.22)!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:14px!important;
+}
+.season-login-panel-logo-row{display:flex!important;align-items:center!important;gap:10px!important;min-width:max-content!important}
+.season-login-panel-logo{
+  width:34px!important;height:34px!important;border-radius:12px!important;
+  background:linear-gradient(135deg,rgba(255,255,255,.98),rgba(194,202,255,.92))!important;
+  color:#12151d!important;display:flex!important;align-items:center!important;justify-content:center!important;
+  font-size:16px!important;font-weight:950!important;box-shadow:0 10px 26px rgba(108,125,255,.22)!important;
+}
+.season-login-panel-brand{font-size:13px!important;font-weight:850!important;color:var(--text)!important;letter-spacing:-.02em!important}
+.season-login-panel .row{align-items:center!important;gap:8px!important;flex-wrap:wrap!important;justify-content:flex-end!important}
+.season-login-panel .auth-input{
+  height:38px!important;min-width:150px!important;padding:0 12px!important;border-radius:12px!important;
+  border:1px solid rgba(255,255,255,.09)!important;background:rgba(255,255,255,.055)!important;
+  color:var(--text)!important;font-size:12px!important;font-weight:650!important;box-shadow:none!important;
+}
+.season-login-panel .auth-input:focus{border-color:rgba(140,153,255,.72)!important;background:rgba(108,125,255,.10)!important;box-shadow:0 0 0 4px rgba(108,125,255,.12)!important}
+.season-login-panel .btn{height:38px!important;border-radius:12px!important;padding:0 14px!important;font-weight:850!important}
+.season-login-panel .btn-primary{background:linear-gradient(135deg,#f7f8ff,#bfc8ff)!important;color:#111521!important;border:0!important;box-shadow:0 10px 26px rgba(108,125,255,.24)!important}
+.season-login-panel .btn-ghost{background:rgba(255,255,255,.045)!important;border:1px solid rgba(255,255,255,.08)!important;color:var(--text2)!important}
+
+.mobile-login-modal-overlay{
+  background:rgba(5,7,12,.62)!important;
+  backdrop-filter:blur(18px) saturate(150%)!important;
+  -webkit-backdrop-filter:blur(18px) saturate(150%)!important;
+}
+.mobile-login-sheet{
+  left:50%!important;right:auto!important;bottom:max(12px,env(safe-area-inset-bottom))!important;
+  transform:translateX(-50%)!important;width:calc(100% - 24px)!important;max-width:430px!important;
+  max-height:calc(100dvh - 24px)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;
+  border-radius:30px!important;border:1px solid rgba(255,255,255,.10)!important;
+  background:linear-gradient(180deg,rgba(25,28,38,.98),rgba(15,17,24,.98))!important;
+  box-shadow:0 28px 90px rgba(0,0,0,.55)!important;
+  padding:0 0 max(18px,env(safe-area-inset-bottom))!important;
+  animation:mloCleanIn .22s cubic-bezier(.2,.8,.2,1)!important;
+}
+@keyframes mloCleanIn{from{opacity:0;transform:translateX(-50%) translateY(16px) scale(.98)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+.mlo-header{
+  padding:22px 22px 16px!important;background:transparent!important;border-bottom:0!important;text-align:left!important;
+}
+.mlo-glow{right:-90px!important;top:-90px!important;width:220px!important;height:220px!important;background:radial-gradient(circle,rgba(108,125,255,.20),transparent 68%)!important}
+.mlo-handle{width:34px!important;height:4px!important;margin:0 auto 18px!important;background:rgba(255,255,255,.16)!important}
+.mlo-logo-row{margin-bottom:20px!important;gap:10px!important}
+.mlo-logo-mark{
+  width:40px!important;height:40px!important;border-radius:14px!important;
+  background:linear-gradient(135deg,#f8f9ff,#b7c2ff)!important;color:#111521!important;
+  font-size:18px!important;box-shadow:0 10px 28px rgba(108,125,255,.24)!important;
+}
+.mlo-logo-text{font-size:15px!important;font-weight:900!important;color:var(--text)!important}
+.mlo-logo-sub{font-size:11px!important;color:var(--text3)!important}
+.mlo-headline{font-size:25px!important;line-height:1.18!important;letter-spacing:-.055em!important;margin-top:2px!important}
+.mlo-sub{font-size:13px!important;line-height:1.55!important;color:var(--text3)!important;margin-top:9px!important}
+.mlo-body{padding:4px 22px 0!important}
+.mlo-field{gap:7px!important;margin-bottom:12px!important}
+.mlo-field label{font-size:11px!important;letter-spacing:-.01em!important;text-transform:none!important;color:var(--text2)!important;font-weight:800!important}
+.mlo-input-wrap{position:relative!important}
+.mlo-input-icon{left:15px!important;font-size:14px!important;opacity:.55!important;filter:grayscale(1)!important}
+.mlo-input{
+  height:52px!important;padding:0 14px 0 42px!important;border-radius:16px!important;
+  border:1px solid rgba(255,255,255,.09)!important;background:rgba(255,255,255,.055)!important;
+  font-size:15px!important;font-weight:650!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.03)!important;
+}
+.mlo-input:focus{border-color:rgba(150,162,255,.76)!important;background:rgba(108,125,255,.10)!important;box-shadow:0 0 0 4px rgba(108,125,255,.13)!important}
+.mlo-btn-row{gap:9px!important;margin-top:14px!important}
+.mlo-btn-primary{
+  height:52px!important;padding:0 16px!important;border-radius:16px!important;
+  background:linear-gradient(135deg,#f7f8ff,#bec8ff)!important;color:#111521!important;
+  font-size:15px!important;font-weight:950!important;box-shadow:0 14px 36px rgba(108,125,255,.27)!important;
+}
+.mlo-btn-secondary{
+  height:48px!important;padding:0 16px!important;border-radius:16px!important;background:rgba(255,255,255,.045)!important;
+  border:1px solid rgba(255,255,255,.08)!important;color:var(--text2)!important;font-size:14px!important;font-weight:850!important;
+}
+.mlo-divider{margin:16px 0 12px!important;font-size:11px!important;color:rgba(255,255,255,.35)!important}
+.mlo-local-chip{
+  padding:13px 14px!important;border-radius:16px!important;background:rgba(255,255,255,.035)!important;
+  border:1px solid rgba(255,255,255,.07)!important;color:var(--text2)!important;
+}
+.mlo-local-icon{background:rgba(255,255,255,.06)!important;border:1px solid rgba(255,255,255,.06)!important}
+.mlo-msg{border-radius:14px!important;padding:10px 12px!important;font-weight:750!important;background:rgba(255,92,114,.10)!important}
+.mlo-session-bar{border-radius:18px!important;padding:14px!important;background:rgba(52,213,138,.10)!important}
+.mlo-action-btn{border-radius:14px!important;padding:12px 10px!important;background:rgba(255,255,255,.045)!important}
+
+@media(max-width:768px){
+  .season-login-panel{display:none!important}
+  .mobile-login-sheet{width:calc(100% - 20px)!important;bottom:max(10px,env(safe-area-inset-bottom))!important;border-radius:28px!important}
+  .mlo-header{padding:20px 20px 14px!important}
+  .mlo-body{padding:4px 20px 0!important}
+  .mlo-headline{font-size:24px!important}
+  .mlo-input,.mlo-btn-primary{height:50px!important}
+}
+:root[data-theme='light'] .season-login-panel{background:rgba(255,255,255,.80)!important;border-color:rgba(20,25,40,.08)!important;box-shadow:0 14px 40px rgba(20,25,40,.08)!important}
+:root[data-theme='light'] .season-login-panel .auth-input{background:rgba(20,25,40,.035)!important;border-color:rgba(20,25,40,.08)!important}
+:root[data-theme='light'] .mobile-login-modal-overlay{background:rgba(242,244,250,.68)!important}
+:root[data-theme='light'] .mobile-login-sheet{background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(247,248,252,.98))!important;border-color:rgba(20,25,40,.08)!important;box-shadow:0 28px 80px rgba(20,25,40,.18)!important}
+:root[data-theme='light'] .mlo-input{background:rgba(20,25,40,.035)!important;border-color:rgba(20,25,40,.08)!important}
+:root[data-theme='light'] .mlo-btn-secondary,:root[data-theme='light'] .mlo-local-chip{background:rgba(20,25,40,.035)!important;border-color:rgba(20,25,40,.08)!important}
+
 `;
