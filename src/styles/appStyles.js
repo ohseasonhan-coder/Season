@@ -839,6 +839,35 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .dashboard-advice-item p{font-size:11px;color:var(--text3);line-height:1.4;margin-top:3px;}
 
 /* Tax */
+/* 세금 간트차트 */
+.tax-gantt-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px 22px;margin-bottom:14px;overflow:hidden}
+.tax-gantt-header{display:flex;align-items:center;margin-bottom:4px;height:28px;position:relative}
+.tax-gantt-label-col{width:180px;flex-shrink:0;font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;padding-right:12px}
+.tax-gantt-track-area{flex:1;position:relative;height:100%}
+.tax-gantt-month-col{position:absolute;top:0;bottom:0;display:flex;align-items:center;border-left:1px dashed var(--border)}
+.tax-gantt-month-lbl{font-size:10px;font-weight:700;color:var(--text3);padding-left:4px;white-space:nowrap}
+.tax-gantt-rows{display:flex;flex-direction:column;gap:5px}
+.tax-gantt-row{display:flex;align-items:center;min-height:32px;border-radius:8px;transition:.15s;cursor:default}
+.tax-gantt-row:hover{background:rgba(255,255,255,.03)}
+.tax-gantt-row.past .tax-gantt-title{color:var(--text3)}
+.tax-gantt-row.active{background:rgba(108,125,255,.04)}
+.tax-gantt-label-col{width:180px;flex-shrink:0;display:flex;align-items:center;gap:6px;padding-right:12px;overflow:hidden}
+.tax-gantt-type-icon{font-size:13px;flex-shrink:0}
+.tax-gantt-title{font-size:11px;font-weight:600;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tax-gantt-track-area{flex:1;position:relative;height:28px}
+.tax-gantt-grid-line{position:absolute;top:0;bottom:0;width:1px;background:var(--border);opacity:.5;pointer-events:none}
+.tax-gantt-today-line{position:absolute;top:0;bottom:0;width:2px;background:var(--red);opacity:.7;z-index:2;pointer-events:none}
+.tax-gantt-today-badge{position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:800;color:var(--red);white-space:nowrap;background:var(--surface);padding:1px 4px;border-radius:4px;border:1px solid var(--red)}
+.tax-gantt-bar{position:absolute;top:4px;bottom:4px;border-radius:6px;border:1.5px solid;display:flex;align-items:center;overflow:hidden;transition:.2s;z-index:1}
+.tax-gantt-bar:hover{filter:brightness(1.15);z-index:3}
+.tax-gantt-bar-text{font-size:9px;font-weight:700;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85}
+.tax-gantt-tooltip{position:absolute;top:calc(100% + 4px);left:0;min-width:220px;max-width:300px;background:rgba(20,22,28,.97);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px 13px;z-index:99;box-shadow:0 12px 32px rgba(0,0,0,.5);pointer-events:none}
+.tax-gantt-tt-title{font-size:12px;font-weight:800;color:#f0f1f3;margin-bottom:4px}
+.tax-gantt-tt-period{font-size:11px;color:rgba(240,241,243,.6);margin-bottom:5px;font-variant-numeric:tabular-nums}
+.tax-gantt-tt-desc{font-size:11px;color:rgba(240,241,243,.75);line-height:1.55}
+.tax-gantt-tt-past{font-size:10px;color:var(--text3);margin-top:5px;font-weight:700}
+.tax-gantt-tt-active{font-size:10px;color:var(--green);margin-top:5px;font-weight:800}
+@media(max-width:760px){.tax-gantt-label-col{width:110px}.tax-gantt-title{font-size:10px}.tax-gantt-bar-text{display:none}}
 .tax-calendar-month-card{background:linear-gradient(135deg,var(--surface),rgba(108,125,255,.06));border:1px solid rgba(108,125,255,.18);border-radius:var(--radius-lg);padding:22px}
 .tax-cal-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
 .tax-cal-title{display:flex;align-items:center;gap:10px}
