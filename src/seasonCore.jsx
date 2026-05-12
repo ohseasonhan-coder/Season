@@ -1638,9 +1638,9 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
               <div className="mlo-handle"/>
               <div className="mlo-logo-row">
                 <div className="mlo-logo-mark">S</div>
-                <div><div className="mlo-logo-text">Season Finance</div><div className="mlo-logo-sub">통합 자산관리</div></div>
+                <div><div className="mlo-logo-text">Season CFO</div><div className="mlo-logo-sub">개인 자산관리</div></div>
               </div>
-              {!session?.user&&<><div className="mlo-headline">계정으로<br/>동기화하세요 ☁️</div><div className="mlo-sub">이메일 인증 없이 아이디와 비밀번호로<br/>여러 기기에서 데이터를 동기화합니다.</div>{!supabase&&<div style={{marginTop:12,padding:"10px 12px",borderRadius:14,border:"1px solid rgba(255,190,90,.28)",background:"rgba(255,190,90,.10)",color:"var(--amber)",fontSize:12,fontWeight:800}}>Supabase 환경변수 등록 전이라 로그인은 아직 비활성화 상태입니다.</div>}</>}
+              {!session?.user&&<><div className="mlo-headline">로그인하고<br/>안전하게 동기화</div><div className="mlo-sub">아이디와 비밀번호로 여러 기기에서<br/>자산 데이터를 이어서 관리할 수 있어요.</div>{!supabase&&<div style={{marginTop:12,padding:"10px 12px",borderRadius:14,border:"1px solid rgba(255,190,90,.28)",background:"rgba(255,190,90,.10)",color:"var(--amber)",fontSize:12,fontWeight:800}}>Supabase 환경변수 등록 전이라 로그인은 아직 비활성화 상태입니다.</div>}</>}
               {session?.user&&<><div className="mlo-headline">연결되었어요 ✓</div><div className="mlo-sub">클라우드에 자동으로 동기화 중입니다.</div></>}
             </div>
             <div className="mlo-body">
@@ -1694,12 +1694,12 @@ function AuthBar({ session, syncState, onLoadCloud, onSaveCloud }) {
                   {msg&&<div className={`mlo-msg ${msgOk?"ok":""}`}>{msg}</div>}
                   <div className="mlo-btn-row">
                     <button className="mlo-btn-primary" onClick={()=>runAuth("signin")} disabled={busy}>{busy?"로그인 중...":"로그인"}</button>
-                    <button className="mlo-btn-secondary" onClick={()=>runAuth("signup")} disabled={busy}>{busy?"처리 중...":"처음이에요, 계정 만들기"}</button>
+                    <button className="mlo-btn-secondary" onClick={()=>runAuth("signup")} disabled={busy}>{busy?"처리 중...":"계정 만들기"}</button>
                   </div>
                   <div className="mlo-divider">또는</div>
                   <button className="mlo-local-chip" onClick={()=>setShowMobileLogin(false)}>
                     <div className="mlo-local-icon">📱</div>
-                    <div><div style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>로컬 모드로 계속하기</div><div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>기기에만 저장 · 동기화 없음</div></div>
+                    <div><div style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>로그인 없이 둘러보기</div><div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>이 기기에만 저장됩니다</div></div>
                   </button>
                 </>
               )}
