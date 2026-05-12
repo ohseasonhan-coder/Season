@@ -6378,12 +6378,49 @@ function buildTaxCalendar(data, taxAnalysis, futureSim) {
     tone,
     completed:false,
   });
+  const hasProperty = n(s.hasProperty) > 0 || (data.assets || []).some(a => a.category === "부동산");
+  const hasCar = n(s.hasCar) > 0 || (data.assets || []).some(a => a.category === "자동차" || (a.name || "").includes("차"));
+  const isFreelancer = s.isFreelancer || false;
+  const hasHealthInsurance = s.employmentType !== "직장인" || true; // 모든 사람에게 해당
+
   const events = [
-    mk(year, 5, 31, "신고", "종합소득세", taxableTax, taxableTax > 0 ? `일반계좌 추정 과세 노출 ${fmt(taxableTax)}원 점검` : "근로 외 소득·금융소득·사업소득 여부 확인", "amber"),
-    mk(year, 7, 31, "납부", "재산세 1기", 0, "주택 1기분·건축물분 등 고지서 확인", "info"),
-    mk(year, 9, 30, "납부", "재산세 2기", 0, "주택 2기분·토지분 등 고지서 확인", "info"),
-    mk(year, 12, 20, "절세", "연금/IRP 한도 마감", pensionGap, pensionGap > 0 ? `세액공제 잔여 한도 ${fmt(pensionGap)}원` : "연금 세액공제 한도 사용 완료", pensionGap > 0 ? "green" : "info"),
+    // ── 1월
+    mk(year, 1, 31, "신고", "부가가치세 확정신고", 0, "사업자(개인·법인) 전년도 2기분 부가가치세 신고·납부", "amber"),
+    mk(year, 1, 15, "납부", "자동차세 연납 할인", 0, "1월 연납 신청 시 약 5~7% 할인 혜택 (고지서 또는 위택스)", "green"),
+
+    // ── 2월
+    mk(year, 2, 28, "신고", "연말정산 서류 제출", 0, "근로소득자 연말정산 간소화 서비스 자료 제출 마감", "amber"),
+
+    // ── 3월
+    mk(year, 3, 31, "납부", "법인세 신고·납부", 0, "12월 결산 법인 법인세 신고 마감", "info"),
+
+    // ── 4월
+    mk(year, 4, 30, "신고", "부가가치세 1기 예정신고", 0, "사업자 1~3월분 부가가치세 예정신고·납부", "amber"),
+
+    // ── 5월
+    mk(year, 5, 31, "신고", "종합소득세 확정신고", taxableTax, taxableTax > 0 ? `일반계좌 추정 과세 노출 ${fmt(taxableTax)}원 점검` : "근로 외 소득·금융소득·사업소득 여부 확인 (프리랜서·임대·금융소득 2천만원 초과 시 필수)", "amber"),
+
+    // ── 6월
+    mk(year, 6, 30, "납부", "자동차세 1기", 0, "자동차세 1기분 납부 (1~6월분). 위택스·자동차세 앱 또는 고지서로 납부", "info"),
+
+    // ── 7월
+    mk(year, 7, 31, "납부", "재산세 1기", 0, "주택 1기분·건축물분·선박·항공기 등 고지서 확인 후 납부", "info"),
+    mk(year, 7, 31, "신고", "부가가치세 1기 확정신고", 0, "사업자 1~6월분 부가가치세 확정신고·납부", "amber"),
+
+    // ── 8월
+    mk(year, 8, 31, "납부", "건강보험료 정산", 0, "전년도 소득 기준 건강보험료 연간 정산. 직장 가입자도 소득월액 변동 시 추가 납부 발생 가능", "info"),
+
+    // ── 9월
+    mk(year, 9, 30, "납부", "재산세 2기", 0, "주택 2기분·토지분 고지서 확인 후 납부", "info"),
+
+    // ── 10월
+    mk(year, 10, 31, "신고", "부가가치세 2기 예정신고", 0, "사업자 7~9월분 부가가치세 예정신고·납부", "amber"),
+
+    // ── 12월
+    mk(year, 12, 15, "납부", "자동차세 2기", 0, "자동차세 2기분 납부 (7~12월분). 위택스·자동차세 앱 또는 고지서로 납부", "info"),
+    mk(year, 12, 20, "절세", "연금/IRP 한도 마감", pensionGap, pensionGap > 0 ? `세액공제 잔여 한도 ${fmt(pensionGap)}원. 연말정산 전 납입 완료 권장` : "연금 세액공제 한도 사용 완료", pensionGap > 0 ? "green" : "info"),
     mk(year, 12, 31, "절세", "ISA 연간 한도 점검", isaGap, isaGap > 0 ? `ISA 남은 납입 여력 ${fmt(isaGap)}원` : "ISA 연간 납입 한도 사용 완료", isaGap > 0 ? "green" : "info"),
+    mk(year, 12, 31, "신고", "연말정산 준비", 0, "의료비·교육비·기부금 영수증, 주택청약 납입 내역 등 연말정산 서류 미리 준비", "accent"),
   ];
   if (isaMaturityYear === year) {
     events.push(mk(year, isaMaturityMonth, 1, "만기", "ISA 만기", 0, "연금 이전·새 ISA 재개설·일반계좌 분리 결정", "red"));
@@ -6401,6 +6438,8 @@ function buildTaxCalendar(data, taxAnalysis, futureSim) {
   if (isaGap > 0) actions.push(`12월 전 ISA 잔여 한도 ${fmt(isaGap)}원을 월별 납입 계획을 직접 판단하세요.`);
   if (pensionGap > 0) actions.push(`연말정산 전 연금/IRP 잔여 한도 ${fmt(pensionGap)}원을 확인하세요.`);
   if (isaMaturityYear <= year + 1) actions.push(`ISA 만기가 가까우면 연금 이전 금액과 새 ISA 재개설 금액을 미리 정하세요.`);
+  actions.push(`6월·12월 자동차세 납부 전 현금 여유분을 미리 확인하세요.`);
+  actions.push(`1월 자동차세 연납 신청 시 5~7% 할인 혜택을 받을 수 있어요.`);
   return { year, months, events, upcoming, next, actions: actions.slice(0,4), isaMaturityYear, isaMaturityMonth, taxableTax, isaGap, pensionGap };
 }
 
