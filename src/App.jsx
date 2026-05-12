@@ -126,7 +126,6 @@ import {
   validateTransactionRows,
   buildSplitTransactions,
   QuickAddModal,
-  FabTooltipHint,
   KOREAN_FINANCIAL_INSTITUTIONS,
   CARD_INSTITUTION_HINTS,
   SMS_CATEGORY_RULE_STORAGE_KEY,
@@ -230,6 +229,24 @@ import {
   PAGE_TITLES,
   STYLES
 } from "./modules/index.js";
+
+// ─── FAB 힌트 말풍선 (첫 방문 1회만) ────────────────────────────────────────
+function FabTooltipHint() {
+  const KEY = "season-fab-hint-shown";
+  const [visible, setVisible] = React.useState(() => !localStorage.getItem(KEY));
+  React.useEffect(() => {
+    if (!visible) return;
+    const t = setTimeout(() => { localStorage.setItem(KEY, "1"); setVisible(false); }, 6000);
+    return () => clearTimeout(t);
+  }, [visible]);
+  if (!visible) return null;
+  return (
+    <div className="fab-hint" onClick={() => { localStorage.setItem(KEY, "1"); setVisible(false); }}>
+      <div className="fab-hint-text">👆 여기서 거래를 바로 입력해요!</div>
+      <div className="fab-hint-arrow"/>
+    </div>
+  );
+}
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
