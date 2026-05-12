@@ -228,7 +228,6 @@ import {
   NAV,
   PAGE_TITLES,
   STYLES,
-  CommandPalette,
 } from "./modules/index.js";
 
 // ─── FAB 힌트 말풍선 (첫 방문 1회만) ────────────────────────────────────────
@@ -245,6 +244,79 @@ function FabTooltipHint() {
     <div className="fab-hint" onClick={() => { localStorage.setItem(KEY, "1"); setVisible(false); }}>
       <div className="fab-hint-text">👆 여기서 거래를 바로 입력해요!</div>
       <div className="fab-hint-arrow"/>
+    </div>
+  );
+}
+
+function CommandPalette({ onNavigate, onClose, onQuickAdd }) {
+  const [query, setQuery] = React.useState("");
+  const [sel, setSel] = React.useState(0);
+  const inputRef = React.useRef(null);
+  React.useEffect(() => { setTimeout(() => inputRef.current?.focus(), 50); }, []);
+
+  const ITEMS = [
+    { id:"__quickadd__", icon:"✍️", label:"거래 빠른 입력", desc:"간편 거래 입력 모달 열기", action:()=>{onClose();onQuickAdd();} },
+    { id:"dashboard",     icon:"◈",  label:"대시보드",       desc:"순자산·현금흐름 한눈에" },
+    { id:"transactions",  icon:"↔",  label:"거래내역",        desc:"수입·지출·이체 기록" },
+    { id:"assets",        icon:"🏦", label:"자산·부채",       desc:"은행·부동산·대출 잔고" },
+    { id:"portfolio",     icon:"📈", label:"포트폴리오",      desc:"주식·ETF 현재가 관리" },
+    { id:"budget",        icon:"💰", label:"가계부",          desc:"카테고리별 예산 현황" },
+    { id:"planning",      icon:"🎯", label:"목표·계획",       desc:"목돈 마련·이벤트 준비" },
+    { id:"professional",  icon:"🧠", label:"전문진단",        desc:"재무비율·등급 심층 분석" },
+    { id:"risk",          icon:"🛡️", label:"리스크 분석",     desc:"MDD·집중도·변동성" },
+    { id:"analysis",      icon:"📊", label:"재무분석",        desc:"월별 트렌드·패턴 분석" },
+    { id:"tax",           icon:"💸", label:"세금·절세",       desc:"ISA·연금 절세 전략" },
+    { id:"simulation",    icon:"🔮", label:"미래 시뮬레이션", desc:"은퇴·복리 시뮬레이션" },
+    { id:"monthlyReport", icon:"🧾", label:"월간 리포트",     desc:"월별 재무 요약 리포트" },
+    { id:"decision",      icon:"🧭", label:"의사결정 센터",   desc:"CFO 추천 액션 플랜" },
+    { id:"goals",         icon:"🎯", label:"목표 자금관리",   desc:"목표별 진행률·월납입" },
+    { id:"cfo",           icon:"🏛️", label:"재무현황 요약",   desc:"CFO 스코어·자동 실행" },
+    { id:"automation",    icon:"🤖", label:"자동화 시스템",   desc:"트리거·리밸런싱 자동화" },
+    { id:"settings",      icon:"⚙",  label:"설정",            desc:"프로필·수익률·ISA 설정" },
+    { id:"accounts",      icon:"🏧", label:"계좌관리",        desc:"연결 계좌 추가·편집" },
+    { id:"data",          icon:"💾", label:"데이터·백업",     desc:"백업·복원·내보내기" },
+  ];
+
+  const q = query.trim().toLowerCase();
+  const filtered = q ? ITEMS.filter(i => i.label.includes(q) || i.desc.includes(q)) : ITEMS;
+
+  React.useEffect(() => { setSel(0); }, [query]);
+
+  const pick = (item) => { if (item.action) item.action(); else { onNavigate(item.id); onClose(); } };
+
+  const handleKey = (e) => {
+    if (e.key === "Escape") { onClose(); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); setSel(s => Math.min(s+1, filtered.length-1)); return; }
+    if (e.key === "ArrowUp")   { e.preventDefault(); setSel(s => Math.max(s-1, 0)); return; }
+    if (e.key === "Enter" && filtered[sel]) pick(filtered[sel]);
+  };
+
+  return (
+    <div className="cmd-overlay" onClick={onClose}>
+      <div className="cmd-box" onClick={e=>e.stopPropagation()} onKeyDown={handleKey}>
+        <div className="cmd-search-row">
+          <span className="cmd-search-icon">🔍</span>
+          <input ref={inputRef} className="cmd-input" placeholder="탭 이름이나 기능을 검색하세요..." value={query} onChange={e=>setQuery(e.target.value)}/>
+          <kbd className="cmd-esc" onClick={onClose}>esc</kbd>
+        </div>
+        <div className="cmd-list">
+          {filtered.length===0 && <div className="cmd-empty">검색 결과가 없습니다</div>}
+          {filtered.map((item,i)=>(
+            <button key={item.id} className={`cmd-item ${i===sel?"sel":""}`} onClick={()=>pick(item)} onMouseEnter={()=>setSel(i)}>
+              <span className="cmd-item-icon">{item.icon}</span>
+              <span className="cmd-item-label">{item.label}</span>
+              <span className="cmd-item-desc">{item.desc}</span>
+              {i===sel && <kbd className="cmd-enter">↵</kbd>}
+            </button>
+          ))}
+        </div>
+        <div className="cmd-footer">
+          <span><kbd>↑↓</kbd> 이동</span>
+          <span><kbd>↵</kbd> 선택</span>
+          <span><kbd>Esc</kbd> 닫기</span>
+          <span className="cmd-footer-tip">⌘K / Ctrl+K 로 언제든 열기</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -842,3 +914,6 @@ export default function App() {
     </ToastProvider>
   );
 }
+
+
+/* FORCE_TOP_LOGIN_SCROLL_V3 */
