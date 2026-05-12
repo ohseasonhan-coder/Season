@@ -3253,6 +3253,8 @@ function DashboardQuickEntryPanel({ data, update }) {
 function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChartData, financialAnalysis, budgetAnalysis, monthlySeries, eventAnalysis, taxAnalysis, futureSim, anomalyAlerts }) {
   const recentTx=dashboardDetail.recentTx||[];
   const topExp=dashboardDetail.topExpenseCats||[];
+  const streak = useStreak(data.transactions || []);
+  const prevScoreRef = useRef(null);
 
   const advanced=useMemo(()=>{
     const rows=dashboardChartData.monthlyTrend||[];
@@ -3358,12 +3360,22 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
 
   return (
     <div className="stack dashboard-pro">
-      {/* 사용자 이름 인사 */}
-      {userName && (
-        <div className="dashboard-greeting">
-          안녕하세요, <strong>{userName}</strong>님의 재무 현황이에요 👋
-        </div>
-      )}
+      {/* 성취 피드백 토스트 */}
+      <AchievementToast advanced={advanced} prevScoreRef={prevScoreRef}/>
+
+      {/* 사용자 이름 인사 + streak */}
+      <div className="dashboard-greeting-row">
+        {userName && (
+          <div className="dashboard-greeting">
+            안녕하세요, <strong>{userName}</strong>님 👋
+          </div>
+        )}
+        {streak >= 3 && (
+          <div className="streak-badge">
+            🔥 {streak}일 연속 기록 중
+          </div>
+        )}
+      </div>
 
       {/* 빈 상태 가이드 — 데이터가 없을 때만 표시 */}
       {!hasAnyData && (
@@ -3390,7 +3402,7 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
         <div className="health-card">
           <div className="row-between">
             <div>
-              <div className="kpi-label">재무 건강도 (참고)</div>
+              <div className="kpi-label"><TermTip term="CFO Score">재무 건강도</TermTip> <span style={{fontSize:10,opacity:.6}}>(참고)</span></div>
               <div className="health-score" style={{color:healthColor}}>{advanced.score}<span>/100</span></div>
               <div className="health-grade" style={{background:healthBg,color:healthColor}}>{advanced.grade}</div>
             </div>
@@ -3399,7 +3411,7 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
         </div>
         <div className="dashboard-summary-grid">
           <div className="mini-metric">
-            <span>저축률</span>
+            <span><TermTip term="저축률">저축률</TermTip></span>
             <strong className={advanced.savingsRate>=20?"text-green":"text-red"}>{fmtPct(advanced.savingsRate)}</strong>
             <small>이번달 순수입 / 수입</small>
           </div>
@@ -3409,7 +3421,7 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
             <small>월 투자계획 기준</small>
           </div>
           <div className="mini-metric">
-            <span>비상금</span>
+            <span><TermTip term="비상금">비상금</TermTip></span>
             <strong className={advanced.emergencyMonths>=6?"text-green":advanced.emergencyMonths>=3?"text-accent":"text-red"}>{advanced.emergencyMonths.toFixed(1)}개월</strong>
             <small>월 지출 기준</small>
           </div>
@@ -3789,6 +3801,168 @@ function buildSplitTransactions({ split, data, accountNamesIn = [], accountNames
   ].filter(Boolean);
 }
 
+// ─── 커맨드 팔레트 (Ctrl+K / ⌘K) ─────────────────────────────────────────────
+function CommandPalette({ onNavigate, onClose, onQuickAdd }) {
+  const [query, setQuery] = useState("");
+  const inputRef = useRef(null);
+
+  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 50); }, []);
+
+  const NAV_ITEMS = [
+    { id:"dashboard",     icon:"◈",  label:"대시보드",        desc:"순자산·현금흐름 한눈에" },
+    { id:"transactions",  icon:"↔",  label:"거래내역",         desc:"수입·지출·이체 기록" },
+    { id:"assets",        icon:"🏦", label:"자산·부채",        desc:"은행·부동산·대출 잔고" },
+    { id:"portfolio",     icon:"📈", label:"포트폴리오",       desc:"주식·ETF 현재가 관리" },
+    { id:"budget",        icon:"💰", label:"가계부",           desc:"카테고리별 예산 현황" },
+    { id:"planning",      icon:"🎯", label:"목표·계획",        desc:"목돈 마련·이벤트 준비" },
+    { id:"professional",  icon:"🧠", label:"전문진단",         desc:"재무비율·등급 심층 분석" },
+    { id:"risk",          icon:"🛡️", label:"리스크 분석",      desc:"MDD·집중도·변동성" },
+    { id:"analysis",      icon:"📊", label:"재무분석",         desc:"월별 트렌드·패턴 분석" },
+    { id:"tax",           icon:"💸", label:"세금·절세",        desc:"ISA·연금 절세 전략" },
+    { id:"simulation",    icon:"🔮", label:"미래 시뮬레이션",  desc:"은퇴·복리 시뮬레이션" },
+    { id:"monthlyReport", icon:"🧾", label:"월간 리포트",      desc:"월별 재무 요약 리포트" },
+    { id:"decision",      icon:"🧭", label:"의사결정 센터",    desc:"CFO 추천 액션 플랜" },
+    { id:"goals",         icon:"🎯", label:"목표 자금관리",    desc:"목표별 진행률·월납입" },
+    { id:"cfo",           icon:"🏛️", label:"재무현황 요약",    desc:"CFO 스코어·자동 실행" },
+    { id:"automation",    icon:"🤖", label:"자동화 시스템",    desc:"트리거·리밸런싱 자동화" },
+    { id:"settings",      icon:"⚙",  label:"설정",             desc:"프로필·수익률·ISA 설정" },
+    { id:"accounts",      icon:"🏧", label:"계좌관리",         desc:"연결 계좌 추가·편집" },
+    { id:"data",          icon:"💾", label:"데이터·백업",      desc:"백업·복원·내보내기" },
+  ];
+
+  const ACTIONS = [
+    { id:"__quickadd__", icon:"✍️", label:"거래 빠른 입력", desc:"간편 거래 입력 모달 열기", action: () => { onClose(); onQuickAdd(); } },
+  ];
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? [...ACTIONS, ...NAV_ITEMS].filter(i => i.label.includes(q) || i.desc.includes(q))
+    : [...ACTIONS, ...NAV_ITEMS];
+
+  const [sel, setSel] = useState(0);
+
+  const handleKey = (e) => {
+    if (e.key === "Escape") { onClose(); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); setSel(s => Math.min(s+1, filtered.length-1)); return; }
+    if (e.key === "ArrowUp")   { e.preventDefault(); setSel(s => Math.max(s-1, 0)); return; }
+    if (e.key === "Enter" && filtered[sel]) {
+      const item = filtered[sel];
+      if (item.action) item.action();
+      else { onNavigate(item.id); onClose(); }
+    }
+  };
+
+  useEffect(() => { setSel(0); }, [query]);
+
+  return (
+    <div className="cmd-overlay" onClick={onClose}>
+      <div className="cmd-box" onClick={e => e.stopPropagation()} onKeyDown={handleKey}>
+        <div className="cmd-search-row">
+          <span className="cmd-search-icon">🔍</span>
+          <input
+            ref={inputRef}
+            className="cmd-input"
+            placeholder="탭 이름이나 기능을 검색하세요..."
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
+          <kbd className="cmd-esc" onClick={onClose}>esc</kbd>
+        </div>
+        <div className="cmd-list">
+          {filtered.length === 0 && <div className="cmd-empty">검색 결과가 없습니다</div>}
+          {filtered.map((item, i) => (
+            <button
+              key={item.id}
+              className={`cmd-item ${i === sel ? "sel" : ""}`}
+              onClick={() => { if (item.action) item.action(); else { onNavigate(item.id); onClose(); } }}
+              onMouseEnter={() => setSel(i)}
+            >
+              <span className="cmd-item-icon">{item.icon}</span>
+              <span className="cmd-item-label">{item.label}</span>
+              <span className="cmd-item-desc">{item.desc}</span>
+              {i === sel && <kbd className="cmd-enter">↵</kbd>}
+            </button>
+          ))}
+        </div>
+        <div className="cmd-footer">
+          <span><kbd>↑↓</kbd> 이동</span>
+          <span><kbd>↵</kbd> 선택</span>
+          <span><kbd>Esc</kbd> 닫기</span>
+          <span className="cmd-footer-tip">⌘K / Ctrl+K 로 언제든 열기</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 성취 피드백 시스템 ─────────────────────────────────────────────────────────
+function AchievementToast({ advanced, prevScoreRef }) {
+  const showToast = useToast();
+
+  useEffect(() => {
+    if (!advanced || advanced.score === undefined) return;
+    const prev = prevScoreRef.current;
+    const cur  = advanced.score;
+
+    if (prev !== null && cur > prev) {
+      const diff = cur - prev;
+      if (diff >= 3) showToast(`🎉 재무 건강도가 ${diff}점 올랐어요! (${prev} → ${cur})`, "success", 4000);
+    }
+    // 비상금 6개월 달성
+    if (prev !== null && advanced.emergencyMonths >= 6 && prevScoreRef._emgNotified !== "done") {
+      showToast("🛟 비상금 6개월치 달성! 안전자산 확보 완료", "success", 5000);
+      prevScoreRef._emgNotified = "done";
+    }
+    prevScoreRef.current = cur;
+  }, [advanced?.score]);
+
+  return null;
+}
+
+// ─── 연속 입력 streak ─────────────────────────────────────────────────────────
+function useStreak(transactions) {
+  return useMemo(() => {
+    const today = todayISO();
+    const dates = new Set(transactions.map(t => t.date?.slice(0,10)).filter(Boolean));
+    let streak = 0;
+    let d = new Date(today);
+    while (true) {
+      const s = d.toISOString().slice(0,10);
+      if (!dates.has(s)) break;
+      streak++;
+      d.setDate(d.getDate() - 1);
+      if (streak > 365) break;
+    }
+    return streak;
+  }, [transactions]);
+}
+
+// ─── 금융 용어 툴팁 래퍼 ──────────────────────────────────────────────────────
+const TERM_TIPS = {
+  "ISA":        "개인종합자산관리계좌. 연 2,000만원까지 납입 가능하며, 비과세·분리과세 혜택이 있어요.",
+  "IRP":        "개인형 퇴직연금. 연 최대 900만원까지 세액공제(16.5%) 혜택을 받을 수 있어요.",
+  "연금저축":   "세액공제 상품. 연 600만원까지 납입 시 최대 16.5% 세액공제. 55세 이후 연금 수령.",
+  "CFO Score":  "재무 건강도 종합 점수. 저축률·비상금·투자율·부채비율·예산관리를 합산해 0~100점으로 표시.",
+  "리밸런싱":   "포트폴리오 자산 비중이 목표에서 벗어났을 때 다시 맞추는 작업.",
+  "MDD":        "최대 낙폭(Maximum DrawDown). 고점 대비 가장 많이 하락했던 비율.",
+  "비상금":     "예상치 못한 지출에 대비한 즉시 인출 가능한 현금성 자산. 월 지출의 3~6개월치 권장.",
+  "순자산":     "총 자산에서 부채를 뺀 실질 재산. 순자산 = 자산 - 부채.",
+  "현금흐름":   "수입에서 지출을 뺀 값. 플러스면 흑자(저축 가능), 마이너스면 적자.",
+  "저축률":     "수입 중 저축·투자에 쓰이는 비율. 일반적으로 20% 이상을 권장.",
+  "세액공제":   "납부할 세금에서 직접 공제. 소득공제와 달리 세금 자체를 줄여줘요.",
+};
+
+function TermTip({ term, children }) {
+  const tip = TERM_TIPS[term];
+  if (!tip) return <>{children || term}</>;
+  return (
+    <span className="term-tip" data-tip={tip} tabIndex={0}>
+      {children || term}
+      <span className="term-tip-icon">?</span>
+    </span>
+  );
+}
+
 function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose, initialMode="split", initialType="지출" }) {
   const EMPTY = { id:"", date:todayISO(), type:"지출", cat1:"", cat2:"", amount:"", inAccount:"", outAccount:"", content:"", memo:"" };
   const DEFAULT_SPLIT = {
@@ -3964,8 +4138,46 @@ function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose,
             <>
               {txTemplates.length > 0 && <div className="qa-template-section"><div className="qa-template-title">템플릿</div><div className="qa-template-list">{txTemplates.map(t => <button key={t.id} className="qa-template-chip" onClick={() => applyTemplate(t)}>{t.name}</button>)}</div></div>}
               <div className="qa-type-row">{["지출","수입","자산이동"].map(t => <button key={t} className={`qa-type-btn ${typeBtnClass(t)}`} onClick={() => setForm({...form, type:t, cat1:"", cat2:""})}>{t === "지출" ? "💳 지출" : t === "수입" ? "💰 수입" : "🔄 이동"}</button>)}</div>
-              <div className="qa-amount-wrap"><input className="qa-amount-input" type="number" inputMode="numeric" placeholder="0" value={form.amount} onChange={e => setForm({...form, amount:e.target.value})} autoFocus/><span className="qa-amount-unit">원</span></div>
+              <div className="qa-amount-wrap">
+                <input
+                  className="qa-amount-input"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="예: 35000 또는 3만5천"
+                  value={form.amount}
+                  onChange={e => {
+                    const raw = e.target.value;
+                    // 한국어 단위 파싱: 3만5천 → 35000, 1.5억 → 150000000
+                    const parsed = raw
+                      .replace(/억/g, "00000000")
+                      .replace(/천만/g, "0000000")
+                      .replace(/만/g, "0000")
+                      .replace(/천/g, "000")
+                      .replace(/백/g, "00")
+                      .replace(/,/g, "")
+                      .replace(/[^0-9.]/g, "");
+                    const num = parsed ? Number(parsed) : "";
+                    setForm({...form, amount: isFinite(num) && num > 0 ? num : raw});
+                  }}
+                  autoFocus
+                />
+                <span className="qa-amount-unit">원</span>
+              </div>
+              {form.amount > 0 && (
+                <div className="qa-amount-preview">{fmt(n(form.amount))}원</div>
+              )}
               <div className="qa-quick-amounts">{(smartSuggestions.amount.length > 0 ? smartSuggestions.amount : QUICK_AMOUNTS).map(v => <button key={v} className="qa-quick-amount" onClick={() => setForm({...form, amount:v})}>{fmt(v)}</button>)}</div>
+              {/* 최근 카테고리 빠른 선택 */}
+              {smartSuggestions.cat1.length > 0 && !form.cat1 && (
+                <div className="qa-recent-cats">
+                  <span className="qa-recent-label">최근 카테고리</span>
+                  {smartSuggestions.cat1.map(v => (
+                    <button key={v} className="qa-recent-chip" onClick={() => setForm({...form, cat1:v, cat2:""})}>
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="qa-form-grid"><div className="qa-field"><label className="qa-label">날짜</label><input className="qa-input" type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></div><div className="qa-field"><label className="qa-label">내용</label><input className="qa-input" value={form.content} onChange={e=>setForm({...form,content:e.target.value})} placeholder="무엇에 썼나요?"/>{smartSuggestions.content.length > 0 && <div className="qa-suggestion-row">{smartSuggestions.content.map(v => <button key={v} className="qa-suggestion-chip" onClick={() => setForm({...form,content:v})}>{v}</button>)}</div>}</div></div>
               <div className="qa-form-grid"><div className="qa-field"><label className="qa-label">대분류</label><select className="qa-select" value={form.cat1} onChange={e=>setForm({...form,cat1:e.target.value,cat2:""})}><option value="">선택</option>{cat1Opts.map(x=><option key={x}>{x}</option>)}</select>{smartSuggestions.cat1.length > 0 && <div className="qa-suggestion-row">{smartSuggestions.cat1.map(v => <button key={v} className="qa-suggestion-chip" onClick={()=>setForm({...form,cat1:v,cat2:""})}>{v}</button>)}</div>}</div><div className="qa-field"><label className="qa-label">소분류</label><select className="qa-select" value={form.cat2} onChange={e=>setForm({...form,cat2:e.target.value})} disabled={!form.cat1}><option value="">선택</option>{cat2Opts.map(x=><option key={x}>{x}</option>)}</select>{smartSuggestions.cat2.length > 0 && <div className="qa-suggestion-row">{smartSuggestions.cat2.map(v => <button key={v} className="qa-suggestion-chip" onClick={()=>setForm({...form,cat2:v})}>{v}</button>)}</div>}</div></div>
               <div className="qa-form-grid">{(form.type === "수입" || form.type === "자산이동") && <div className="qa-field"><label className="qa-label">입금계좌</label><select className="qa-select" value={form.inAccount} onChange={e=>setForm({...form,inAccount:e.target.value})}><option value="">선택</option>{incomeAccounts.map(x=><option key={x}>{x}</option>)}</select></div>}{(form.type === "지출" || form.type === "자산이동") && <div className="qa-field"><label className="qa-label">출금계좌</label><select className="qa-select" value={form.outAccount} onChange={e=>setForm({...form,outAccount:e.target.value})}><option value="">선택</option>{outAccounts.map(x=><option key={x}>{x}</option>)}</select></div>}</div>
@@ -9602,6 +9814,7 @@ export {
   buildSplitTransactions,
   QuickAddModal,
   EmptyState,
+  CommandPalette,
   KOREAN_FINANCIAL_INSTITUTIONS,
   CARD_INSTITUTION_HINTS,
   SMS_CATEGORY_RULE_STORAGE_KEY,
