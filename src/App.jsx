@@ -842,6 +842,3 @@ export default function App() {
     </ToastProvider>
   );
 }
-
-
-/* FORCE_TOP_LOGIN_SCROLL_V3 */
