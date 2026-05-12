@@ -6895,7 +6895,6 @@ function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
   }, []);
   return (
     <>
-    <TaxGanttChart calendar={calendar}/>
     <div className="tax-calendar-month-card">
       <div className="tax-cal-header">
         <div className="tax-cal-title">
@@ -6920,6 +6919,59 @@ function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
       </div>
       <div className="tax-cal-grid">
         {["일","월","화","수","목","금","토"].map(w => <div className="tax-cal-weekday" key={w}>{w}</div>)}
+
+        {/* ── 간트 바: 기간이 있는 이벤트를 날짜 칸에 맞춰 이어서 표시 ── */}
+        {(() => {
+          const daysInMonth = new Date(y, m, 0).getDate();
+          const firstDow = new Date(y, m - 1, 1).getDay();
+          const TONE_BG     = { amber:"rgba(240,180,41,.2)", green:"rgba(52,213,138,.18)", info:"rgba(108,125,255,.15)", accent:"rgba(108,125,255,.2)", red:"rgba(255,92,114,.17)" };
+          const TONE_BORDER = { amber:"var(--amber)", green:"var(--green)", info:"var(--accent2)", accent:"var(--accent)", red:"var(--red)" };
+          const TONE_TEXT   = { amber:"var(--amber)", green:"var(--green)", info:"var(--accent2)", accent:"var(--accent)", red:"var(--red)" };
+          const ganttEvents = (calendar.events || []).filter(e => {
+            const s2 = new Date(y, e.startMonth - 1, e.startDay);
+            const e2 = new Date(y, e.month - 1, e.day);
+            return s2 <= new Date(y, m - 1, daysInMonth) && e2 >= new Date(y, m - 1, 1);
+          });
+          if (!ganttEvents.length) return null;
+          const allBars = [];
+          ganttEvents.forEach((ev, gi) => {
+            const cs = ev.startMonth < m ? 1 : ev.startMonth > m ? daysInMonth + 1 : ev.startDay;
+            const ce = ev.month > m ? daysInMonth : ev.month < m ? 0 : ev.day;
+            if (cs > daysInMonth || ce < 1) return;
+            let remaining = (firstDow + ce - 1) - (firstDow + cs - 1) + 1;
+            let curCell = firstDow + cs - 1;
+            while (remaining > 0) {
+              const curCol = curCell % 7;
+              const curRow = Math.floor(curCell / 7);
+              const span   = Math.min(remaining, 7 - curCol);
+              const isFirst = curCell === firstDow + cs - 1;
+              const isLast  = remaining === span;
+              allBars.push({ gi, ev, curRow, curCol, span, isFirst, isLast });
+              curCell += span; remaining -= span;
+            }
+          });
+          return allBars.map((bar, bi) => (
+            <div
+              key={`gb-${bar.gi}-${bi}`}
+              className="tax-gantt-inline-bar"
+              style={{
+                gridColumn: `${bar.curCol + 1} / span ${bar.span}`,
+                gridRow: bar.curRow + 2,
+                background: TONE_BG[bar.ev.tone] || TONE_BG.info,
+                borderTop:    `2px solid ${TONE_BORDER[bar.ev.tone] || TONE_BORDER.info}`,
+                borderBottom: `2px solid ${TONE_BORDER[bar.ev.tone] || TONE_BORDER.info}`,
+                borderLeft:  bar.isFirst ? `2px solid ${TONE_BORDER[bar.ev.tone] || TONE_BORDER.info}` : "none",
+                borderRight: bar.isLast  ? `2px solid ${TONE_BORDER[bar.ev.tone] || TONE_BORDER.info}` : "none",
+                borderRadius: bar.isFirst && bar.isLast ? "6px" : bar.isFirst ? "6px 0 0 6px" : bar.isLast ? "0 6px 6px 0" : "0",
+                color: TONE_TEXT[bar.ev.tone] || TONE_TEXT.info,
+              }}
+              title={`${bar.ev.title}\n${bar.ev.hasPeriod ? `${bar.ev.startMonth}/${bar.ev.startDay} ~ ${bar.ev.month}/${bar.ev.day}` : `마감: ${bar.ev.month}/${bar.ev.day}`}\n${bar.ev.desc}`}
+            >
+              {bar.isFirst && <span className="tax-gantt-inline-label">{bar.ev.title}</span>}
+            </div>
+          ));
+        })()}
+
         {cells.map(c => (
           <div key={c.iso} className={`tax-cal-day ${c.outside ? "outside" : ""} ${c.today ? "today" : ""}`}>
             <div className="tax-cal-date"><span>{c.day}</span>{c.events.length>0 && <span className="badge badge-muted">{c.events.length}</span>}</div>
