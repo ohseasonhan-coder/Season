@@ -321,8 +321,52 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .esb-step{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text2)}
 .esb-num{width:20px;height:20px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .esb-step strong{color:var(--text)}
+.dashboard-greeting-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:2px}
 .dashboard-greeting{font-size:14px;color:var(--text3);padding:2px 4px;font-weight:400}
 .dashboard-greeting strong{color:var(--text);font-weight:700}
+.streak-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:99px;background:rgba(240,180,41,.1);border:1px solid rgba(240,180,41,.25);font-size:12px;font-weight:700;color:var(--amber);animation:streakPop .4s cubic-bezier(.2,.8,.2,1)}
+@keyframes streakPop{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* 커맨드 팔레트 */
+.cmd-overlay{position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.7);backdrop-filter:blur(16px);display:flex;align-items:flex-start;justify-content:center;padding-top:80px;animation:cmdIn .15s ease}
+@keyframes cmdIn{from{opacity:0}to{opacity:1}}
+.cmd-box{background:var(--surface);border:1px solid rgba(108,125,255,.25);border-radius:20px;width:100%;max-width:580px;box-shadow:0 32px 80px rgba(0,0,0,.6),0 0 0 1px rgba(108,125,255,.08);overflow:hidden;animation:cmdUp .2s cubic-bezier(.16,1,.3,1)}
+@keyframes cmdUp{from{transform:translateY(-12px);opacity:0}to{transform:translateY(0);opacity:1}}
+.cmd-search-row{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border)}
+.cmd-search-icon{font-size:16px;flex-shrink:0;opacity:.6}
+.cmd-input{flex:1;background:none;border:none;outline:none;font-size:15px;color:var(--text);font-family:inherit}
+.cmd-input::placeholder{color:var(--text3)}
+.cmd-esc{padding:3px 7px;border-radius:6px;background:var(--surface2);border:1px solid var(--border2);font-size:11px;color:var(--text3);cursor:pointer;flex-shrink:0;font-family:inherit}
+.cmd-list{max-height:360px;overflow-y:auto;padding:6px}
+.cmd-empty{padding:28px;text-align:center;font-size:13px;color:var(--text3)}
+.cmd-item{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:12px;border:none;background:none;cursor:pointer;text-align:left;font-family:inherit;transition:.12s}
+.cmd-item:hover,.cmd-item.sel{background:var(--accent-bg)}
+.cmd-item-icon{font-size:16px;width:22px;flex-shrink:0;text-align:center}
+.cmd-item-label{font-size:13px;font-weight:600;color:var(--text);flex-shrink:0}
+.cmd-item-desc{font-size:12px;color:var(--text3);flex:1;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+.cmd-enter{padding:2px 6px;border-radius:5px;background:var(--surface2);border:1px solid var(--border2);font-size:10px;color:var(--text3);flex-shrink:0;font-family:inherit}
+.cmd-footer{display:flex;align-items:center;gap:14px;padding:10px 18px;border-top:1px solid var(--border);font-size:11px;color:var(--text3)}
+.cmd-footer kbd{padding:2px 5px;border-radius:4px;background:var(--surface2);border:1px solid var(--border2);font-size:10px;font-family:inherit}
+.cmd-footer-tip{margin-left:auto;color:var(--text3)}
+
+/* topbar 검색 버튼 */
+.topbar-search-btn{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:9px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;transition:.15s}
+.topbar-search-btn:hover{background:var(--surface3);color:var(--text);border-color:var(--accent)}
+.topbar-search-label{font-weight:500}
+.topbar-kbd{padding:1px 5px;border-radius:4px;background:var(--surface3);border:1px solid var(--border2);font-size:10px;color:var(--text3);font-family:inherit}
+
+/* 금융 용어 툴팁 */
+.term-tip{position:relative;display:inline-flex;align-items:center;gap:3px;cursor:help;border-bottom:1px dashed rgba(108,125,255,.4)}
+.term-tip-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-size:9px;font-weight:900;flex-shrink:0}
+.term-tip::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);min-width:220px;max-width:280px;padding:9px 12px;border-radius:11px;background:rgba(20,22,28,.98);color:#f0f1f3;border:1px solid rgba(255,255,255,.12);box-shadow:0 12px 32px rgba(0,0,0,.4);font-size:11.5px;font-weight:400;line-height:1.55;white-space:normal;word-break:keep-all;opacity:0;visibility:hidden;pointer-events:none;z-index:9999;transition:opacity .14s ease,transform .14s ease;transform:translateX(-50%) translateY(4px)}
+.term-tip:hover::after,.term-tip:focus::after{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+
+/* QuickAdd 금액 미리보기 + 최근 카테고리 */
+.qa-amount-preview{font-size:11px;color:var(--accent);font-weight:700;margin-top:-4px;margin-bottom:2px;padding-left:2px}
+.qa-recent-cats{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:8px 2px}
+.qa-recent-label{font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.05em;text-transform:uppercase;flex-shrink:0}
+.qa-recent-chip{padding:5px 12px;border-radius:99px;font-size:12px;font-weight:600;border:1px solid rgba(108,125,255,.25);background:rgba(108,125,255,.08);color:var(--accent2);cursor:pointer;transition:.15s;font-family:inherit}
+.qa-recent-chip:hover{background:rgba(108,125,255,.18);border-color:var(--accent)}
 
 /* QA Sheet */
 .qa-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:qa-fade-in .18s ease}
