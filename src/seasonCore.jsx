@@ -6920,72 +6920,85 @@ function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
       <div className="tax-cal-grid">
         {["일","월","화","수","목","금","토"].map(w => <div className="tax-cal-weekday" key={w}>{w}</div>)}
 
-        {/* ── 간트 바: 기간이 있는 이벤트를 날짜 칸에 맞춰 이어서 표시 ── */}
-        {(() => {
-          const daysInMonth = new Date(y, m, 0).getDate();
-          const firstDow = new Date(y, m - 1, 1).getDay();
-          const TONE_BG     = { amber:"rgba(240,180,41,.2)", green:"rgba(52,213,138,.18)", info:"rgba(108,125,255,.15)", accent:"rgba(108,125,255,.2)", red:"rgba(255,92,114,.17)" };
-          const TONE_BORDER = { amber:"var(--amber)", green:"var(--green)", info:"var(--accent2)", accent:"var(--accent)", red:"var(--red)" };
-          const TONE_TEXT   = { amber:"var(--amber)", green:"var(--green)", info:"var(--accent2)", accent:"var(--accent)", red:"var(--red)" };
-          const ganttEvents = (calendar.events || []).filter(e => {
-            const s2 = new Date(y, e.startMonth - 1, e.startDay);
-            const e2 = new Date(y, e.month - 1, e.day);
-            return s2 <= new Date(y, m - 1, daysInMonth) && e2 >= new Date(y, m - 1, 1);
+        {cells.map((c, cellIdx) => {
+          // 이 날짜 셀에 걸쳐있는 간트 이벤트 계산
+          const cellDate = new Date(c.year, c.month - 1, c.day);
+          const ganttBars = (calendar.events || []).filter(ev => {
+            if (!ev.hasPeriod) return false;
+            const start = new Date(ev.year, ev.startMonth - 1, ev.startDay);
+            const end   = new Date(ev.year, ev.month - 1, ev.day);
+            return cellDate >= start && cellDate <= end;
+          }).map(ev => {
+            const start   = new Date(ev.year, ev.startMonth - 1, ev.startDay);
+            const end     = new Date(ev.year, ev.month - 1, ev.day);
+            const isFirst = cellDate.getTime() === start.getTime()
+                         || (cellDate.getDay() === 0 && cellDate >= start); // 주 시작
+            const isLast  = cellDate.getTime() === end.getTime()
+                         || (cellDate.getDay() === 6 && cellDate <= end);   // 주 끝
+            const showLabel = cellDate.getTime() === start.getTime()
+                           || (cellDate.getDay() === 0 && cellDate > start && cellDate <= end);
+            return { ev, isFirst, isLast, showLabel };
           });
-          if (!ganttEvents.length) return null;
-          const allBars = [];
-          ganttEvents.forEach((ev, gi) => {
-            const cs = ev.startMonth < m ? 1 : ev.startMonth > m ? daysInMonth + 1 : ev.startDay;
-            const ce = ev.month > m ? daysInMonth : ev.month < m ? 0 : ev.day;
-            if (cs > daysInMonth || ce < 1) return;
-            let remaining = (firstDow + ce - 1) - (firstDow + cs - 1) + 1;
-            let curCell = firstDow + cs - 1;
-            while (remaining > 0) {
-              const curCol = curCell % 7;
-              const curRow = Math.floor(curCell / 7);
-              const span   = Math.min(remaining, 7 - curCol);
-              const isFirst = curCell === firstDow + cs - 1;
-              const isLast  = remaining === span;
-              allBars.push({ gi, ev, curRow, curCol, span, isFirst, isLast });
-              curCell += span; remaining -= span;
-            }
-          });
-          return allBars.map((bar, bi) => (
-            <div
-              key={`gb-${bar.gi}-${bi}`}
-              className="tax-gantt-inline-bar"
-              style={{
-                gridColumn: `${bar.curCol + 1} / span ${bar.span}`,
-                gridRow: bar.curRow + 2,
-                background: TONE_BG[bar.ev.tone] || TONE_BG.info,
-                borderTop:    `2px solid ${TONE_BORDER[bar.ev.tone] || TONE_BORDER.info}`,
-                borderBottom: `2px solid ${TONE_BORDER[bar.ev.tone] || TONE_BORDER.info}`,
-                borderLeft:  bar.isFirst ? `2px solid ${TONE_BORDER[bar.ev.tone] || TONE_BORDER.info}` : "none",
-                borderRight: bar.isLast  ? `2px solid ${TONE_BORDER[bar.ev.tone] || TONE_BORDER.info}` : "none",
-                borderRadius: bar.isFirst && bar.isLast ? "6px" : bar.isFirst ? "6px 0 0 6px" : bar.isLast ? "0 6px 6px 0" : "0",
-                color: TONE_TEXT[bar.ev.tone] || TONE_TEXT.info,
-              }}
-              title={`${bar.ev.title}\n${bar.ev.hasPeriod ? `${bar.ev.startMonth}/${bar.ev.startDay} ~ ${bar.ev.month}/${bar.ev.day}` : `마감: ${bar.ev.month}/${bar.ev.day}`}\n${bar.ev.desc}`}
-            >
-              {bar.isFirst && <span className="tax-gantt-inline-label">{bar.ev.title}</span>}
-            </div>
-          ));
-        })()}
 
-        {cells.map(c => (
-          <div key={c.iso} className={`tax-cal-day ${c.outside ? "outside" : ""} ${c.today ? "today" : ""}`}>
-            <div className="tax-cal-date"><span>{c.day}</span>{c.events.length>0 && <span className="badge badge-muted">{c.events.length}</span>}</div>
-            <div className="tax-cal-events">
-              {c.events.map((e,idx) => (
-                <div className="tax-cal-event" key={`${e.title}-${idx}`}>
-                  <span className={`badge ${toneClass(e.tone)}`}>{e.type}</span>
-                  <strong>{e.title}</strong>
-                  <p>{e.desc}</p>
+          const TONE_BG     = { amber:"rgba(240,180,41,.18)", green:"rgba(52,213,138,.16)", info:"rgba(108,125,255,.14)", accent:"rgba(108,125,255,.18)", red:"rgba(255,92,114,.16)" };
+          const TONE_BORDER = { amber:"#f0b429", green:"#34d58a", info:"#7c8fff", accent:"#6c7dff", red:"#ff5c72" };
+          const TONE_TEXT   = { amber:"#f0b429", green:"#34d58a", info:"#7c8fff", accent:"#6c7dff", red:"#ff5c72" };
+
+          return (
+            <div key={c.iso} className={`tax-cal-day ${c.outside ? "outside" : ""} ${c.today ? "today" : ""}`}>
+              <div className="tax-cal-date">
+                <span>{c.day}</span>
+                {c.events.length > 0 && <span className="badge badge-muted">{c.events.length}</span>}
+              </div>
+
+              {/* 간트 바 */}
+              {ganttBars.length > 0 && (
+                <div className="tax-gantt-bars-wrap">
+                  {ganttBars.map((bar, bi) => {
+                    const bg  = TONE_BG[bar.ev.tone]     || TONE_BG.info;
+                    const bc  = TONE_BORDER[bar.ev.tone] || TONE_BORDER.info;
+                    const tc  = TONE_TEXT[bar.ev.tone]   || TONE_TEXT.info;
+                    return (
+                      <div
+                        key={bi}
+                        className="tax-gantt-bar-cell"
+                        style={{
+                          background: bg,
+                          borderTop:    `1.5px solid ${bc}`,
+                          borderBottom: `1.5px solid ${bc}`,
+                          borderLeft:  bar.isFirst ? `1.5px solid ${bc}` : "none",
+                          borderRight: bar.isLast  ? `1.5px solid ${bc}` : "none",
+                          borderRadius: bar.isFirst && bar.isLast ? 6
+                                      : bar.isFirst ? "6px 0 0 6px"
+                                      : bar.isLast  ? "0 6px 6px 0"
+                                      : 0,
+                          marginLeft:  bar.isFirst ? 0 : -9,
+                          marginRight: bar.isLast  ? 0 : -9,
+                          color: tc,
+                        }}
+                        title={`${bar.ev.title}\n${bar.ev.startMonth}/${bar.ev.startDay} ~ ${bar.ev.month}/${bar.ev.day}\n${bar.ev.desc}`}
+                      >
+                        {bar.showLabel && (
+                          <span className="tax-gantt-bar-label">{bar.ev.title}</span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              )}
+
+              <div className="tax-cal-events">
+                {c.events.map((e, idx) => (
+                  <div className="tax-cal-event" key={`${e.title}-${idx}`}>
+                    <span className={`badge ${toneClass(e.tone)}`}>{e.type}</span>
+                    <strong>{e.title}</strong>
+                    <p>{e.desc}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="tax-update-box tax-update-status-box">
         <div className={`tax-update-status-card ${summarizeTaxUpdateStatus(settings, localMsg).tone}`}>
