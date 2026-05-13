@@ -3363,6 +3363,42 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
       {/* 성취 피드백 토스트 */}
       <AchievementToast advanced={advanced} prevScoreRef={prevScoreRef}/>
 
+      {/* 월간 리포트 자동 알림 배너 (매월 1~7일) */}
+      {(() => {
+        const today = new Date();
+        const day = today.getDate();
+        const prevM = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const prevMonthKey = `${prevM.getFullYear()}-${String(prevM.getMonth()+1).padStart(2,"0")}`;
+        const dismissKey = `season-report-banner-${prevMonthKey}`;
+        const [dismissed, setDismissed] = useState(() => !!localStorage.getItem(dismissKey));
+        const hasPrevData = monthlySeries.some(r => r.month === prevMonthKey);
+        if (day > 7 || dismissed || !hasPrevData) return null;
+        const prev = monthlySeries.find(r => r.month === prevMonthKey) || {};
+        const netSign = prev.net >= 0 ? "흑자" : "적자";
+        const netAbs = Math.abs(prev.net || 0);
+        return (
+          <div className="report-banner">
+            <div className="report-banner-icon">📋</div>
+            <div className="report-banner-body">
+              <div className="report-banner-title">{prevMonthKey} 리포트가 준비됐어요</div>
+              <div className="report-banner-desc">
+                지난달 {netSign} {fmt(netAbs)}원 · 수입 {fmt(prev.income||0)}원 · 지출 {fmt(prev.expense||0)}원
+              </div>
+            </div>
+            <button
+              className="report-banner-btn"
+              onClick={() => window.dispatchEvent(new CustomEvent("season-settab", {detail:"monthlyReport"}))}
+            >
+              리포트 보기 →
+            </button>
+            <button
+              className="report-banner-close"
+              onClick={() => { localStorage.setItem(dismissKey,"1"); setDismissed(true); }}
+            >✕</button>
+          </div>
+        );
+      })()}
+
       {/* 사용자 이름 인사 + streak */}
       <div className="dashboard-greeting-row">
         {userName && (
@@ -3433,12 +3469,84 @@ function DashboardTab({ data, update, dashboard, dashboardDetail, dashboardChart
         </div>
       </div>
 
-      <div className="kpi-grid">
-        <KpiCard label="순자산" value={dashboard.netWorth} unit="원" accent tooltip="총 자산에서 부채를 뺀 나의 실질 재산 (자산+투자-부채)"/>
-        <KpiCard label="이번달 현금흐름" value={dashboard.net} unit="원" tone={dashboard.net>=0?"green":"red"} tooltip="이번달 수입에서 지출을 뺀 금액. 플러스면 흑자, 마이너스면 적자"/>
-        <KpiCard label="총 투자자산" value={financialAnalysis.total} unit="원" tooltip="포트폴리오에 등록된 주식·ETF의 현재가 기준 총 평가금액"/>
-        <KpiCard label="비상금" value={dashboardDetail.emergencyFund} unit="원" tooltip="즉시 인출 가능한 현금성 자산. 월 지출의 3~6개월치 보유를 권장해요"/>
-      </div>
+      {/* ── KPI 카드 개인화 ── */}
+      {(() => {
+        const ALL_KPIS = [
+          { id:"netWorth",      label:"순자산",         unit:"원", getValue:()=>dashboard.netWorth,              accent:true,  tone:undefined,                                   tooltip:"총 자산에서 부채를 뺀 나의 실질 재산 (자산+투자-부채)" },
+          { id:"cashflow",      label:"이번달 현금흐름", unit:"원", getValue:()=>dashboard.net,                   accent:false, tone:dashboard.net>=0?"green":"red",               tooltip:"이번달 수입에서 지출을 뺀 금액. 플러스면 흑자, 마이너스면 적자" },
+          { id:"portfolio",     label:"총 투자자산",     unit:"원", getValue:()=>financialAnalysis.total,         accent:false, tone:undefined,                                   tooltip:"포트폴리오에 등록된 주식·ETF의 현재가 기준 총 평가금액" },
+          { id:"emergency",     label:"비상금",          unit:"원", getValue:()=>dashboardDetail.emergencyFund,   accent:false, tone:undefined,                                   tooltip:"즉시 인출 가능한 현금성 자산. 월 지출의 3~6개월치 권장" },
+          { id:"income",        label:"이번달 수입",     unit:"원", getValue:()=>dashboard.income,                accent:false, tone:"green",                                     tooltip:"이번달 수입 합계" },
+          { id:"expense",       label:"이번달 지출",     unit:"원", getValue:()=>dashboard.expense,               accent:false, tone:"red",                                       tooltip:"이번달 지출 합계" },
+          { id:"savingsRate",   label:"저축률",          unit:"%",  getValue:()=>advanced.savingsRate,            accent:false, tone:advanced.savingsRate>=20?"green":"red",       tooltip:"수입 대비 저축·투자 비율. 20% 이상 권장" },
+          { id:"assets",        label:"총 자산",         unit:"원", getValue:()=>dashboard.totalAssets,           accent:false, tone:undefined,                                   tooltip:"자산 탭에 등록된 모든 자산의 합계" },
+          { id:"liabilities",   label:"총 부채",         unit:"원", getValue:()=>dashboard.totalLiabs,            accent:false, tone:dashboard.totalLiabs>0?"red":undefined,      tooltip:"자산 탭에 등록된 모든 부채의 합계" },
+          { id:"healthScore",   label:"재무 건강도",     unit:"점", getValue:()=>advanced.score,                  accent:false, tone:advanced.tone==="green"?"green":advanced.tone==="red"?"red":undefined, tooltip:"CFO Score: 저축률·비상금·투자율·부채비율 종합 점수 (0~100)" },
+        ];
+        const DEFAULT_PINNED = ["netWorth","cashflow","portfolio","emergency"];
+        const pinned = (data.settings?.pinnedKpis || DEFAULT_PINNED).slice(0,4);
+        const [editing, setEditing] = useState(false);
+        const [draft, setDraft] = useState(pinned);
+        const toggle = (id) => setDraft(prev =>
+          prev.includes(id) ? prev.filter(x=>x!==id) : prev.length < 4 ? [...prev, id] : prev
+        );
+        const save = () => {
+          update(d => ({...d, settings:{...d.settings, pinnedKpis: draft}}));
+          setEditing(false);
+        };
+        const displayed = pinned.map(id => ALL_KPIS.find(k=>k.id===id)).filter(Boolean);
+        return (
+          <div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <span style={{fontSize:11,fontWeight:700,color:"var(--text3)",letterSpacing:".06em",textTransform:"uppercase"}}>주요 지표</span>
+              <button
+                onClick={()=>{setDraft(pinned);setEditing(!editing);}}
+                style={{fontSize:11,color:"var(--text3)",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:600,padding:"2px 6px",borderRadius:6}}
+              >
+                {editing ? "취소" : "⚙ 편집"}
+              </button>
+            </div>
+            {editing ? (
+              <div className="kpi-edit-panel">
+                <div className="kpi-edit-hint">원하는 지표 4개를 선택하세요 ({draft.length}/4)</div>
+                <div className="kpi-edit-grid">
+                  {ALL_KPIS.map(k => (
+                    <button
+                      key={k.id}
+                      className={`kpi-edit-chip ${draft.includes(k.id) ? "sel" : ""}`}
+                      onClick={()=>toggle(k.id)}
+                    >
+                      {draft.includes(k.id) && <span className="kpi-edit-check">✓</span>}
+                      {k.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="kpi-edit-save"
+                  onClick={save}
+                  disabled={draft.length === 0}
+                >
+                  저장
+                </button>
+              </div>
+            ) : (
+              <div className="kpi-grid">
+                {displayed.map(k => (
+                  <KpiCard
+                    key={k.id}
+                    label={k.label}
+                    value={k.unit==="%"?k.getValue():k.getValue()}
+                    unit={k.unit}
+                    accent={k.accent}
+                    tone={k.tone}
+                    tooltip={k.tooltip}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="g3">
         <div className="card">
@@ -4665,6 +4773,8 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
   const [filterMonth,setFilterMonth]=useState(thisMonthISO());
   const [filterType,setFilterType]=useState("");
   const [filterCat1,setFilterCat1]=useState("");
+  const [filterAmountMin,setFilterAmountMin]=useState("");
+  const [filterAmountMax,setFilterAmountMax]=useState("");
   const [autoFillMonth,setAutoFillMonth]=useState(thisMonthISO());
   const [templateName,setTemplateName]=useState("");
 
@@ -4682,16 +4792,20 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
   // 필터 적용
   const filtered=useMemo(()=>{
     const q=search.trim().toLowerCase();
+    const minA = filterAmountMin !== "" ? n(filterAmountMin) * 10000 : null;
+    const maxA = filterAmountMax !== "" ? n(filterAmountMax) * 10000 : null;
     return [...data.transactions]
       .filter(t=>{
         if(filterMonth&&monthOf(t.date)!==filterMonth) return false;
         if(filterType&&t.type!==filterType) return false;
         if(filterCat1&&t.cat1!==filterCat1) return false;
-        if(q){const hay=[t.content,t.memo,t.cat1,t.cat2,t.inAccount,t.outAccount].join(" ").toLowerCase();if(!hay.includes(q)) return false;}
+        if(minA !== null && n(t.amount) < minA) return false;
+        if(maxA !== null && n(t.amount) > maxA) return false;
+        if(q){const hay=[t.content,t.memo,t.cat1,t.cat2,t.inAccount,t.outAccount,String(t.amount)].join(" ").toLowerCase();if(!hay.includes(q)) return false;}
         return true;
       })
       .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  },[data.transactions,filterMonth,filterType,filterCat1,search]);
+  },[data.transactions,filterMonth,filterType,filterCat1,filterAmountMin,filterAmountMax,search]);
 
   // 소계
   const subtotal=useMemo(()=>{
@@ -4880,8 +4994,8 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
     return {missing,accountMiss,duplicates,total:missing+accountMiss+duplicates};
   },[data.transactions]);
 
-  const activeFilterCount=[filterMonth!==thisMonthISO(),!!filterType,!!filterCat1,!!search.trim()].filter(Boolean).length;
-  const resetFilters=()=>{setSearch("");setFilterMonth(thisMonthISO());setFilterType("");setFilterCat1("");};
+  const activeFilterCount=[filterMonth!==thisMonthISO(),!!filterType,!!filterCat1,!!search.trim(),!!filterAmountMin,!!filterAmountMax].filter(Boolean).length;
+  const resetFilters=()=>{setSearch("");setFilterMonth(thisMonthISO());setFilterType("");setFilterCat1("");setFilterAmountMin("");setFilterAmountMax("");};
 
   const saveTemplate=()=>{
     if(!canSave) return showToast('필수값을 먼저 채워주세요.', 'warn');
@@ -5165,22 +5279,30 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div style={{position:"relative"}}>
             <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"var(--text3)",pointerEvents:"none"}}>🔍</span>
-            <input style={{...inpS,paddingLeft:34}} placeholder="내용·메모·카테고리 검색..." value={search} onChange={e=>setSearch(e.target.value)}/>
+            <input style={{...inpS,paddingLeft:34}} placeholder="내용·메모·카테고리·금액 검색..." value={search} onChange={e=>setSearch(e.target.value)} autoComplete="off"/>
             {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:14,lineHeight:1}}>✕</button>}
           </div>
           <input type="month" style={inpS} value={filterMonth} onChange={e=>setFilterMonth(e.target.value)}/>
         </div>
 
-        {/* 구분 + 대분류 */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:10,marginBottom:14,alignItems:"center"}}>
+        {/* 구분 + 대분류 + 금액 범위 */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr auto",gap:8,marginBottom:14,alignItems:"center"}}>
           <select style={inpS} value={filterType} onChange={e=>{setFilterType(e.target.value);setFilterCat1("");}}>
             <option value="">전체 구분</option><option>수입</option><option>지출</option><option>자산이동</option>
           </select>
           <select style={inpS} value={filterCat1} onChange={e=>setFilterCat1(e.target.value)}>
             <option value="">전체 대분류</option>{filterCat1Opts.map(x=><option key={x}>{x}</option>)}
           </select>
+          <div style={{position:"relative"}}>
+            <input type="number" style={{...inpS,paddingRight:28}} placeholder="최소 금액(만)" value={filterAmountMin} onChange={e=>setFilterAmountMin(e.target.value)} min={0}/>
+            <span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"var(--text3)",pointerEvents:"none"}}>만원~</span>
+          </div>
+          <div style={{position:"relative"}}>
+            <input type="number" style={{...inpS,paddingRight:28}} placeholder="최대 금액(만)" value={filterAmountMax} onChange={e=>setFilterAmountMax(e.target.value)} min={0}/>
+            <span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"var(--text3)",pointerEvents:"none"}}>만원</span>
+          </div>
           {activeFilterCount>0
-            ?<button onClick={resetFilters} style={{padding:"9px 14px",borderRadius:10,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text2)",fontSize:12,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit"}}>모두 초기화</button>
+            ?<button onClick={resetFilters} style={{padding:"9px 14px",borderRadius:10,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text2)",fontSize:12,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit"}}>초기화</button>
             :<span style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap"}}>필터 없음</span>
           }
         </div>
