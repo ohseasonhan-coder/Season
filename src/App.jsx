@@ -345,6 +345,13 @@ export default function App() {
     return ()=>window.removeEventListener("keydown",handler);
   },[]);
 
+  // ── 월간 리포트 배너 탭 이동 이벤트
+  useEffect(()=>{
+    const handler=(e)=>setTab(e.detail);
+    window.addEventListener("season-settab",handler);
+    return ()=>window.removeEventListener("season-settab",handler);
+  },[]);
+
   // ── 다크/라이트 테마
   const [theme,setTheme]=useState(()=>localStorage.getItem("season-theme")||"dark");
   useEffect(()=>{
