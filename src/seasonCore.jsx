@@ -6917,77 +6917,25 @@ function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
         <div className="compact-insight green"><span>🌱</span><div><strong>절세 잔여 여력</strong><p>ISA {fmt(calendar.isaGap)}원 · 연금 {fmt(calendar.pensionGap)}원</p></div></div>
         <div className="compact-insight info"><span>🏁</span><div><strong>접속 시 자동 업데이트</strong><p>{settings?.taxUpdateLastChecked ? `${formatTaxUpdateDateTime(settings.taxUpdateLastChecked)} · ${settings?.taxUpdateStatus === "checked" ? "확인 완료" : settings?.taxUpdateStatus === "failed" ? "확인 실패" : "대기"}` : "접속하면 자동 확인"}</p></div></div>
       </div>
-      <div className="tax-cal-grid">
-        {["일","월","화","수","목","금","토"].map(w => <div className="tax-cal-weekday" key={w}>{w}</div>)}
-
-        {cells.map((c, cellIdx) => {
-          // 이 날짜 셀에 걸쳐있는 간트 이벤트 계산
-          const cellDate = new Date(c.year, c.month - 1, c.day);
-          const ganttBars = (calendar.events || []).filter(ev => {
-            if (!ev.hasPeriod) return false;
-            const start = new Date(ev.year, ev.startMonth - 1, ev.startDay);
-            const end   = new Date(ev.year, ev.month - 1, ev.day);
-            return cellDate >= start && cellDate <= end;
-          }).map(ev => {
-            const start   = new Date(ev.year, ev.startMonth - 1, ev.startDay);
-            const end     = new Date(ev.year, ev.month - 1, ev.day);
-            const isFirst = cellDate.getTime() === start.getTime()
-                         || (cellDate.getDay() === 0 && cellDate >= start); // 주 시작
-            const isLast  = cellDate.getTime() === end.getTime()
-                         || (cellDate.getDay() === 6 && cellDate <= end);   // 주 끝
-            const showLabel = cellDate.getTime() === start.getTime()
-                           || (cellDate.getDay() === 0 && cellDate > start && cellDate <= end);
-            return { ev, isFirst, isLast, showLabel };
-          });
-
-          const TONE_BG     = { amber:"rgba(240,180,41,.18)", green:"rgba(52,213,138,.16)", info:"rgba(108,125,255,.14)", accent:"rgba(108,125,255,.18)", red:"rgba(255,92,114,.16)" };
-          const TONE_BORDER = { amber:"#f0b429", green:"#34d58a", info:"#7c8fff", accent:"#6c7dff", red:"#ff5c72" };
-          const TONE_TEXT   = { amber:"#f0b429", green:"#34d58a", info:"#7c8fff", accent:"#6c7dff", red:"#ff5c72" };
-
-          return (
-            <div key={c.iso} className={`tax-cal-day ${c.outside ? "outside" : ""} ${c.today ? "today" : ""}`}>
+      {/* 주 단위 간트 바 오버레이 (캘린더 그리드 위에 절대 위치) */}
+      <div className="tax-cal-gantt-container">
+        <div className="tax-cal-grid tax-cal-grid-ref" id="tax-cal-grid-ref">
+          {["일","월","화","수","목","금","토"].map(w => <div className="tax-cal-weekday" key={w}>{w}</div>)}
+          {cells.map((c, cellIdx) => (
+            <div key={c.iso} className={`tax-cal-day ${c.outside ? "outside" : ""} ${c.today ? "today" : ""}`} data-cell={cellIdx}>
               <div className="tax-cal-date">
                 <span>{c.day}</span>
                 {c.events.length > 0 && <span className="badge badge-muted">{c.events.length}</span>}
               </div>
-
-              {/* 간트 바 */}
-              {ganttBars.length > 0 && (
-                <div className="tax-gantt-bars-wrap">
-                  {ganttBars.map((bar, bi) => {
-                    const bg  = TONE_BG[bar.ev.tone]     || TONE_BG.info;
-                    const bc  = TONE_BORDER[bar.ev.tone] || TONE_BORDER.info;
-                    const tc  = TONE_TEXT[bar.ev.tone]   || TONE_TEXT.info;
-                    return (
-                      <div
-                        key={bi}
-                        className="tax-gantt-bar-cell"
-                        style={{
-                          background: bg,
-                          borderTop:    `1.5px solid ${bc}`,
-                          borderBottom: `1.5px solid ${bc}`,
-                          borderLeft:  bar.isFirst ? `1.5px solid ${bc}` : "none",
-                          borderRight: bar.isLast  ? `1.5px solid ${bc}` : "none",
-                          borderRadius: bar.isFirst && bar.isLast ? 6
-                                      : bar.isFirst ? "6px 0 0 6px"
-                                      : bar.isLast  ? "0 6px 6px 0"
-                                      : 0,
-                          marginLeft:  bar.isFirst ? 0 : -9,
-                          marginRight: bar.isLast  ? 0 : -9,
-                          color: tc,
-                        }}
-                        title={`${bar.ev.title}\n${bar.ev.startMonth}/${bar.ev.startDay} ~ ${bar.ev.month}/${bar.ev.day}\n${bar.ev.desc}`}
-                      >
-                        {bar.showLabel && (
-                          <span className="tax-gantt-bar-label">{bar.ev.title}</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              <div className="tax-cal-events">
+              <div className="tax-cal-events" style={{marginTop: (() => {
+                // 이 셀에 간트 바가 있으면 상단 여백 확보
+                const cd = new Date(c.year, c.month - 1, c.day);
+                const cnt = (calendar.events || []).filter(ev => {
+                  if (!ev.hasPeriod) return false;
+                  return cd >= new Date(ev.year, ev.startMonth-1, ev.startDay) && cd <= new Date(ev.year, ev.month-1, ev.day);
+                }).length;
+                return cnt > 0 ? cnt * 22 + 4 : 0;
+              })()}}>
                 {c.events.map((e, idx) => (
                   <div className="tax-cal-event" key={`${e.title}-${idx}`}>
                     <span className={`badge ${toneClass(e.tone)}`}>{e.type}</span>
@@ -6997,8 +6945,99 @@ function TaxCalendarTimeline({ calendar, settings, onUpdateSettings }) {
                 ))}
               </div>
             </div>
-          );
-        })}
+          ))}
+        </div>
+
+        {/* 간트 바: 주 단위로 하나씩, 절대 위치로 셀 위에 오버레이 */}
+        {(() => {
+          const TONE_BG     = { amber:"rgba(240,180,41,.2)", green:"rgba(52,213,138,.18)", info:"rgba(108,125,255,.15)", accent:"rgba(108,125,255,.2)", red:"rgba(255,92,114,.17)" };
+          const TONE_BORDER = { amber:"#f0b429", green:"#34d58a", info:"#7c8fff", accent:"#6c7dff", red:"#ff5c72" };
+          const TONE_TEXT   = { amber:"#f0b429", green:"#34d58a", info:"#7c8fff", accent:"#6c7dff", red:"#ff5c72" };
+
+          const firstDow = new Date(y, m - 1, 1).getDay();
+          const daysInMonth = new Date(y, m, 0).getDate();
+
+          const ganttEvents = (calendar.events || []).filter(ev => {
+            if (!ev.hasPeriod) return false;
+            const s = new Date(ev.year, ev.startMonth - 1, ev.startDay);
+            const e2 = new Date(ev.year, ev.month - 1, ev.day);
+            return s <= new Date(y, m - 1, daysInMonth) && e2 >= new Date(y, m - 1, 1);
+          });
+
+          // 각 이벤트를 주(row) 단위로 분할
+          const bars = [];
+          ganttEvents.forEach((ev, ei) => {
+            const clampStart = ev.startMonth < m ? 1 : ev.startMonth > m ? null : ev.startDay;
+            const clampEnd   = ev.month > m ? daysInMonth : ev.month < m ? null : ev.day;
+            if (clampStart === null || clampEnd === null) return;
+
+            const startCell = firstDow + clampStart - 1; // 0-based
+            const endCell   = firstDow + clampEnd - 1;
+
+            let cur = startCell;
+            while (cur <= endCell) {
+              const rowStart = cur;
+              const rowEnd   = Math.min(Math.floor(cur / 7) * 7 + 6, endCell);
+              const col      = rowStart % 7;
+              const row      = Math.floor(rowStart / 7);
+              const span     = rowEnd - rowStart + 1;
+              const isAbsStart = cur === startCell;
+              const isAbsEnd   = rowEnd === endCell;
+              bars.push({ ev, ei, col, row, span, isAbsStart, isAbsEnd });
+              cur = rowEnd + 1;
+            }
+          });
+
+          // 같은 row에 여러 이벤트가 있을 때 세로 슬롯 배정
+          const rowSlots = {};
+          bars.forEach(bar => {
+            const key = bar.row;
+            if (!rowSlots[key]) rowSlots[key] = [];
+            // 이 row에서 겹치는 기존 슬롯 찾기
+            let slot = 0;
+            while (rowSlots[key].some(b => b.slot === slot && !(b.col + b.span <= bar.col || bar.col + bar.span <= b.col))) slot++;
+            bar.slot = slot;
+            rowSlots[key].push(bar);
+          });
+
+          const WEEKDAY_H = 32;  // 요일 행 높이 (px)
+          const CELL_H    = 120; // 날짜 셀 높이 (px)
+          const BAR_H     = 20;
+          const BAR_GAP   = 2;
+          const BAR_TOP_OFFSET = 28; // 날짜 숫자 아래
+
+          return bars.map((bar, bi) => {
+            const left   = `${(bar.col / 7) * 100}%`;
+            const width  = `${(bar.span / 7) * 100}%`;
+            const top    = WEEKDAY_H + bar.row * CELL_H + BAR_TOP_OFFSET + bar.slot * (BAR_H + BAR_GAP);
+            const bg     = TONE_BG[bar.ev.tone]     || TONE_BG.info;
+            const bc     = TONE_BORDER[bar.ev.tone] || TONE_BORDER.info;
+            const tc     = TONE_TEXT[bar.ev.tone]   || TONE_TEXT.info;
+            const radius = bar.isAbsStart && bar.isAbsEnd ? 6
+                         : bar.isAbsStart ? "6px 0 0 6px"
+                         : bar.isAbsEnd   ? "0 6px 6px 0"
+                         : 0;
+            return (
+              <div
+                key={`gbar-${bar.ei}-${bi}`}
+                className="tax-gantt-abs-bar"
+                style={{
+                  left, width, top,
+                  height: BAR_H,
+                  background: bg,
+                  border: `1.5px solid ${bc}`,
+                  borderLeft:  bar.isAbsStart ? `1.5px solid ${bc}` : "none",
+                  borderRight: bar.isAbsEnd   ? `1.5px solid ${bc}` : "none",
+                  borderRadius: radius,
+                  color: tc,
+                }}
+                title={`${bar.ev.title}\n${bar.ev.startMonth}/${bar.ev.startDay} ~ ${bar.ev.month}/${bar.ev.day}\n${bar.ev.desc}`}
+              >
+                <span className="tax-gantt-abs-label">{bar.ev.title}</span>
+              </div>
+            );
+          });
+        })()}
       </div>
       <div className="tax-update-box tax-update-status-box">
         <div className={`tax-update-status-card ${summarizeTaxUpdateStatus(settings, localMsg).tone}`}>
