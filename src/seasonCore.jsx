@@ -853,6 +853,7 @@ function areaPath(pts,base){ if(!pts.length) return ""; const d=polylinePath(pts
 function MonthlyTrendChart({ data }) {
   const rows = (data||[]).slice(-12);
   if(!rows.length) return <div className="empty">거래내역을 입력하면 차트가 표시됩니다.</div>;
+  const [hovered, setHovered] = useState(null);
   const W=560,H=180,ml=52,mr=12,mt=12,mb=28,iW=W-ml-mr,iH=H-mt-mb;
   const maxVal=Math.max(...rows.map(r=>Math.max(n(r.income),n(r.expense))),1);
   const minNet=Math.min(...rows.map(r=>n(r.net)),0);
@@ -863,14 +864,17 @@ function MonthlyTrendChart({ data }) {
   const incBars=rows.map((r,i)=>{ const bx=ml+step*i+step*.12,bw=step*.3,v=n(r.income),by=y(v); return {x:bx,y:by,w:bw,h:mt+iH-by}; });
   const expBars=rows.map((r,i)=>{ const bx=ml+step*i+step*.46,bw=step*.3,v=n(r.expense),by=y(v); return {x:bx,y:by,w:bw,h:mt+iH-by}; });
   const grids=Array.from({length:4}).map((_,i)=>minY+(range*i)/3);
+  const hRow = hovered !== null ? rows[hovered] : null;
+  const hX = hovered !== null ? ml+step*hovered+step/2 : null;
   return (
-    <div>
+    <div style={{position:"relative"}}>
       <div className="chart-legend">
         <span><i className="legend-dot" style={{background:"#6c7dff"}}/>수입</span>
         <span><i className="legend-dot" style={{background:"#ff5c72"}}/>지출</span>
         <span><i className="legend-dot" style={{background:"#34d58a"}}/>순수입</span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="chart-svg">
+      <svg viewBox={`0 0 ${W} ${H}`} className="chart-svg" style={{overflow:"visible"}}
+        onMouseLeave={()=>setHovered(null)}>
         <defs>
           <linearGradient id="netGrad" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="#34d58a" stopOpacity=".2"/>
@@ -884,17 +888,43 @@ function MonthlyTrendChart({ data }) {
           </g>
         ))}
         <line x1={ml} x2={W-mr} y1={y(0)} y2={y(0)} stroke="#353840"/>
-        {incBars.map((b,i)=><rect key={`i${i}`} x={b.x} y={b.y} width={b.w} height={b.h} rx="4" fill="#6c7dff" opacity=".7"/>)}
-        {expBars.map((b,i)=><rect key={`e${i}`} x={b.x} y={b.y} width={b.w} height={b.h} rx="4" fill="#ff5c72" opacity=".7"/>)}
+        {/* 호버 컬럼 하이라이트 */}
+        {hovered!==null&&<rect x={ml+step*hovered} y={mt} width={step} height={iH} fill="rgba(255,255,255,.04)" rx="4"/>}
+        {incBars.map((b,i)=><rect key={`i${i}`} x={b.x} y={b.y} width={b.w} height={b.h} rx="4" fill="#6c7dff" opacity={hovered===null||hovered===i?".85":".3"}
+          style={{transition:"opacity .15s"}}/>)}
+        {expBars.map((b,i)=><rect key={`e${i}`} x={b.x} y={b.y} width={b.w} height={b.h} rx="4" fill="#ff5c72" opacity={hovered===null||hovered===i?".85":".3"}
+          style={{transition:"opacity .15s"}}/>)}
         <path d={areaPath(linePts,y(0))} fill="url(#netGrad)"/>
         <path d={polylinePath(linePts)} fill="none" stroke="#34d58a" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
-        {linePts.map((p,i)=><circle key={`p${i}`} cx={p.x} cy={p.y} r="3.5" fill="#34d58a"/>)}
+        {linePts.map((p,i)=><circle key={`p${i}`} cx={p.x} cy={p.y} r={hovered===i?"5":"3.5"} fill="#34d58a"
+          style={{transition:"r .15s"}}/>)}
+        {/* 호버 수직선 */}
+        {hovered!==null&&<line x1={hX} x2={hX} y1={mt} y2={mt+iH} stroke="#f0f1f3" strokeWidth=".8" strokeDasharray="3 3" opacity=".4"/>}
+        {/* 마우스 이벤트 캡처용 투명 컬럼 */}
         {rows.map((r,i)=>(
-          <text key={r.month} x={ml+step*i+step/2} y={H-6} textAnchor="middle" fontSize="10" fill="#5a6278">
+          <rect key={`hit${i}`} x={ml+step*i} y={mt} width={step} height={iH} fill="transparent"
+            onMouseEnter={()=>setHovered(i)} style={{cursor:"crosshair"}}/>
+        ))}
+        {rows.map((r,i)=>(
+          <text key={r.month} x={ml+step*i+step/2} y={H-6} textAnchor="middle" fontSize="10"
+            fill={hovered===i?"#f0f1f3":"#5a6278"} style={{transition:"fill .15s"}}>
             {String(r.month).slice(5)}
           </text>
         ))}
       </svg>
+      {/* 호버 툴팁 */}
+      {hRow&&hovered!==null&&(
+        <div className="chart-hover-tooltip" style={{
+          left: `${Math.min(Math.max(((ml+step*hovered+step/2)/W)*100, 10), 80)}%`,
+        }}>
+          <div className="cht-month">{hRow.month}</div>
+          <div className="cht-row"><span style={{color:"#6c7dff"}}>■</span> 수입 {fmt(hRow.income)}원</div>
+          <div className="cht-row"><span style={{color:"#ff5c72"}}>■</span> 지출 {fmt(hRow.expense)}원</div>
+          <div className="cht-row" style={{borderTop:"0.5px solid rgba(255,255,255,.1)",marginTop:4,paddingTop:4}}>
+            <span style={{color:"#34d58a"}}>■</span> 순수입 <strong style={{color:hRow.net>=0?"#34d58a":"#ff5c72"}}>{fmt(hRow.net)}원</strong>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -902,21 +932,60 @@ function MonthlyTrendChart({ data }) {
 function AssetDonutChart({ segments }) {
   const rows=(segments||[]).filter(s=>n(s.value)>0);
   if(!rows.length) return <div className="empty">자산 데이터가 없습니다.</div>;
+  const [hovered, setHovered] = useState(null);
   const total=rows.reduce((s,r)=>s+n(r.value),0);
   const colors=["#6c7dff","#34d58a","#f0b429","#ff5c72","#60c5e8","#a78bfa"];
   let angle=0;
   const slices=rows.map((r,i)=>{ const value=n(r.value),sweep=(value/total)*360,start=angle,end=angle+sweep; angle=end; return {...r,color:colors[i%colors.length],start,end,pct:value/total*100}; });
+  const hovSlice = hovered!==null ? slices[hovered] : null;
   return (
     <div className="donut-wrap">
-      <svg viewBox="0 0 200 200" className="chart-svg">
-        {slices.map(s=><path key={s.label} d={arcPath(100,100,72,s.start,s.end)} fill="none" stroke={s.color} strokeWidth="28" strokeLinecap="butt"/>)}
-        <circle cx="100" cy="100" r="50" fill="#161920"/>
-        <text x="100" y="96" textAnchor="middle" fontSize="10" fill="#5a6278">총자산</text>
-        <text x="100" y="116" textAnchor="middle" fontSize="16" fontWeight="800" fill="#f0f1f3">{fmt(total/100000000)}억</text>
-      </svg>
+      <div style={{position:"relative"}}>
+        <svg viewBox="0 0 200 200" className="chart-svg">
+          {slices.map((s,i)=>{
+            const isHov = hovered===i;
+            // hover 시 세그먼트를 바깥으로 살짝 이동
+            const mid=(s.start+s.end)/2;
+            const rad=mid*Math.PI/180;
+            const dx=isHov?Math.cos(rad)*5:0;
+            const dy=isHov?Math.sin(rad)*5:0;
+            return (
+              <path key={s.label}
+                d={arcPath(100+dx,100+dy,72,s.start,s.end)}
+                fill="none" stroke={s.color}
+                strokeWidth={isHov?"34":"28"}
+                strokeLinecap="butt"
+                opacity={hovered===null||isHov?1:.5}
+                style={{transition:"all .2s cubic-bezier(.2,.8,.2,1)",cursor:"pointer"}}
+                onMouseEnter={()=>setHovered(i)}
+                onMouseLeave={()=>setHovered(null)}
+              />
+            );
+          })}
+          <circle cx="100" cy="100" r="50" fill="#161920"/>
+          {hovSlice ? (
+            <>
+              <text x="100" y="90" textAnchor="middle" fontSize="9" fill="#9ba3b5">{hovSlice.label}</text>
+              <text x="100" y="108" textAnchor="middle" fontSize="13" fontWeight="800" fill={hovSlice.color}>
+                {fmtPct(hovSlice.pct)}
+              </text>
+              <text x="100" y="122" textAnchor="middle" fontSize="9" fill="#9ba3b5">{fmt(n(hovSlice.value)/10000)}만</text>
+            </>
+          ) : (
+            <>
+              <text x="100" y="96" textAnchor="middle" fontSize="10" fill="#5a6278">총자산</text>
+              <text x="100" y="116" textAnchor="middle" fontSize="16" fontWeight="800" fill="#f0f1f3">{fmt(total/100000000)}억</text>
+            </>
+          )}
+        </svg>
+      </div>
       <div>
-        {slices.map(s=>(
-          <div key={s.label} className="stat-row" style={{padding:"7px 0"}}>
+        {slices.map((s,i)=>(
+          <div key={s.label} className="stat-row"
+            style={{padding:"7px 0",opacity:hovered===null||hovered===i?1:.4,transition:"opacity .15s",cursor:"pointer"}}
+            onMouseEnter={()=>setHovered(i)}
+            onMouseLeave={()=>setHovered(null)}
+          >
             <span className="row" style={{gap:8}}>
               <i className="legend-dot" style={{background:s.color,width:10,height:10,borderRadius:"50%",display:"inline-block",flexShrink:0}}/>
               <span style={{fontSize:12,color:"var(--text2)"}}>{s.label}</span>
@@ -4161,7 +4230,17 @@ function QuickAddModal({ data, update, accountNamesIn, accountNamesOut, onClose,
 
   const commitRows = () => {
     if (!pendingRows.length) return;
-    update(d => ({ ...d, transactions: [...(d.transactions || []), ...pendingRows.map(r => ({ ...r, id:r.id || uid() }))] }));
+    update(d => {
+      const newList = [...(d.transactions || []), ...pendingRows.map(r => ({ ...r, id:r.id || uid() }))];
+      const newCount = newList.length;
+      const MILESTONES={1:"🎉 첫 거래가 기록됐어요!",10:"✨ 거래 10건 달성!",50:"🔥 거래 50건!",100:"💪 거래 100건 달성!",300:"🏆 거래 300건!"};
+      const msg=MILESTONES[newCount];
+      if(msg&&!localStorage.getItem(`season-tx-ms-${newCount}`)){
+        setTimeout(()=>{const t=document.createElement("div");t.className="milestone-toast";t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);},300);
+        localStorage.setItem(`season-tx-ms-${newCount}`,"1");
+      }
+      return { ...d, transactions: newList };
+    });
     setConfirmOpen(false);
     setPendingRows([]);
     setShowSuccess(true);
@@ -5042,9 +5121,19 @@ function TransactionsTab({ data, update, accountNamesIn, accountNamesOut }) {
         return;
       }
     }
+    const isNew = !form.id;
     update(d=>{
       const row={...form,amount:n(form.amount),id:form.id||uid()};
       const list=form.id?d.transactions.map(t=>t.id===form.id?row:t):[...d.transactions,row];
+      if(isNew){
+        const newCount=list.length;
+        const MILESTONES={1:"🎉 첫 거래가 기록됐어요! 앞으로도 꾸준히 입력해봐요",10:"✨ 거래 10건 달성! 재무 습관이 만들어지고 있어요",50:"🔥 거래 50건! 이제 패턴이 보이기 시작할 거예요",100:"💪 거래 100건 달성! 재무관리 완전 정착했네요",300:"🏆 거래 300건! 시즌 파이낸스 헤비유저 인증"};
+        const msg=MILESTONES[newCount];
+        if(msg&&!localStorage.getItem(`season-tx-ms-${newCount}`)){
+          setTimeout(()=>showToast(msg,"success",4000),200);
+          localStorage.setItem(`season-tx-ms-${newCount}`,"1");
+        }
+      }
       return {...d,transactions:list};
     });
     setForm(EMPTY);
