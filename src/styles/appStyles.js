@@ -321,6 +321,25 @@ tr:hover td{background:rgba(255,255,255,.02);color:var(--text)}
 .esb-step{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text2)}
 .esb-num{width:20px;height:20px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .esb-step strong{color:var(--text)}
+.kpi-edit-panel{background:var(--surface2);border:1.5px solid rgba(108,125,255,.22);border-radius:16px;padding:16px 18px;margin-bottom:4px}
+.kpi-edit-hint{font-size:12px;color:var(--text3);margin-bottom:12px}
+.kpi-edit-grid{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+.kpi-edit-chip{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:99px;font-size:12px;font-weight:600;border:1.5px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;transition:.15s;font-family:inherit}
+.kpi-edit-chip.sel{border-color:var(--accent);background:rgba(108,125,255,.14);color:var(--accent)}
+.kpi-edit-chip:hover:not(.sel){background:var(--surface3);color:var(--text)}
+.kpi-edit-check{font-size:11px;font-weight:900}
+.kpi-edit-save{padding:9px 24px;border-radius:11px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:.15s}
+.kpi-edit-save:hover{opacity:.9}
+.kpi-edit-save:disabled{opacity:.4;cursor:not-allowed}
+.report-banner{display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:14px;background:linear-gradient(135deg,rgba(52,213,138,.08),rgba(108,125,255,.06));border:1px solid rgba(52,213,138,.25);margin-bottom:4px}
+.report-banner-icon{font-size:24px;flex-shrink:0}
+.report-banner-body{flex:1;min-width:0}
+.report-banner-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px}
+.report-banner-desc{font-size:12px;color:var(--text3)}
+.report-banner-btn{padding:8px 16px;border-radius:10px;border:none;background:var(--green);color:#fff;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;font-family:inherit;transition:.15s;white-space:nowrap}
+.report-banner-btn:hover{opacity:.9}
+.report-banner-close{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:4px;flex-shrink:0;font-family:inherit}
+.report-banner-close:hover{color:var(--text)}
 .dashboard-greeting-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:2px}
 .dashboard-greeting{font-size:14px;color:var(--text3);padding:2px 4px;font-weight:400}
 .dashboard-greeting strong{color:var(--text);font-weight:700}
